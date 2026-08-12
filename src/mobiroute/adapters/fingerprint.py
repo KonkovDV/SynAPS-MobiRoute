@@ -51,6 +51,9 @@ def fingerprint_problem(problem: Any) -> str:
                     t.quota_minutes_remaining,
                     t.service_priority.value,
                     t.medical_priority,
+                    t.eligibility_class.value,
+                    t.trip_purpose,
+                    t.requested_at,
                 )
                 for t in problem.requests
             ],

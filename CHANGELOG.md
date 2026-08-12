@@ -19,6 +19,9 @@
   breakdowns, cancellations, traffic replan, and 8 urgent inserts about
   **13–15 s**. Sample, not a SLA. Persistent native fleet, `eval_route` seed/emit,
   online kernel fork, and O(1) passenger quota lookup. Greedy never OPTIMAL.
+- Red Team of the speed path: online stash no longer overwrites the baseline
+  kernel; combined disruption+emergency replans before insert; full-plan notary
+  after online (`tests/test_redteam_combat.py`).
 - Stress `stress_200` found later pooling could lengthen an already-accepted
   ride past the passenger-day hour quota; greedy/online now recheck every
   onboard passenger against the cap (notary `QUOTA:`).
