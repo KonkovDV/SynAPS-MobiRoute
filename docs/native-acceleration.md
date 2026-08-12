@@ -36,17 +36,23 @@ CI `test` and `native-accelerator` jobs build the wheel.
 Scoring is sequential and deterministic: lexicographic min of
 `(duration, wait_sum, -max_load, i, j)` (and `mid` when the new trip has a VIA).
 `wait_sum` is **passenger** delay after earliest (0 if the vehicle snaps to earliest).
-The winning `(i, mid, j)` is materialized once through `simulate_stop_sequence`.
+The winning `(i, mid, j)` is committed in the native fleet; Python builds
+`RoutePlan` from `eval_route` / `trial_eval` stop times. FIFO and the rare
+frozen-retry path still use `simulate_stop_sequence`.
 Trip table stride is **16** (`via`, `via_svc`). Native `best_insert` returns a
 6-tuple; `mid=-1` if there is no VIA. `score_fleet` returns one 7-tuple per
 feasible vehicle: `(fleet_index, i, mid, j, dur, wait, max_load)`.
 Candidates are simulated on a virtual insert (no copied stop arrays).
-Rebuild the wheel after ABI change.
+The engine keeps a persistent fleet (`set_fleet` / `score_stored` / `commit_insert`)
+and can `eval_route` / `eval_fleet` an existing sequence (seed + emit) without
+Pydantic. Online insertion forks that engine and `append_trip` instead of
+repacking 3200 trips. Rebuild the wheel after ABI change.
 Pickup dwell is \(\max(\mathrm{board},5)\). Dropoff snaps to
 `appointment_start - 30` when that field is set (lobby cap, not cabin hold).
 VIA detour uses itinerary minutes including VIA service. Vehicle unavail covers
-travel and wait, not only boarding. Compat/assist checks run on the **new** trip;
-capacity, stretcher, and windows still cover the whole route.
+travel and wait, not only boarding. Compat/assist checks run on the **new** trip
+during insertion; `eval_route` (existing sequence) rechecks every pickup.
+Capacity, stretcher, and windows still cover the whole route.
 
 ## Measured wall-clock (not a portable product claim)
 
@@ -72,17 +78,19 @@ vehicles, then a disruption shake. Artifact:
 `benchmark/results/stress-2026-08-12/stress_200.json` (gitignored).
 Not real MAST trips. Greedy never `OPTIMAL`.
 
-Re-measure after cancel cascade + seed peel + final quota lockstep
-(CPU was also busy; wall-clock is a sample, not a SLA):
+Re-measured 2026-08-12 after persistent fleet, native `eval_route` seed/emit,
+online kernel fork, and passenger-indexed `quota_caps` (two consecutive runs,
+seed 42). Sample, not a SLA:
 
 | Phase | Wall-clock | Served / active | Notary |
 | --- | --- | --- | --- |
-| Day-ahead greedy (Rust) | 38.2 s | 2589 / 3045 (`PARTIAL`) | pass |
-| Batch disruption (5 WAV down, 3 drivers, 25 cancel, 20 no-show) | 15.8 s | 2531 / 2999 (`PARTIAL`) | pass |
-| Traffic +8 min (full re-greedy) | 27.6 s | 2242 / 2999 (`PARTIAL`) | pass |
-| 8 online medical inserts | 13.8 s (~1.4–2.0 s each) | 8/8 accepted | pass |
-| **Pipeline total** | **95.5 s** | — | — |
+| Day-ahead greedy (Rust) | 5.4–5.8 s | 2589 / 3045 (`PARTIAL`) | pass |
+| Batch disruption (seeded replan) | 1.6–1.7 s | 2531 / 2999 (`PARTIAL`) | pass |
+| Traffic +8 min (seeded replan) | 5.8–6.5 s | 2247 / 2999 (`PARTIAL`) | pass |
+| 8 online medical inserts | 0.49–0.52 s | 8/8 accepted | pass |
+| **Pipeline total** | **13.4–14.6 s** | — | — |
 
-Earlier the same day-ahead finished in 16.3–24.2 s on a quieter CPU; treat
-16–40 s as the observed band, not a SLA. Batch disruption previously left
-one `QUOTA:` notary; that hole is closed.
+Earlier the same day, before this pass, the pipeline was about 95 s (then ~24 s
+after stored-fleet scoring). Treat **13–15 s** as the current observed band on
+this machine, not a product SLA. Greedy never `OPTIMAL`. Batch disruption
+previously left one `QUOTA:` notary; that hole is closed.

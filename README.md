@@ -49,6 +49,12 @@ Greedy / beam / ALNS / online insertion **require** the Rust kernel
 See [`docs/native-acceleration.md`](docs/native-acceleration.md).
 Do not quote an unverified ×N speedup.
 
+Measured on this machine, synthetic `stress_200` (200 vehicles / 3200 requests,
+seed 42): overnight greedy about **5–6 s**; the same run including breakdowns,
+cancellations, traffic replan, and 8 urgent inserts about **13–15 s**.
+Sample, not a SLA. Not real MAST trips. Details:
+[`docs/native-acceleration.md`](docs/native-acceleration.md).
+
 ## Solvers (portfolio)
 
 | Solver | When | May claim OPTIMAL? |

@@ -20,7 +20,8 @@ feasibility-checked. It is not a proven optimal shareability network.
 Insertion scoring for greedy / beam / ALNS / online is Rust `mobiroute_native`.
 Python SoA is an oracle for lockstep tests, not a solver backend, and not a
 license to claim OPTIMAL or an unmeasured ×N speedup. Generator `medium` is
-60 vehicles / 1000 requests.
+60 vehicles / 1000 requests. The `stress_200` ~13–15 s full pipeline (day-ahead
+plus disruptions and 8 inserts) is a sample on one machine, not a SLA.
 
 ## Forbidden statements
 

@@ -17,7 +17,7 @@ from mobiroute.domain.constraints import (
     push_past_unavail,
 )
 from mobiroute.domain.models import StopType, WheelchairType
-from mobiroute.domain.requests import DayProblem, Stop, Vehicle
+from mobiroute.domain.requests import DayProblem, Stop, TripRequest, Vehicle
 from mobiroute.domain.route_graph import service_stops
 from mobiroute.validation.feasibility import default_wheelchair_types
 
@@ -238,6 +238,67 @@ class ProblemKernel:
             else:
                 kinds.append(1)
         return trips, kinds
+
+
+def append_trip_soa(
+    k: ProblemKernel, trip: TripRequest, zmap: dict[str, int]
+) -> tuple[int, list[int], float]:
+    """Append one trip to the Python SoA tables. Empty row means already present."""
+    existing = k.id_to_idx.get(trip.id)
+    if existing is not None:
+        return existing, [], 0.0
+    fl = 0
+    if trip.needs_lift:
+        fl |= FLAG_LIFT
+    if trip.needs_ramp:
+        fl |= FLAG_RAMP
+    if trip.needs_boarding_assistance:
+        fl |= FLAG_ASSIST
+    if trip.wheelchair_requirement == WheelchairType.STRETCHER:
+        fl |= FLAG_STRETCHER
+    pu = zmap.get(trip.pickup_zone, -1)
+    do = zmap.get(trip.dropoff_zone, -1)
+    via = zmap[trip.via_zone] if trip.via_zone and trip.via_zone in zmap else -1
+    det = float(trip.max_detour_ratio)
+    row = [
+        pu,
+        do,
+        trip.earliest_pickup,
+        trip.latest_pickup,
+        trip.max_wait_time,
+        trip.max_ride_time,
+        trip.boarding_duration,
+        trip.alighting_duration,
+        -1 if trip.appointment_start is None else trip.appointment_start,
+        -1 if trip.appointment_end is None else trip.appointment_end,
+        1 + trip.companion_count,
+        0 if trip.wheelchair_requirement == WheelchairType.NONE else 1,
+        fl,
+        _wt_code(trip.wheelchair_requirement),
+        via,
+        trip.via_service_duration,
+    ]
+    idx = len(k.trip_ids)
+    k.id_to_idx[trip.id] = idx
+    k.trip_ids = (*k.trip_ids, trip.id)
+    k.pu = (*k.pu, pu)
+    k.do = (*k.do, do)
+    k.earliest = (*k.earliest, trip.earliest_pickup)
+    k.latest = (*k.latest, trip.latest_pickup)
+    k.max_wait = (*k.max_wait, trip.max_wait_time)
+    k.max_ride = (*k.max_ride, trip.max_ride_time)
+    k.board = (*k.board, trip.boarding_duration)
+    k.alight = (*k.alight, trip.alighting_duration)
+    k.appt_s = (*k.appt_s, row[8])
+    k.appt_e = (*k.appt_e, row[9])
+    k.seats = (*k.seats, row[10])
+    k.wunits = (*k.wunits, row[11])
+    k.flags = (*k.flags, fl)
+    k.wt = (*k.wt, row[13])
+    k.via = (*k.via, via)
+    k.via_svc = (*k.via_svc, trip.via_service_duration)
+    k.detour = (*k.detour, det)
+    return idx, row, det
 
 
 def _compat(k: ProblemKernel, vk: VehicleKernel, idx: int) -> bool:

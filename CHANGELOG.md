@@ -15,6 +15,10 @@
 - Harsh synthetic day `stress_200`: 200 vehicles / 3200 requests, mixed WAV/VIA/
   wait-return/quota/unavail/breakdowns, plus a disruption shake benchmark
   (`python benchmark/run_stress_day.py`). Not real MAST. Greedy never OPTIMAL.
+  On this machine, seed 42: day-ahead greedy about **5–6 s**; the same run with
+  breakdowns, cancellations, traffic replan, and 8 urgent inserts about
+  **13–15 s**. Sample, not a SLA. Persistent native fleet, `eval_route` seed/emit,
+  online kernel fork, and O(1) passenger quota lookup. Greedy never OPTIMAL.
 - Stress `stress_200` found later pooling could lengthen an already-accepted
   ride past the passenger-day hour quota; greedy/online now recheck every
   onboard passenger against the cap (notary `QUOTA:`).

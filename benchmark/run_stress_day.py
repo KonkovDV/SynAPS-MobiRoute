@@ -181,7 +181,7 @@ def run_stress(seed: int = 42, out_dir: Path | None = None) -> dict:
 
     traffic = apply_traffic_delay(shaken, 8)
     t2 = time.perf_counter()
-    after_traffic = solve_greedy(traffic)
+    after_traffic = _seeded_replan(traffic, after_batch)
     after_traffic = after_traffic.model_copy(update={"solution_type": "DISRUPTION_RECOVERY"})
     traffic_s = time.perf_counter() - t2
     rows.append(_row("traffic_delay_8min", traffic_s, traffic, after_traffic))

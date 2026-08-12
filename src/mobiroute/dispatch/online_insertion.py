@@ -13,6 +13,7 @@ from mobiroute.domain.requests import (
     RejectedTrip,
     RoutePlan,
     Stop,
+    TripExplanation,
     TripRequest,
 )
 from mobiroute.domain.route_graph import service_stops
@@ -21,10 +22,10 @@ from mobiroute.solvers.greedy import solve_greedy
 from mobiroute.solvers.native_accel import acceleration_status
 from mobiroute.validation.feasibility import (
     accessibility_compatible,
-    check_plan,
     passenger_rides,
     quota_caps,
     trial_exceeds_quota,
+    trial_exceeds_quota_rides,
     trip_quota_remaining,
     used_quota_minutes,
 )
@@ -259,12 +260,28 @@ def online_insert(
     """Insert into existing routes; do not rebuild the day plan from scratch."""
     from mobiroute.solvers.greedy import (
         _assign_driver,
+        _materialize_insert,
+        _pair_stops,
+        _rides_by_pid,
+        _sync_native_fleet,
         _trip_stops,
+        _via_stop,
+        route_plan_from_eval,
         simulate_stop_sequence,
-        try_insert_trip,
     )
-    from mobiroute.solvers.insertion_kernel import ProblemKernel
-    from mobiroute.solvers.native_accel import attach_native
+    from mobiroute.solvers.insertion_kernel import ProblemKernel, vehicle_payload
+    from mobiroute.solvers.native_accel import (
+        append_trip,
+        attach_native,
+        commit_insert,
+        fork_kernel,
+        kernel_for,
+        score_stored,
+        set_route,
+        set_vehicle,
+        stash_kernel,
+        trial_eval,
+    )
 
     frozen = {t.id for t in problem.requests if t.frozen} | (
         set(baseline.served_requests) if protect_frozen else set()
@@ -277,68 +294,55 @@ def online_insert(
         ]
     updated = problem.model_copy(update={"requests": reqs})
     trips_by_id = {t.id: t for t in updated.requests}
-    kernel = attach_native(ProblemKernel.from_problem(updated))
     vmap = {v.id: v for v in updated.vehicles}
     occupied = {rp.driver_id for rp in baseline.route_plans if rp.driver_id}
-
-    candidates: list[tuple[int, int, str, list[Stop], str]] = []
     used = {rp.vehicle_id for rp in baseline.route_plans}
+    baseline_by_v = {rp.vehicle_id: rp for rp in baseline.route_plans}
+    zmap = {z: i for i, z in enumerate(updated.travel.zones)}
+    stored = kernel_for(baseline)
+    if stored is not None:
+        kernel = fork_kernel(stored)
+    else:
+        kernel = attach_native(ProblemKernel.from_problem(problem))
+        seed_stops: dict[str, list[Stop]] = {v.id: [] for v in problem.vehicles}
+        seed_drivers: dict[str, str | None] = {v.id: None for v in problem.vehicles}
+        for rp in baseline.route_plans:
+            if rp.vehicle_id in seed_stops:
+                seed_stops[rp.vehicle_id] = service_stops(list(rp.ordered_stops))
+                seed_drivers[rp.vehicle_id] = rp.driver_id
+        _sync_native_fleet(kernel, problem, seed_stops, seed_drivers)
+    new_idx = append_trip(kernel, new_trip, zmap)
+    fleet_ids = [v.id for v in updated.vehicles]
     alt_no: list[str] = []
-    for rp in baseline.route_plans:
-        v = vmap[rp.vehicle_id]
-        if accessibility_compatible(v, new_trip) is not None:
-            alt_no.append(f"{v.id}:NO_COMPATIBLE_VEHICLE")
-            continue
-        occ = occupied - ({rp.driver_id} if rp.driver_id else set())
-        inserted = try_insert_trip(
-            updated,
-            v,
-            rp.driver_id,
-            service_stops(list(rp.ordered_stops)),
-            new_trip,
-            trips_by_id,
-            occupied_driver_ids=occ,
-            kernel=kernel,
-        )
-        if inserted is not None:
-            dur, wait_s, seq, assigned = inserted
-            candidates.append((dur, wait_s, v.id, seq, assigned))
-        else:
-            alt_no.append(f"{v.id}:INSERT_INFEASIBLE")
-    for v in updated.vehicles:
-        if v.id in used:
+    tentative: dict[str, str] = {}
+    for fi, v in enumerate(updated.vehicles):
+        existing = baseline_by_v.get(v.id)
+        if existing is not None and existing.driver_id:
             continue
         if accessibility_compatible(v, new_trip) is not None:
             alt_no.append(f"{v.id}:NO_COMPATIBLE_VEHICLE")
             continue
-        did = _assign_driver(
+        did0 = _assign_driver(
             updated,
             v.id,
+            vehicle=v,
             needs_accessibility=new_trip.needs_boarding_assistance,
             occupied_driver_ids=occupied,
         )
-        if did is None:
+        if did0 is None:
             alt_no.append(f"{v.id}:NO_DRIVER")
             continue
-        inserted = try_insert_trip(
-            updated,
-            v,
-            did,
-            [],
-            new_trip,
-            trips_by_id,
-            occupied_driver_ids=occupied,
-            kernel=kernel,
-        )
-        if inserted is not None:
-            dur, wait_s, seq, assigned = inserted
-            candidates.append((dur, wait_s, v.id, seq, assigned))
-        else:
-            alt_no.append(f"{v.id}:EMPTY_INSERT_INFEASIBLE")
+        tentative[v.id] = did0
+        dk = kernel.drivers.get(did0)
+        veh, una = vehicle_payload(kernel.vehicles[v.id], dk)
+        set_vehicle(kernel, fi, veh, una)
 
+    scored = score_stored(kernel, new_idx)
+    scored.sort(key=lambda r: (r[4], r[5], r[0]))
+    pu, do = _pair_stops(new_trip)
+    via = _via_stop(new_trip)
     eid = _event_id(baseline.plan_id or baseline.input_hash, "NEW_REQUEST", new_trip.id)
 
-    candidates.sort(key=lambda x: (x[0], x[1], x[2]))
     new_plan = None
     vid = ""
     quota_blocked = False
@@ -347,27 +351,37 @@ def online_insert(
     qleft = None if cap is None else cap - used_q.get(new_trip.pseudonymous_passenger_id, 0)
     if qleft is not None and qleft <= 0:
         quota_blocked = True
-        candidates = []
+        scored = []
     quota_cap = quota_caps(updated)
-    baseline_by_v = {rp.vehicle_id: rp for rp in baseline.route_plans}
     trips_for_quota = {**trips_by_id, new_trip.id: new_trip}
-    for _dur, _wait_s, cand_vid, seq, did in candidates:
-        trial = simulate_stop_sequence(updated, vmap[cand_vid], did, seq, trips_by_id)
-        if trial is None:
+    for fleet_i, i, mid, j, _dur, _wait_s, _mx in scored:
+        cand_vid = fleet_ids[fleet_i]
+        if accessibility_compatible(vmap[cand_vid], new_trip) is not None:
             continue
         old_rp = baseline_by_v.get(cand_vid)
+        did = (old_rp.driver_id if old_rp is not None else None) or tentative.get(cand_vid)
+        if not did:
+            alt_no.append(f"{cand_vid}:NO_DRIVER")
+            continue
+        ev = trial_eval(kernel, fleet_i, i, mid, j, new_idx)
+        if ev is None:
+            continue
+        trial_used = _rides_by_pid(ev[2], kernel, trips_for_quota)
         prev = passenger_rides(old_rp, trips_by_id) if old_rp is not None else {}
-        if trial_exceeds_quota(
-            trial,
-            trips_for_quota,
+        if trial_exceeds_quota_rides(
+            trial_used,
             quota_cap=quota_cap,
             used_now=used_q,
             previous_on_vehicle=prev,
         ):
             quota_blocked = True
             continue
+        core = service_stops(list(old_rp.ordered_stops)) if old_rp is not None else []
+        seq = _materialize_insert(core, pu, via, do, i, mid, j)
+        trial = route_plan_from_eval(vmap[cand_vid], did, seq, kernel, ev)
+        if trial is None:
+            continue
         if protect_frozen and _frozen_times_changed(old_rp, trial, frozen):
-            core = service_stops(list(old_rp.ordered_stops)) if old_rp is not None else []
             trial = simulate_stop_sequence(
                 updated, vmap[cand_vid], did, [*core, *_trip_stops(new_trip)], trips_by_id
             )
@@ -384,6 +398,12 @@ def online_insert(
                 continue
             if _frozen_times_changed(old_rp, trial, frozen):
                 continue
+            st, sk = kernel.stops_to_arrays(service_stops(list(trial.ordered_stops)))
+            set_route(kernel, fleet_i, st, sk)
+            new_plan = trial
+            vid = cand_vid
+            break
+        commit_insert(kernel, fleet_i, i, mid, j, new_idx)
         new_plan = trial
         vid = cand_vid
         break
@@ -403,7 +423,6 @@ def online_insert(
             ),
         ]
         new_result = baseline.model_copy(
-            deep=True,
             update={
                 "solution_type": "ONLINE_INSERTION",
                 "status": SolutionStatus.PARTIAL.value,
@@ -421,13 +440,25 @@ def online_insert(
         if rp.vehicle_id == vid:
             routes.append(new_plan)
         else:
-            routes.append(
-                rp.model_copy(update={"ordered_stops": service_stops(list(rp.ordered_stops))})
-            )
+            routes.append(rp)
     if vid not in used:
         routes.append(new_plan)
+    why = f"Online insert onto vehicle {vid} without rebuilding the day plan."
+    explanations = [e for e in baseline.explanations if e.trip_id != new_trip.id]
+    explanations.append(
+        TripExplanation(
+            trip_id=new_trip.id,
+            accepted=True,
+            vehicle_id=vid,
+            driver_id=new_plan.driver_id,
+            waiting_time=new_plan.waiting_times.get(new_trip.id, 0),
+            ride_time=new_plan.ride_times.get(new_trip.id, 0),
+            why_this_route=why,
+            reason_code=ReasonCode.ACCEPTED.value,
+            active_constraints=["PAIRING", "CAPACITY", "WINDOWS", "ACCESSIBILITY"],
+        )
+    )
     new_result = baseline.model_copy(
-        deep=True,
         update={
             "solution_type": "ONLINE_INSERTION",
             "served_requests": sorted([*baseline.served_requests, new_trip.id]),
@@ -442,7 +473,7 @@ def online_insert(
                 "pooling": True,
                 **acceleration_status(),
             },
-            "explanations": [],
+            "explanations": explanations,
         },
     )
     bmap = _trip_vehicle(baseline)
@@ -452,27 +483,32 @@ def online_insert(
     ]
     if protect_frozen and frozen_broken:
         code = ReasonCode.TIME_WINDOW_CONFLICT.value
-        restored = baseline.model_copy(deep=True)
-        restored.solution_type = "ONLINE_INSERTION"
-        restored.rejected_requests = [
-            *list(baseline.rejected_requests),
-            RejectedTrip(
-                trip_id=new_trip.id,
-                reason_code=code,
-                detail="insertion would change frozen trips",
-            ),
-        ]
-        restored.reason_codes = {**baseline.reason_codes, new_trip.id: code}
-        restored.status = SolutionStatus.PARTIAL.value
+        restored = baseline.model_copy(
+            update={
+                "solution_type": "ONLINE_INSERTION",
+                "status": SolutionStatus.PARTIAL.value,
+                "rejected_requests": [
+                    *list(baseline.rejected_requests),
+                    RejectedTrip(
+                        trip_id=new_trip.id,
+                        reason_code=code,
+                        detail="insertion would change frozen trips",
+                    ),
+                ],
+                "reason_codes": {**baseline.reason_codes, new_trip.id: code},
+            }
+        )
         restored = _stamp_version(baseline, restored, event_type="NEW_REQUEST", event_id=eid)
         diff = compute_diff(baseline, restored, frozen)
         return updated, restored, diff
-    new_result = finalize_result(updated, new_result)
+    new_result = finalize_result(
+        updated,
+        new_result,
+        explanations=explanations,
+        changed_vehicle_ids={vid},
+    )
     new_result = _stamp_version(baseline, new_result, event_type="NEW_REQUEST", event_id=eid)
-    report = check_plan(updated, new_result)
-    new_result.verified_feasible = report.feasible
-    if not report.feasible:
-        new_result.status = SolutionStatus.NOT_VERIFIED.value
+    stash_kernel(new_result, kernel)
     diff = compute_diff(baseline, new_result, frozen | {t.id for t in updated.requests if t.frozen})
     return updated, new_result, diff
 
@@ -528,23 +564,21 @@ def recover_disruption(
 
     seed_stops: dict[str, list[Stop]] | None = None
     seed_drivers: dict[str, str | None] | None = None
-    retiming = bool(traffic_delay_minutes) or appointment_trip_id is not None
-    if not retiming:
-        disabled_v = {vehicle_unavailable_id} if vehicle_unavailable_id else set()
-        disabled_d = {driver_unavailable_id} if driver_unavailable_id else set()
-        active_ids = active_trip_ids(updated)
-        seed_stops = {v.id: [] for v in updated.vehicles}
-        seed_drivers = {v.id: None for v in updated.vehicles}
-        for rp in baseline.route_plans:
-            if rp.vehicle_id in disabled_v:
-                continue
-            if rp.driver_id and rp.driver_id in disabled_d:
-                continue
-            if rp.vehicle_id not in seed_stops:
-                continue
-            core = [s for s in service_stops(list(rp.ordered_stops)) if s.trip_id in active_ids]
-            seed_stops[rp.vehicle_id] = core
-            seed_drivers[rp.vehicle_id] = rp.driver_id
+    disabled_v = {vehicle_unavailable_id} if vehicle_unavailable_id else set()
+    disabled_d = {driver_unavailable_id} if driver_unavailable_id else set()
+    active_ids = active_trip_ids(updated)
+    seed_stops = {v.id: [] for v in updated.vehicles}
+    seed_drivers = {v.id: None for v in updated.vehicles}
+    for rp in baseline.route_plans:
+        if rp.vehicle_id in disabled_v:
+            continue
+        if rp.driver_id and rp.driver_id in disabled_d:
+            continue
+        if rp.vehicle_id not in seed_stops:
+            continue
+        core = [s for s in service_stops(list(rp.ordered_stops)) if s.trip_id in active_ids]
+        seed_stops[rp.vehicle_id] = core
+        seed_drivers[rp.vehicle_id] = rp.driver_id
 
     new_result = solve_greedy(updated, seed_stops=seed_stops, seed_drivers=seed_drivers)
     new_result = new_result.model_copy(update={"solution_type": "DISRUPTION_RECOVERY"})
