@@ -190,14 +190,25 @@ def set_vehicle(k: ProblemKernel, fleet_i: int, veh: list[int], unavail: list[in
     method(fleet_i, veh, unavail)
 
 
-def score_stored(k: ProblemKernel, new_idx: int) -> list[tuple[int, int, int, int, int, int, int]]:
+def score_stored(
+    k: ProblemKernel,
+    new_idx: int,
+    fleet_idx: Sequence[int] | None = None,
+    max_dur: int | None = None,
+) -> list[tuple[int, int, int, int, int, int, int]]:
     eng = k.native_engine
     if eng is None:
         raise RuntimeError(NATIVE_REQUIRED)
     method = getattr(eng, "score_stored", None)
     if not callable(method):
         raise RuntimeError(NATIVE_REQUIRED)
-    raw = method(new_idx)
+    idx = None if fleet_idx is None else [int(i) for i in fleet_idx]
+    if idx is None and max_dur is None:
+        raw = method(new_idx)
+    elif max_dur is None:
+        raw = method(new_idx, idx)
+    else:
+        raw = method(new_idx, idx, int(max_dur))
     if raw is None or isinstance(raw, (str, bytes)) or not isinstance(raw, Sequence):
         raise TypeError("native score_stored must return a sequence")
     out: list[tuple[int, int, int, int, int, int, int]] = []

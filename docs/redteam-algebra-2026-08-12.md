@@ -42,9 +42,11 @@ Pytest after the residual close: see `tests/test_residuals.py`, `tests/test_alns
 | RT-29 | Online insert stashed the forked engine under the baseline `plan_id` | Two inserts from the same day plan reused a mutated fleet (`ASSIGNED_NOT_SERVED`) | Stash key is `event_id`; online gets a new `plan_id`; fleet re-synced before stash |
 | RT-30 | `recover_disruption(..., emergency_trip=)` skipped the replan and inserted into the stale baseline | Combined cancel+emergency left cancelled trips on routes | Structural disruptions replan first, then online insert |
 | RT-31 | `quota_caps` scanned every passenger for every request | Online insert paid ~0.3 s × 8; notary looked slow | Index remaining minutes by passenger id |
-| RT-32 | Incremental `check_plan(only_vehicles=)` could bless `verified_feasible` without walking other routes | Speed path after native eval | Finalize still enriches the changed vehicle only; notary is full-plan again |
+| RT-32 | Incremental `check_plan(only_vehicles=)` could bless `verified_feasible` without walking other routes | Speed path after native eval | Finalize still enriches the changed vehicle only; `check_plan` skips `check_route` on untouched vehicles but still walks assignments, drivers, quota, completeness. Combat test compares `verified_feasible` to a full notary |
 | RT-33 | Full resim from depot on every `(i, j)` / VIA triple | Speed path paid O(m) prefix twice | Prefix cursor + incremental walk; lockstep vs Python SoA (`test_native_prefix_insert_matches_python_on_loaded_route`) |
 | RT-34 | `fork()` cloned the 3200-trip table on every online insert | Copy-on-write was missing | `Arc` travel/table/detour; `append_trip` uses `make_mut` |
+| RT-35 | +8 min traffic `eval_route` miss wiped the whole vehicle | Uniform delay usually breaks the tail, not the prefix | Peel last dropoff + wait-return children; reinsert dropped trips onto the same vehicle before global greedy |
+| RT-36 | Two-phase duration prune (empties, then loaded with `current_dur > D`) | Duration is monotonic, but quota-ok \(D\) is known only after scoring | Tried; extra native round-trips lost ~1 s vs one 200-way Rayon `score_stored`. Not in the hot path |
 
 ## Measured after the fix (seed 42, this machine)
 
@@ -67,6 +69,8 @@ Ops greedy served counts for the original sixteen scripts are unchanged vs the e
 | LBBD / RHC | Still `NotImplementedError` |
 | Native and Python SoA must stay in lockstep | Rebuild `mobiroute_native` after kernel ABI changes; CI pytest builds the wheel |
 | Gschwind–Drexl amortized O(1) insertion test | VIA, stretcher, unavail occupancy, and appointment lobby snap break the auxiliary-data contract; prefix+incremental walk is the honest analogue |
+| 2–3 s `stress_200` pipeline | Day-ahead is ~4 s of sequential lex inserts (3000×200). Traffic +8 keeps a short feasible tail; leftovers still re-greedy. Measured **8.1 s**, not 2–3 s. See `docs/native-acceleration.md` |
+| GPU / CUDA scoring of this insert kernel | 13×13 zone matrix; hot path is sequential and branchy. cuOpt-style GPU nets help independent neighborhood moves, not this constructive lex insert |
 | Jain index on tiny served sets | `fair_by_single_metric` remains false |
 | Manual override does not retime the residual route | Status `MANUAL_REVIEW_REQUIRED`, notary false — intentional HITL |
 | Annual 80h / fare / registry | Billing CRM; kernel only sees remaining minutes |
