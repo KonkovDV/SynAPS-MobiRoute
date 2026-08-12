@@ -24,3 +24,9 @@ Thumbs.db
 .idea/
 .vscode/
 *.swp
+target/
+native-dist/
+*.pyd
+*.so
+*.dll
+*.pdb

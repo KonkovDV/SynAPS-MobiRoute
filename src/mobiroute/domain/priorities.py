@@ -25,10 +25,26 @@ DEFAULT_HIERARCHY: list[PriorityLevel] = [
 
 
 def trip_sort_key(trip: TripRequest) -> tuple[object, ...]:
-    """Lexicographic sort for greedy/FIFO hybrids — transparent ranks."""
+    """Lexicographic sort for greedy/FIFO hybrids — transparent ranks.
+
+    Frozen confirmed trips and unpaired outbounds are placed before
+    ``same_vehicle_as`` returns so pairing cannot fail by sort order.
+    """
+    frozen = 0 if trip.frozen else 1
+    paired = 1 if trip.same_vehicle_as else 0
     medical = (
         0 if trip.medical_priority or trip.service_priority == ServicePriority.MEDICAL_URGENT else 1
     )
     protected = 0 if trip.appointment_end is not None else 1
     accessibility = 0 if trip.wheelchair_requirement.value != "NONE" else 1
-    return (medical, protected, accessibility, trip.earliest_pickup, trip.id)
+    return (frozen, paired, medical, protected, accessibility, trip.earliest_pickup, trip.id)
+
+
+def fifo_sort_key(trip: TripRequest) -> tuple[object, ...]:
+    """Request-time order with frozen-first and outbound-before-return."""
+    return (
+        0 if trip.frozen else 1,
+        1 if trip.same_vehicle_as else 0,
+        trip.requested_at,
+        trip.id,
+    )

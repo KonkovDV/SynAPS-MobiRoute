@@ -46,8 +46,20 @@ class OverrideJournal(StrictModel):
             if trip_id not in rp.passenger_assignments:
                 plans.append(rp)
                 continue
-            # drop route for simplicity — operator must re-solve; mark review
-            plans.append(rp)
+            kept = [s for s in rp.ordered_stops if s.trip_id != trip_id]
+            assigns = [t for t in rp.passenger_assignments if t != trip_id]
+            arr = {k: v for k, v in rp.arrival_times.items() if not k.startswith(trip_id)}
+            dep = {k: v for k, v in rp.departure_times.items() if not k.startswith(trip_id)}
+            plans.append(
+                rp.model_copy(
+                    update={
+                        "ordered_stops": kept,
+                        "passenger_assignments": assigns,
+                        "arrival_times": arr,
+                        "departure_times": dep,
+                    }
+                )
+            )
         out = result.model_copy(
             update={
                 "served_requests": served,

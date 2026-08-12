@@ -2,9 +2,8 @@
 
 [![CI](https://github.com/KonkovDV/SynAPS-MobiRoute/actions/workflows/ci.yml/badge.svg)](https://github.com/KonkovDV/SynAPS-MobiRoute/actions/workflows/ci.yml)
 
-Экспериментальное **объяснимое оптимизационное ядро** для планирования и
-диспетчеризации доступного транспорта по требованию (социальное такси /
-paratransit / DARP).
+Экспериментальный объяснимый оптимизационный контур доступного транспорта по
+требованию. Проверяется только на синтетических сценариях зон Москвы.
 
 Это **не** замена операционной платформы оператора, call-центра, реестра льгот
 или мобильного приложения пассажира.
@@ -19,6 +18,12 @@ paratransit / DARP).
 
 ```bash
 python -m pip install -e ".[dev]"
+python -m pip install maturin
+python -m maturin develop --release --manifest-path native/mobiroute_native/Cargo.toml
 mobiroute demo --out-dir benchmark/results/demo
+mobiroute ops-benchmark --seed 42 --out-dir benchmark/results/ops-2026-08-12
 pytest -q
 ```
+
+Greedy / beam / ALNS требуют Rust-ядро `mobiroute_native`.
+См. [`docs/native-acceleration.md`](docs/native-acceleration.md).

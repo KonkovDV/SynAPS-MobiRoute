@@ -48,11 +48,20 @@ def main() -> None:
                 "verified_feasible": res.verified_feasible,
                 "served": len(res.served_requests),
                 "rejected": len(res.rejected_requests),
+                "service_rate": round(len(res.served_requests) / max(1, len(problem.requests)), 4),
                 "runtime_s": round(dt, 4),
                 "input_hash": res.input_hash,
                 "config_hash": res.config_hash,
+                "mobiroute_version": res.mobiroute_version,
                 "synaps_commit": res.synaps_commit,
+                "instance_size": len(problem.requests),
+                "solver_status": res.status,
                 "claim_level": res.claim_level,
+                "jain_index": res.fairness_metrics.jain_index,
+                "p95_waiting": res.fairness_metrics.p95_waiting,
+                "p95_ride_time": res.fairness_metrics.p95_ride_time,
+                "service_coverage": res.fairness_metrics.service_coverage,
+                "plan_id": res.plan_id,
             }
         )
         (args.out_dir / f"result_{name}.json").write_text(

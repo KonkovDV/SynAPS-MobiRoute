@@ -16,7 +16,7 @@ def solve_incremental_repair(
     driver_unavailable_id: str | None = None,
     traffic_delay_minutes: int = 0,
 ) -> tuple[DayProblem, PlanningResult, PlanDiff]:
-    """Named repair lane. Heuristic — never OPTIMAL. ALNS destroy/repair is PLANNED."""
+    """Named repair lane. Heuristic — never OPTIMAL."""
     updated, result, diff = recover_disruption(
         problem,
         baseline,

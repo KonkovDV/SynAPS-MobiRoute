@@ -1,0 +1,14 @@
+[build-system]
+requires = ["maturin>=1.7,<2"]
+build-backend = "maturin"
+
+[project]
+name = "mobiroute_native"
+version = "0.2.0"
+description = "Required PyO3 insertion scoring kernel for MobiRoute"
+requires-python = ">=3.12"
+license = { text = "MIT" }
+
+[tool.maturin]
+module-name = "mobiroute_native"
+features = ["pyo3/extension-module"]

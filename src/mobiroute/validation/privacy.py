@@ -24,7 +24,7 @@ def redact_problem_for_open(problem: DayProblem) -> DayProblem:
     passengers = []
     for p in problem.passengers:
         d = p.model_dump()
-        d["privacy_class"] = PrivacyClass.PUBLIC_SYNTHETIC
+        d["privacy_class"] = PrivacyClass.OPEN_SYNTHETIC
         d["data_provenance"] = DataProvenance.SYNTHETIC
         passengers.append(type(p).model_validate(d))
     return problem.model_copy(update={"requests": reqs, "passengers": passengers})
@@ -38,7 +38,17 @@ def log_safe(message: str) -> str:
 
 
 def assert_no_pii_fields(obj: dict[str, object]) -> list[str]:
-    banned = {"full_name", "phone", "email", "passport", "diagnosis", "address"}
+    banned = {
+        "full_name",
+        "fio",
+        "phone",
+        "email",
+        "passport",
+        "diagnosis",
+        "address",
+        "snils",
+        "oms",
+    }
     found = []
     for k in obj:
         if k.lower() in banned:

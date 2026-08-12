@@ -17,11 +17,15 @@ Prefer changes that strengthen:
 
 ```bash
 python -m pip install -e ".[dev]"
+python -m pip install maturin
+python -m maturin develop --release --manifest-path native/mobiroute_native/Cargo.toml
 ruff check src tests benchmark
 ruff format src tests benchmark
 pytest
 mypy
 ```
+
+Greedy / beam / ALNS require `mobiroute_native`. See `docs/native-acceleration.md`.
 
 ## Claims hygiene
 

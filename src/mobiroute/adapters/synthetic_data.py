@@ -34,7 +34,63 @@ Mode = Literal[
     "infeasible",
     "fairness_stress",
     "peak_demand",
+    "driver_unavailable",
+    "vehicle_breakdown",
+    "ops_clinic_peak",
+    "ops_wait_return",
+    "ops_airport",
+    "ops_palliative",
+    "ops_group",
+    "ops_wav_shortage",
+    "ops_companions",
+    "ops_subscription_vs_nextday",
+    "ops_fairness_districts",
+    "ops_shift_close",
+    "ops_stretcher",
+    "ops_scooter",
+    "ops_medical_vs_dacha",
+    "ops_service_area",
+    "ops_untrained_driver",
+    "ops_agency_missed",
+    "ops_via",
+    "ops_quota",
+    "stress_200",
 ]
+
+MODES: tuple[str, ...] = (
+    "tiny",
+    "small",
+    "medium",
+    "large",
+    "wheelchair_heavy",
+    "medical_priority",
+    "pooled_rides",
+    "disruption",
+    "infeasible",
+    "fairness_stress",
+    "peak_demand",
+    "driver_unavailable",
+    "vehicle_breakdown",
+    "ops_clinic_peak",
+    "ops_wait_return",
+    "ops_airport",
+    "ops_palliative",
+    "ops_group",
+    "ops_wav_shortage",
+    "ops_companions",
+    "ops_subscription_vs_nextday",
+    "ops_fairness_districts",
+    "ops_shift_close",
+    "ops_stretcher",
+    "ops_scooter",
+    "ops_medical_vs_dacha",
+    "ops_service_area",
+    "ops_untrained_driver",
+    "ops_agency_missed",
+    "ops_via",
+    "ops_quota",
+    "stress_200",
+)
 
 _MODE_SIZES = {
     "tiny": (5, 20, 2),
@@ -48,6 +104,8 @@ _MODE_SIZES = {
     "infeasible": (2, 30, 1),
     "fairness_stress": (8, 40, 4),
     "peak_demand": (15, 120, 3),
+    "driver_unavailable": (5, 20, 2),
+    "vehicle_breakdown": (5, 20, 2),
 }
 
 ZONES = [
@@ -63,6 +121,7 @@ ZONES = [
     "Z_DEPOT_1",
     "Z_DEPOT_2",
     "Z_DEPOT_3",
+    "Z_DEPOT_4",
 ]
 
 
@@ -85,7 +144,17 @@ def _travel_matrix() -> TravelMatrix:
     return TravelMatrix(zones=list(ZONES), minutes=minutes)
 
 
-def generate_day(mode: Mode = "tiny", seed: int = 42) -> DayProblem:
+def generate_day(mode: str = "tiny", seed: int = 42) -> DayProblem:
+    if mode == "stress_200":
+        from mobiroute.adapters.stress_day import generate_stress_day
+
+        return generate_stress_day(seed)
+    if mode.startswith("ops_"):
+        from mobiroute.adapters.ops_scenarios import generate_ops_day
+
+        return generate_ops_day(mode, seed)
+    if mode not in _MODE_SIZES:
+        raise ValueError(f"unknown generator mode: {mode}")
     n_veh, n_req, n_depots = _MODE_SIZES[mode]
     travel = _travel_matrix()
     depots = [f"Z_DEPOT_{i + 1}" for i in range(n_depots)]
@@ -108,6 +177,9 @@ def generate_day(mode: Mode = "tiny", seed: int = 42) -> DayProblem:
                 lift_available=accessible and (i % 2 == 0),
                 ramp_available=accessible and (i % 2 == 1),
                 accessible_features=["lift"] if accessible else [],
+                compatible_wheelchair_types=(
+                    [WheelchairType.MANUAL, WheelchairType.POWER] if accessible else []
+                ),
                 depot_id=depot,
                 shift_start=0,
                 shift_end=12 * 60,
@@ -124,6 +196,7 @@ def generate_day(mode: Mode = "tiny", seed: int = 42) -> DayProblem:
                 language_capabilities=["ru"],
                 accessibility_training=accessible,
                 availability=True,
+                qualified_vehicle_types=["car", "minibus"],
             )
         )
 
@@ -193,6 +266,17 @@ def generate_day(mode: Mode = "tiny", seed: int = 42) -> DayProblem:
     vehicles.sort(key=lambda v: v.id)
     drivers.sort(key=lambda d: d.id)
     passengers.sort(key=lambda p: p.pseudonymous_id)
+
+    if mode == "driver_unavailable" and drivers:
+        drivers[0] = drivers[0].model_copy(update={"availability": False})
+    if mode == "vehicle_breakdown" and vehicles:
+        v0 = vehicles[0]
+        vehicles[0] = v0.model_copy(
+            update={
+                "shift_end": v0.shift_start,
+                "unavailable_intervals": [(v0.shift_start, 12 * 60)],
+            }
+        )
 
     return DayProblem(
         problem_id=f"moscow_synth_{mode}_{seed}",
