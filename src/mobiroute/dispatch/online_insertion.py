@@ -108,38 +108,125 @@ def online_insert(
     *,
     protect_frozen: bool = True,
 ) -> tuple[DayProblem, PlanningResult, PlanDiff]:
+    """Insert into existing routes; do not rebuild the day plan from scratch."""
+    from mobiroute.domain.models import SolutionStatus
+    from mobiroute.domain.requests import RejectedTrip
+    from mobiroute.solvers.greedy import _assign_driver, try_insert_trip
+
     frozen = {t.id for t in problem.requests if t.frozen}
-    # Ensure frozen trips stay assigned: mark them frozen and re-solve with priority
     reqs = [*list(problem.requests), new_trip]
-    # Mark currently served as soft-frozen preference via frozen flag if protect
     if protect_frozen:
-        new_reqs = []
         served = set(baseline.served_requests)
-        for t in reqs:
-            if t.id in served and t.id != new_trip.id:
-                new_reqs.append(t.model_copy(update={"frozen": True}))
-            else:
-                new_reqs.append(t)
-        reqs = new_reqs
+        reqs = [
+            t.model_copy(update={"frozen": True}) if t.id in served and t.id != new_trip.id else t
+            for t in reqs
+        ]
     updated = problem.model_copy(update={"requests": reqs})
-    # Greedy with frozen trips first
-    from mobiroute.domain.priorities import trip_sort_key
+    trips_by_id = {t.id: t for t in updated.requests}
+    vmap = {v.id: v for v in updated.vehicles}
 
-    active = [t for t in updated.requests if t.booking_status.value not in {"CANCELLED", "NO_SHOW"}]
-    active.sort(key=lambda t: (0 if t.frozen else 1, trip_sort_key(t)))
-    from mobiroute.solvers.greedy import _greedy_core
+    candidates: list[tuple[int, str, object]] = []
+    used = {rp.vehicle_id for rp in baseline.route_plans}
+    for rp in baseline.route_plans:
+        v = vmap[rp.vehicle_id]
+        inserted = try_insert_trip(
+            updated, v, rp.driver_id, list(rp.ordered_stops), new_trip, trips_by_id
+        )
+        if inserted is not None:
+            score, _seq, plan = inserted
+            candidates.append((score, v.id, plan))
+    for v in updated.vehicles:
+        if v.id in used:
+            continue
+        inserted = try_insert_trip(
+            updated, v, _assign_driver(updated, v.id), [], new_trip, trips_by_id
+        )
+        if inserted is not None:
+            score, _seq, plan = inserted
+            candidates.append((score, v.id, plan))
 
-    new_result = _greedy_core(updated, active, solution_type="ONLINE_INSERTION")
-    # Detect frozen violations
+    if not candidates:
+        rejected = [
+            *list(baseline.rejected_requests),
+            RejectedTrip(
+                trip_id=new_trip.id,
+                reason_code=ReasonCode.TIME_WINDOW_CONFLICT.value,
+                detail="no feasible insertion into existing routes",
+            ),
+        ]
+        new_result = baseline.model_copy(
+            deep=True,
+            update={
+                "solution_type": "ONLINE_INSERTION",
+                "status": SolutionStatus.PARTIAL.value,
+                "rejected_requests": rejected,
+                "reason_codes": {
+                    **baseline.reason_codes,
+                    new_trip.id: ReasonCode.TIME_WINDOW_CONFLICT.value,
+                },
+            },
+        )
+        diff = compute_diff(baseline, new_result, frozen)
+        return updated, new_result, diff
+
+    candidates.sort(key=lambda x: (x[0], x[1]))
+    _score, vid, new_plan = candidates[0]
+    routes = []
+    for rp in baseline.route_plans:
+        if rp.vehicle_id == vid:
+            routes.append(new_plan)
+        else:
+            routes.append(rp)
+    if vid not in used:
+        routes.append(new_plan)
+    new_result = baseline.model_copy(
+        deep=True,
+        update={
+            "solution_type": "ONLINE_INSERTION",
+            "served_requests": sorted([*baseline.served_requests, new_trip.id]),
+            "route_plans": routes,
+            "reason_codes": {**baseline.reason_codes, new_trip.id: ReasonCode.ACCEPTED.value},
+            "objective_values": {
+                **baseline.objective_values,
+                "served": float(len(baseline.served_requests) + 1),
+            },
+            "solver_config": {"name": "ONLINE_INSERTION", "pooling": True},
+        },
+    )
     bmap = _trip_vehicle(baseline)
     nmap = _trip_vehicle(new_result)
-    for tid in frozen:
-        if tid in bmap and (tid not in nmap or nmap[tid] != bmap[tid]):
-            new_result.reason_codes[tid] = ReasonCode.MANUAL_REVIEW_REQUIRED.value
-            new_result.status = "MANUAL_REVIEW_REQUIRED"
-    diff = compute_diff(baseline, new_result, frozen | {t.id for t in updated.requests if t.frozen})
+    frozen_broken = [
+        tid for tid in frozen if tid in bmap and (tid not in nmap or nmap[tid] != bmap[tid])
+    ]
+    if protect_frozen and frozen_broken:
+        restored = baseline.model_copy(deep=True)
+        restored.solution_type = "ONLINE_INSERTION"
+        restored.rejected_requests = [
+            *list(baseline.rejected_requests),
+            RejectedTrip(
+                trip_id=new_trip.id,
+                reason_code=ReasonCode.TIME_WINDOW_CONFLICT.value,
+                detail="insertion would change frozen trips",
+            ),
+        ]
+        restored.reason_codes = {
+            **baseline.reason_codes,
+            new_trip.id: ReasonCode.TIME_WINDOW_CONFLICT.value,
+        }
+        restored.status = SolutionStatus.PARTIAL.value
+        diff = compute_diff(baseline, restored, frozen)
+        return updated, restored, diff
     report = check_plan(updated, new_result)
     new_result.verified_feasible = report.feasible
+    if report.feasible:
+        new_result.status = (
+            SolutionStatus.PARTIAL.value
+            if new_result.rejected_requests
+            else SolutionStatus.HEURISTIC_FEASIBLE.value
+        )
+    else:
+        new_result.status = SolutionStatus.NOT_VERIFIED.value
+    diff = compute_diff(baseline, new_result, frozen | {t.id for t in updated.requests if t.frozen})
     return updated, new_result, diff
 
 

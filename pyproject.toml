@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "synaps-mobiroute"
-version = "0.1.0"
+version = "0.1.1"
 description = "Explainable accessible Dial-a-Ride / paratransit planning and dispatch optimization kernel"
 readme = "README.md"
 requires-python = ">=3.12"

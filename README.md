@@ -45,11 +45,13 @@ ruff check src tests benchmark
 
 | Solver | When | May claim OPTIMAL? |
 | --- | --- | --- |
-| FIFO | baseline | No |
+| FIFO | baseline, no pooling | No |
 | Nearest feasible | baseline | No |
-| Greedy insertion | small/medium heuristic | No |
+| Greedy insertion | small/medium; **pooling insertion** | No |
+| Beam (width 3) | limited branching over insertions | No |
 | CP-SAT tiny | ≤40 trips / ≤12 vehicles | Yes, only if OR-Tools proves OPTIMAL **and** independent feasibility passes |
-| Online insertion / disruption | continuous dispatch | No |
+| Online insertion / disruption | insert into existing routes | No |
+| Incremental repair | named disruption replan | No |
 | ALNS / LBBD / RHC | large / medium | **PLANNED** (stubs only) |
 
 ## Repository layout

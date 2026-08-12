@@ -61,11 +61,12 @@ def check_route(
             if tid in seen_pickup:
                 violations.append(f"DUPLICATE_PICKUP:{tid}")
             seen_pickup.add(tid)
+            if arr < trip.earliest_pickup:
+                wait = trip.earliest_pickup - arr
+                if wait > trip.max_wait_time:
+                    violations.append(f"MAX_WAIT:{tid}")
             if arr > trip.latest_pickup:
                 violations.append(f"LATE_PICKUP:{tid}")
-            if arr < trip.earliest_pickup:
-                # waiting allowed; departure after earliest
-                pass
             seats = 1 + trip.companion_count
             load += seats
             wload += _wheelchair_units(trip.wheelchair_requirement)

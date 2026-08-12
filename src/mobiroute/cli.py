@@ -11,6 +11,7 @@ from mobiroute.dispatch.online_insertion import online_insert, recover_disruptio
 from mobiroute.domain.models import ServicePriority, WheelchairType
 from mobiroute.domain.requests import TripRequest
 from mobiroute.reporting.json_report import write_csv_metrics, write_json, write_markdown
+from mobiroute.solvers.beam import solve_beam
 from mobiroute.solvers.cpsat import solve_cpsat
 from mobiroute.solvers.greedy import solve_fifo, solve_greedy
 from mobiroute.solvers.nearest import solve_nearest
@@ -30,7 +31,7 @@ def main(argv: list[str] | None = None) -> int:
     s.add_argument("--problem", type=Path, required=True)
     s.add_argument(
         "--solver",
-        choices=["fifo", "greedy", "nearest", "cpsat"],
+        choices=["fifo", "greedy", "nearest", "cpsat", "beam"],
         default="greedy",
     )
     s.add_argument("--out-dir", type=Path, required=True)
@@ -62,6 +63,8 @@ def main(argv: list[str] | None = None) -> int:
             result = solve_cpsat(problem, time_limit_s=args.time_limit)
         elif args.solver == "nearest":
             result = solve_nearest(problem)
+        elif args.solver == "beam":
+            result = solve_beam(problem)
         else:
             result = solve_greedy(problem)
         args.out_dir.mkdir(parents=True, exist_ok=True)

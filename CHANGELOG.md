@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.1.1 — 2026-08-12
+
+- Greedy **pooling insertion** (interleaved pickup/dropoff), not sequential PU–DO only.
+- Online insertion into existing routes; reject if a frozen trip would move.
+- Beam search heuristic; incremental-repair named lane.
+- Driver accessibility training checked in simulation and feasibility.
+- Deeper research cards (CP 2026, IJOC Benders, OR Spectrum 2026, IJCAI 2024).
+- Still synthetic_benchmark only. ALNS/LBBD/RHC remain PLANNED.
+
 ## 0.1.0 — 2026-08-12
 
 - Initial public engineering prototype.
