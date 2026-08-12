@@ -14,13 +14,22 @@ from mobiroute.dispatch.online_insertion import (
 )
 from mobiroute.domain.models import WheelchairType
 from mobiroute.domain.route_graph import service_stops
-from mobiroute.solvers.greedy import route_plan_from_eval, simulate_stop_sequence, solve_greedy
-from mobiroute.solvers.insertion_kernel import ProblemKernel, vehicle_payload
+from mobiroute.solvers.greedy import (
+    _pair_stops,
+    route_plan_from_eval,
+    simulate_stop_sequence,
+    solve_greedy,
+)
+from mobiroute.solvers.insertion_kernel import ProblemKernel, best_insert_python, vehicle_payload
 from mobiroute.solvers.native_accel import (
+    append_trip,
     attach_native,
+    best_insert,
     eval_route,
+    fork_kernel,
     kernel_for,
     native_available,
+    score_stored,
     set_fleet,
 )
 from mobiroute.validation.feasibility import check_plan
@@ -253,3 +262,200 @@ def test_combat_small_day_traffic_then_two_online() -> None:
         _assert_notary(cur_p, cur_r)
     if cur_r.route_plans:
         _assert_native_lockstep(cur_p, cur_r)
+
+
+def test_native_prefix_insert_matches_python_on_loaded_route() -> None:
+    """Incremental (i, j) must match the Python SoA oracle on a non-empty route."""
+    if not native_available():
+        pytest.skip("mobiroute_native not built")
+    v = vehicle("v1", capacity=8, wheelchairs=2)
+    d = driver("d1")
+    trips = [
+        trip("a", "Z_NORTH", "Z_SOUTH", earliest=60, latest=240, max_ride=180, max_wait=80),
+        trip("b", "Z_EAST", "Z_WEST", earliest=70, latest=250, max_ride=180, max_wait=80),
+        trip("c", "Z_CENTER", "Z_HOSP_A", earliest=80, latest=260, max_ride=180, max_wait=80),
+        trip(
+            "d",
+            "Z_WEST",
+            "Z_HOSP_B",
+            earliest=90,
+            latest=270,
+            max_ride=180,
+            max_wait=80,
+            appt_start=200,
+            appt_end=280,
+        ),
+    ]
+    p = problem([v], [d], trips)
+    k = attach_native(ProblemKernel.from_problem(p))
+    vk = k.vehicles[v.id]
+    dk = k.drivers[d.id]
+    current: list = []
+    for new in trips:
+        st, sk = k.stops_to_arrays(current)
+        py_best = best_insert_python(k, vk, dk, st, sk, k.id_to_idx[new.id])
+        nat_best = best_insert(k, vk, dk, st, sk, k.id_to_idx[new.id])
+        assert nat_best == py_best, (new.id, nat_best, py_best)
+        if py_best is None:
+            break
+        i, _mid, j, _dur, _wait, _mx = py_best
+        pu, do = _pair_stops(new)
+        core = service_stops(current)
+        current = [*core[:i], pu, *core[i:j], do, *core[j:]]
+
+
+def test_native_via_insert_matches_python_on_loaded_route() -> None:
+    if not native_available():
+        pytest.skip("mobiroute_native not built")
+    v = vehicle("v1", capacity=6, wheelchairs=2)
+    d = driver("d1")
+    first = trip("a", "Z_NORTH", "Z_SOUTH", earliest=50, latest=300, max_ride=200, max_wait=90)
+    via_trip = trip(
+        "via",
+        "Z_EAST",
+        "Z_WEST",
+        earliest=80,
+        latest=320,
+        max_ride=220,
+        max_wait=90,
+        via="Z_HOSP_A",
+        appt_start=210,
+        appt_end=300,
+    )
+    p = problem([v], [d], [first, via_trip])
+    k = attach_native(ProblemKernel.from_problem(p))
+    vk = k.vehicles[v.id]
+    dk = k.drivers[d.id]
+    st, sk = k.stops_to_arrays([])
+    first_best = best_insert_python(k, vk, dk, st, sk, k.id_to_idx[first.id])
+    assert first_best is not None
+    pu, do = _pair_stops(first)
+    current = [pu, do]
+    st, sk = k.stops_to_arrays(current)
+    py_best = best_insert_python(k, vk, dk, st, sk, k.id_to_idx[via_trip.id])
+    nat_best = best_insert(k, vk, dk, st, sk, k.id_to_idx[via_trip.id])
+    assert nat_best == py_best
+
+
+def test_fork_copy_on_write_does_not_mutate_parent_table() -> None:
+    if not native_available():
+        pytest.skip("mobiroute_native not built")
+    p = generate_day("tiny", seed=21)
+    k = attach_native(ProblemKernel.from_problem(p))
+    vk = k.vehicles[p.vehicles[0].id]
+    dk = k.drivers[p.drivers[0].id]
+    veh, una = vehicle_payload(vk, dk)
+    set_fleet(k, [[]], [[]], [veh], [una])
+    new_idx = 0
+    parent = score_stored(k, new_idx)
+    child = fork_kernel(k)
+    extra = trip("cow", "Z_SOUTH", "Z_NORTH", earliest=400, latest=520, max_ride=90, max_wait=40)
+    zmap = {z: i for i, z in enumerate(p.travel.zones)}
+    append_trip(child, extra, zmap)
+    assert score_stored(k, new_idx) == parent
+    assert extra.id not in k.id_to_idx
+    assert extra.id in child.id_to_idx
+
+
+def test_group_bus_capacity_and_stretcher_exclusive_insert() -> None:
+    if not native_available():
+        pytest.skip("mobiroute_native not built")
+    bus = vehicle(
+        "bus",
+        capacity=18,
+        wheelchairs=2,
+        vtype="minibus",
+        types=[WheelchairType.MANUAL, WheelchairType.POWER, WheelchairType.STRETCHER],
+    )
+    d = driver("d1")
+    packed = [
+        trip(f"g{i}", "Z_NORTH", "Z_SOCIAL", earliest=60 + i, latest=240, companions=2)
+        for i in range(5)
+    ]
+    stretcher = trip(
+        "st",
+        "Z_EAST",
+        "Z_HOSP_A",
+        earliest=90,
+        latest=200,
+        wheelchair=WheelchairType.STRETCHER,
+        lift=True,
+        assist=True,
+    )
+    p = problem([bus], [d], [*packed, stretcher])
+    res = solve_greedy(p)
+    _assert_notary(p, res)
+    if res.route_plans:
+        _assert_native_lockstep(p, res)
+    if stretcher.id in set(res.served_requests):
+        assigned = next(rp for rp in res.route_plans if stretcher.id in rp.passenger_assignments)
+        others = [tid for tid in assigned.passenger_assignments if tid != stretcher.id]
+        assert others == []
+
+
+def test_unavail_travel_window_and_service_area_insert() -> None:
+    if not native_available():
+        pytest.skip("mobiroute_native not built")
+    v = vehicle("v1", capacity=4, wheelchairs=1)
+    v = v.model_copy(
+        update={
+            "unavailable_intervals": [(120, 140)],
+            "service_area": ["Z_NORTH", "Z_SOUTH", "Z_HOSP_A", "Z_DEPOT_1"],
+        }
+    )
+    d = driver("d1")
+    inside = trip("in", "Z_NORTH", "Z_HOSP_A", earliest=60, latest=200, max_ride=120, max_wait=50)
+    outside = trip("out", "Z_EAST", "Z_WEST", earliest=70, latest=210, max_ride=120, max_wait=50)
+    p = problem([v], [d], [inside, outside])
+    res = solve_greedy(p)
+    _assert_notary(p, res)
+    assert outside.id not in res.served_requests
+    if res.route_plans:
+        _assert_native_lockstep(p, res)
+
+
+def test_combat_ops_stretcher_then_traffic_then_emergency() -> None:
+    p = generate_ops_day("ops_stretcher", seed=42)
+    day = solve_greedy(p)
+    _assert_notary(p, day)
+    traffic = apply_traffic_delay(p, 7)
+    p2, r2, _ = recover_disruption(traffic, day, traffic_delay_minutes=7)
+    _assert_notary(p2, r2)
+    em = trip(
+        "st-er",
+        "Z_NORTH",
+        "Z_HOSP_A",
+        earliest=100,
+        latest=180,
+        max_ride=70,
+        max_wait=30,
+        wheelchair=WheelchairType.STRETCHER,
+        lift=True,
+        assist=True,
+    )
+    p3, r3, _ = recover_disruption(p2, r2, emergency_trip=em)
+    _assert_notary(p3, r3)
+    assert r3.status != "OPTIMAL"
+    if r3.route_plans:
+        _assert_native_lockstep(p3, r3)
+
+
+def test_score_stored_is_deterministic_across_calls() -> None:
+    if not native_available():
+        pytest.skip("mobiroute_native not built")
+    p = generate_day("tiny", seed=33)
+    k = attach_native(ProblemKernel.from_problem(p))
+    rows = []
+    vehs = []
+    unas = []
+    for v in p.vehicles:
+        vk = k.vehicles[v.id]
+        dk = k.drivers[p.drivers[0].id]
+        veh, una = vehicle_payload(vk, dk)
+        rows.append([])
+        vehs.append(veh)
+        unas.append(una)
+    set_fleet(k, rows, [[] for _ in rows], vehs, unas)
+    a = sorted(score_stored(k, 0))
+    b = sorted(score_stored(k, 0))
+    assert a == b

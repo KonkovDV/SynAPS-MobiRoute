@@ -1,9 +1,15 @@
 //! MobiRoute insertion scoring kernel (SynAPS-style PyO3 hot path).
-//! Virtual insert (Hu/Omega 2026 linear test analogue) + persistent fleet
-//! (avoid recopying routes; Jaw/Cordeau) + rayon over vehicles.
-//! Not Gschwind–Drexl O(1) FTS. Heuristic, never OPTIMAL.
+//! Prefix-state reuse + incremental (i, j) / VIA walk (Savelsbergh concatenated
+//! evaluation; Hu/Omega 2026 linear-test analogue) + persistent fleet
+//! (Jaw/Cordeau) + rayon over vehicles + Arc copy-on-write fork.
+//! Trip row is 16×i32 = one 64-byte cache line (AoS, not PDX/SoA: access is
+//! trip-at-a-time, not dimension-at-a-time). Not Gschwind–Drexl O(1) FTS:
+//! VIA, stretcher, unavail occupancy, and appointment lobby snap break that
+//! auxiliary-data contract. Heuristic, never OPTIMAL.
 //! ABI: trip stride 16; best_insert returns (i, mid, j, dur, wait, max_load); mid=-1 if no VIA.
 //! score_fleet returns (fleet_index, i, mid, j, dur, wait, max_load) per feasible vehicle.
+
+use std::sync::Arc;
 
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
@@ -203,16 +209,25 @@ struct RouteTrace {
     stops: Vec<(i32, i32, i32, i32)>,
 }
 
-fn simulate_inserted(
-    travel: &[i32],
+#[derive(Clone, Copy)]
+struct Cursor {
+    loc: i32,
+    tnow: i32,
+    end: i32,
+    load: i32,
+    wload: i32,
+    wait_sum: i32,
+    max_load: i32,
+    stretcher_on: i32,
+}
+
+struct World<'a> {
+    travel: &'a [i32],
     n_zones: usize,
-    table: &[i32],
-    detour: &[f64],
+    table: &'a [i32],
+    detour: &'a [f64],
+    detour_cap: &'a [i32],
     n_trips: usize,
-    orig_t: &[i32],
-    orig_k: &[i32],
-    new_idx: i32,
-    mode: InsertMode,
     depot: i32,
     shift_start: i32,
     shift_end: i32,
@@ -224,8 +239,343 @@ fn simulate_inserted(
     dend: i32,
     dassist: bool,
     has_driver: bool,
-    unavail: &[i32],
-    area: &[i32],
+    unavail: &'a [i32],
+    area: &'a [i32],
+    check_unavail: bool,
+}
+
+fn compute_detour_caps(travel: &[i32], n_zones: usize, table: &[i32], detour: &[f64]) -> Vec<i32> {
+    let n = table.len() / STRIDE;
+    let mut out = vec![-1i32; n];
+    if n_zones == 0 || travel.len() != n_zones * n_zones || detour.len() != n {
+        return out;
+    }
+    let inb = |z: i32| z >= 0 && (z as usize) < n_zones;
+    for i in 0..n {
+        let t = trip_at(table, detour, i);
+        let direct = if t.via >= 0 {
+            if inb(t.pu) && inb(t.via) && inb(t.do_) {
+                tt(travel, n_zones, t.pu, t.via) + t.via_svc + tt(travel, n_zones, t.via, t.do_)
+            } else {
+                0
+            }
+        } else if inb(t.pu) && inb(t.do_) {
+            tt(travel, n_zones, t.pu, t.do_)
+        } else {
+            0
+        };
+        if direct > 0 {
+            out[i] = detour_limit(direct, t.detour);
+        }
+    }
+    out
+}
+
+fn start_cursor(w: &World) -> Cursor {
+    let mut tnow = w.shift_start;
+    let mut end = w.shift_end;
+    if w.has_driver {
+        if tnow < w.dstart {
+            tnow = w.dstart;
+        }
+        if end > w.dend {
+            end = w.dend;
+        }
+    }
+    Cursor {
+        loc: w.depot,
+        tnow,
+        end,
+        load: 0,
+        wload: 0,
+        wait_sum: 0,
+        max_load: 0,
+        stretcher_on: 0,
+    }
+}
+
+fn world_from_veh<'a>(
+    travel: &'a [i32],
+    n_zones: usize,
+    table: &'a [i32],
+    detour: &'a [f64],
+    detour_cap: &'a [i32],
+    n_trips: usize,
+    veh: &'a [i32],
+    unavail: &'a [i32],
+) -> Option<World<'a>> {
+    let (depot, shift_start, shift_end, cap_p, cap_w, vflags, wmask, dstart, dend, dassist, has_driver, area) =
+        parse_veh(veh)?;
+    Some(World {
+        travel,
+        n_zones,
+        table,
+        detour,
+        detour_cap,
+        n_trips,
+        depot,
+        shift_start,
+        shift_end,
+        cap_p,
+        cap_w,
+        vflags,
+        wmask,
+        dstart,
+        dend,
+        dassist,
+        has_driver,
+        unavail,
+        area,
+        check_unavail: !unavail.is_empty(),
+    })
+}
+
+#[inline(always)]
+fn apply_stop(
+    w: &World,
+    cur: &mut Cursor,
+    pickup_dep: &mut [i32],
+    trip_i: i32,
+    kind: i32,
+    check_new: bool,
+    best_dur: i32,
+    best_wait: i32,
+    mut trace: Option<&mut RouteTrace>,
+) -> bool {
+    let idx = trip_i as usize;
+    if idx >= w.n_trips {
+        return false;
+    }
+    let t = trip_at(w.table, w.detour, idx);
+    let dest = match kind {
+        0 => t.pu,
+        2 => t.via,
+        _ => t.do_,
+    };
+    if dest < 0 || (dest as usize) >= w.n_zones {
+        return false;
+    }
+    if cur.load == 0 && cur.loc == w.depot {
+        cur.tnow = push_past_unavail(cur.tnow, w.unavail);
+    }
+    let t_begin = cur.tnow;
+    let mut arrive = cur.tnow + tt(w.travel, w.n_zones, cur.loc, dest);
+    let svc;
+    if kind == 0 {
+        let mut hold = 0;
+        let mut pwait = 0;
+        if arrive < t.earliest {
+            hold = t.earliest - arrive;
+            arrive = t.earliest;
+        } else {
+            pwait = arrive - t.earliest;
+        }
+        if (hold > t.max_wait && cur.load > 0) || pwait > t.max_wait || arrive > t.latest {
+            return false;
+        }
+        if check_new {
+            if !compat(
+                &t,
+                w.cap_p,
+                w.cap_w,
+                w.vflags,
+                w.wmask,
+                w.shift_start,
+                w.shift_end,
+                w.area,
+            ) {
+                return false;
+            }
+            if (t.flags & FLAG_ASSIST) != 0 && (!w.has_driver || !w.dassist) {
+                return false;
+            }
+        }
+        if (t.flags & FLAG_STRETCHER) != 0 && cur.load > 0 {
+            return false;
+        }
+        if cur.stretcher_on > 0 {
+            return false;
+        }
+        svc = t.board.max(CURB_WAIT);
+        cur.load += t.seats;
+        cur.wload += t.wunits;
+        if cur.load > w.cap_p || cur.wload > w.cap_w {
+            return false;
+        }
+        if cur.load > cur.max_load {
+            cur.max_load = cur.load;
+        }
+        if (t.flags & FLAG_STRETCHER) != 0 {
+            cur.stretcher_on += 1;
+        }
+        cur.wait_sum += pwait;
+        if let Some(buf) = trace.as_mut() {
+            buf.waits.push((trip_i, pwait));
+        }
+    } else if kind == 2 {
+        if pickup_dep[idx] < 0 {
+            return false;
+        }
+        svc = t.via_svc;
+    } else {
+        if pickup_dep[idx] < 0 {
+            return false;
+        }
+        if t.appt_s >= 0 {
+            let mut early_do = t.appt_s - EARLY_DROPOFF_SLACK;
+            if early_do < 0 {
+                early_do = 0;
+            }
+            if arrive < early_do {
+                if cur.load > t.seats {
+                    return false;
+                }
+                arrive = early_do;
+            }
+        }
+        let ride = arrive - pickup_dep[idx];
+        if let Some(buf) = trace.as_mut() {
+            buf.rides.push((trip_i, ride));
+        }
+        if ride > t.max_ride {
+            return false;
+        }
+        let cap = if idx < w.detour_cap.len() {
+            w.detour_cap[idx]
+        } else {
+            -1
+        };
+        if cap >= 0 && ride > cap {
+            return false;
+        }
+        if t.appt_e >= 0 && arrive > t.appt_e {
+            return false;
+        }
+        svc = t.alight;
+        cur.load -= t.seats;
+        cur.wload -= t.wunits;
+        if cur.load < 0 || cur.wload < 0 {
+            return false;
+        }
+        if (t.flags & FLAG_STRETCHER) != 0 {
+            cur.stretcher_on -= 1;
+        }
+    }
+    let leave = arrive + svc;
+    if leave > cur.end {
+        return false;
+    }
+    if w.check_unavail && occupancy_overlaps(t_begin, leave, w.unavail) {
+        return false;
+    }
+    if kind == 0 {
+        pickup_dep[idx] = leave;
+    }
+    if let Some(buf) = trace.as_mut() {
+        buf.stops.push((arrive, leave, cur.load, cur.wload));
+    }
+    cur.loc = dest;
+    cur.tnow = leave;
+    if best_dur != i32::MAX {
+        let dur_lb = cur.tnow - w.shift_start;
+        if dur_lb > best_dur {
+            return false;
+        }
+        if dur_lb >= best_dur && cur.wait_sum > best_wait {
+            return false;
+        }
+    }
+    true
+}
+
+#[inline(always)]
+fn finish_return(w: &World, cur: &Cursor) -> Option<(i32, i32, i32)> {
+    let t_ret = cur.tnow;
+    let tnow = t_ret + tt(w.travel, w.n_zones, cur.loc, w.depot);
+    if tnow > cur.end {
+        return None;
+    }
+    if w.check_unavail && occupancy_overlaps(t_ret, tnow, w.unavail) {
+        return None;
+    }
+    Some((tnow - w.shift_start, cur.wait_sum, cur.max_load))
+}
+
+fn apply_orig_range(
+    w: &World,
+    cur: &mut Cursor,
+    pickup_dep: &mut [i32],
+    orig_t: &[i32],
+    orig_k: &[i32],
+    from: usize,
+    to: usize,
+    best_dur: i32,
+    best_wait: i32,
+) -> bool {
+    for s in from..to {
+        if !apply_stop(
+            w,
+            cur,
+            pickup_dep,
+            orig_t[s],
+            orig_k[s],
+            false,
+            best_dur,
+            best_wait,
+            None,
+        ) {
+            return false;
+        }
+    }
+    true
+}
+
+fn capture_dep(orig_t: &[i32], new_idx: i32, pickup_dep: &[i32]) -> Vec<(usize, i32)> {
+    let mut cap = Vec::with_capacity(orig_t.len() + 1);
+    for &ti in orig_t {
+        let u = ti as usize;
+        if u < pickup_dep.len() {
+            cap.push((u, pickup_dep[u]));
+        }
+    }
+    let nu = new_idx as usize;
+    if nu < pickup_dep.len() {
+        cap.push((nu, pickup_dep[nu]));
+    }
+    cap
+}
+
+fn restore_dep(cap: &[(usize, i32)], pickup_dep: &mut [i32]) {
+    for &(u, v) in cap {
+        pickup_dep[u] = v;
+    }
+}
+
+fn load_prefix(orig_t: &[i32], new_idx: i32, onboard: &[(i32, i32)], pickup_dep: &mut [i32]) {
+    for &ti in orig_t {
+        let u = ti as usize;
+        if u < pickup_dep.len() {
+            pickup_dep[u] = -1;
+        }
+    }
+    let nu = new_idx as usize;
+    if nu < pickup_dep.len() {
+        pickup_dep[nu] = -1;
+    }
+    for &(ti, leave) in onboard {
+        let u = ti as usize;
+        if u < pickup_dep.len() {
+            pickup_dep[u] = leave;
+        }
+    }
+}
+
+fn simulate_inserted(
+    w: &World,
+    orig_t: &[i32],
+    orig_k: &[i32],
+    new_idx: i32,
+    mode: InsertMode,
     pickup_dep: &mut [i32],
     mut trace: Option<&mut RouteTrace>,
 ) -> Option<(i32, i32, i32)> {
@@ -245,165 +595,29 @@ fn simulate_inserted(
     if nu < pickup_dep.len() {
         pickup_dep[nu] = -1;
     }
-    let mut loc = depot;
-    let mut tnow = shift_start;
-    let mut end = shift_end;
-    if has_driver {
-        if tnow < dstart {
-            tnow = dstart;
-        }
-        if end > dend {
-            end = dend;
-        }
-    }
-    let mut load = 0i32;
-    let mut wload = 0i32;
-    let mut wait_sum = 0i32;
-    let mut max_load = 0i32;
-    let mut stretcher_on = 0i32;
-    let check_unavail = !unavail.is_empty();
+    let mut cur = start_cursor(w);
     for s in 0..nstop {
         let (trip_i, kind) = match mode {
             InsertMode::Pair { i, j } => pair_at(orig_t, orig_k, new_idx, i, j, s),
             InsertMode::Via { i, mid, j } => via_at(orig_t, orig_k, new_idx, i, mid, j, s),
             InsertMode::AsIs => (orig_t[s], orig_k[s]),
         };
-        let idx = trip_i as usize;
-        if idx >= n_trips {
+        let check_new = matches!(mode, InsertMode::AsIs) || trip_i == new_idx;
+        if !apply_stop(
+            w,
+            &mut cur,
+            pickup_dep,
+            trip_i,
+            kind,
+            check_new,
+            i32::MAX,
+            i32::MAX,
+            trace.as_deref_mut(),
+        ) {
             return None;
         }
-        let t = trip_at(table, detour, idx);
-        let dest = match kind {
-            0 => t.pu,
-            2 => t.via,
-            _ => t.do_,
-        };
-        if dest < 0 || (dest as usize) >= n_zones {
-            return None;
-        }
-        if load == 0 && loc == depot {
-            tnow = push_past_unavail(tnow, unavail);
-        }
-        let t_begin = tnow;
-        let mut arrive = tnow + tt(travel, n_zones, loc, dest);
-        let svc;
-        let is_new = matches!(mode, InsertMode::AsIs) || trip_i == new_idx;
-        if kind == 0 {
-            let mut hold = 0;
-            let mut pwait = 0;
-            if arrive < t.earliest {
-                hold = t.earliest - arrive;
-                arrive = t.earliest;
-            } else {
-                pwait = arrive - t.earliest;
-            }
-            if (hold > t.max_wait && load > 0) || pwait > t.max_wait || arrive > t.latest {
-                return None;
-            }
-            if is_new {
-                if !compat(&t, cap_p, cap_w, vflags, wmask, shift_start, shift_end, area) {
-                    return None;
-                }
-                if (t.flags & FLAG_ASSIST) != 0 && (!has_driver || !dassist) {
-                    return None;
-                }
-            }
-            if (t.flags & FLAG_STRETCHER) != 0 && load > 0 {
-                return None;
-            }
-            if stretcher_on > 0 {
-                return None;
-            }
-            svc = t.board.max(CURB_WAIT);
-            load += t.seats;
-            wload += t.wunits;
-            if load > cap_p || wload > cap_w {
-                return None;
-            }
-            if load > max_load {
-                max_load = load;
-            }
-            if (t.flags & FLAG_STRETCHER) != 0 {
-                stretcher_on += 1;
-            }
-            wait_sum += pwait;
-            if let Some(buf) = trace.as_mut() {
-                buf.waits.push((trip_i, pwait));
-            }
-        } else if kind == 2 {
-            if pickup_dep[idx] < 0 {
-                return None;
-            }
-            svc = t.via_svc;
-        } else {
-            if pickup_dep[idx] < 0 {
-                return None;
-            }
-            if t.appt_s >= 0 {
-                let mut early_do = t.appt_s - EARLY_DROPOFF_SLACK;
-                if early_do < 0 {
-                    early_do = 0;
-                }
-                if arrive < early_do {
-                    if load > t.seats {
-                        return None;
-                    }
-                    arrive = early_do;
-                }
-            }
-            let ride = arrive - pickup_dep[idx];
-            if let Some(buf) = trace.as_mut() {
-                buf.rides.push((trip_i, ride));
-            }
-            if ride > t.max_ride {
-                return None;
-            }
-            let direct = if t.via >= 0 {
-                tt(travel, n_zones, t.pu, t.via) + t.via_svc + tt(travel, n_zones, t.via, t.do_)
-            } else {
-                tt(travel, n_zones, t.pu, t.do_)
-            };
-            if direct > 0 && ride > detour_limit(direct, t.detour) {
-                return None;
-            }
-            if t.appt_e >= 0 && arrive > t.appt_e {
-                return None;
-            }
-            svc = t.alight;
-            load -= t.seats;
-            wload -= t.wunits;
-            if load < 0 || wload < 0 {
-                return None;
-            }
-            if (t.flags & FLAG_STRETCHER) != 0 {
-                stretcher_on -= 1;
-            }
-        }
-        let leave = arrive + svc;
-        if leave > end {
-            return None;
-        }
-        if check_unavail && occupancy_overlaps(t_begin, leave, unavail) {
-            return None;
-        }
-        if kind == 0 {
-            pickup_dep[idx] = leave;
-        }
-        if let Some(buf) = trace.as_mut() {
-            buf.stops.push((arrive, leave, load, wload));
-        }
-        loc = dest;
-        tnow = leave;
     }
-    let t_ret = tnow;
-    tnow += tt(travel, n_zones, loc, depot);
-    if tnow > end {
-        return None;
-    }
-    if check_unavail && occupancy_overlaps(t_ret, tnow, unavail) {
-        return None;
-    }
-    Some((tnow - shift_start, wait_sum, max_load))
+    finish_return(w, &cur)
 }
 
 fn parse_veh(veh: &[i32]) -> Option<(i32, i32, i32, i32, i32, i32, i32, i32, i32, bool, bool, &[i32])> {
@@ -441,6 +655,7 @@ fn eval_stored(
     n_zones: usize,
     table: &[i32],
     detour: &[f64],
+    detour_cap: &[i32],
     fv: &FleetVeh,
 ) -> Option<(i32, i32, RouteTrace)> {
     if fv.stop_trip.is_empty() {
@@ -453,45 +668,24 @@ fn eval_stored(
     if detour.len() != n_trips {
         return None;
     }
-    let (
-        depot,
-        shift_start,
-        shift_end,
-        cap_p,
-        cap_w,
-        vflags,
-        wmask,
-        dstart,
-        dend,
-        dassist,
-        has_driver,
-        area,
-    ) = parse_veh(&fv.veh)?;
-    let mut pickup_dep = vec![-1i32; n_trips];
-    let mut trace = RouteTrace::default();
-    let (dur, wait, _mx) = simulate_inserted(
+    let w = world_from_veh(
         travel,
         n_zones,
         table,
         detour,
+        detour_cap,
         n_trips,
+        &fv.veh,
+        &fv.unavail,
+    )?;
+    let mut pickup_dep = vec![-1i32; n_trips];
+    let mut trace = RouteTrace::default();
+    let (dur, wait, _mx) = simulate_inserted(
+        &w,
         &fv.stop_trip,
         &fv.stop_kind,
         -1,
         InsertMode::AsIs,
-        depot,
-        shift_start,
-        shift_end,
-        cap_p,
-        cap_w,
-        vflags,
-        wmask,
-        dstart,
-        dend,
-        dassist,
-        has_driver,
-        &fv.unavail,
-        area,
         &mut pickup_dep,
         Some(&mut trace),
     )?;
@@ -503,6 +697,7 @@ fn trial_insert_trace(
     n_zones: usize,
     table: &[i32],
     detour: &[f64],
+    detour_cap: &[i32],
     fv: &FleetVeh,
     i: i32,
     mid: i32,
@@ -513,20 +708,16 @@ fn trial_insert_trace(
     if n_trips == 0 {
         return None;
     }
-    let (
-        depot,
-        shift_start,
-        shift_end,
-        cap_p,
-        cap_w,
-        vflags,
-        wmask,
-        dstart,
-        dend,
-        dassist,
-        has_driver,
-        area,
-    ) = parse_veh(&fv.veh)?;
+    let w = world_from_veh(
+        travel,
+        n_zones,
+        table,
+        detour,
+        detour_cap,
+        n_trips,
+        &fv.veh,
+        &fv.unavail,
+    )?;
     let mode = if mid < 0 {
         InsertMode::Pair {
             i: i.max(0) as usize,
@@ -542,32 +733,31 @@ fn trial_insert_trace(
     let mut pickup_dep = vec![-1i32; n_trips];
     let mut trace = RouteTrace::default();
     let (dur, wait, _mx) = simulate_inserted(
-        travel,
-        n_zones,
-        table,
-        detour,
-        n_trips,
+        &w,
         &fv.stop_trip,
         &fv.stop_kind,
         new_idx,
         mode,
-        depot,
-        shift_start,
-        shift_end,
-        cap_p,
-        cap_w,
-        vflags,
-        wmask,
-        dstart,
-        dend,
-        dassist,
-        has_driver,
-        &fv.unavail,
-        area,
         &mut pickup_dep,
         Some(&mut trace),
     )?;
     Some((dur, wait, trace))
+}
+
+fn consider_best(
+    best: &mut Option<(i32, i32, i32, i32, i32, i32)>,
+    best_key: &mut Option<(i32, i32, i32, i32, i32, i32)>,
+    best_dur: &mut i32,
+    best_wait: &mut i32,
+    key: (i32, i32, i32, i32, i32, i32),
+    row: (i32, i32, i32, i32, i32, i32),
+) {
+    if best_key.map(|b| key < b).unwrap_or(true) {
+        *best_key = Some(key);
+        *best = Some(row);
+        *best_dur = row.3;
+        *best_wait = row.4;
+    }
 }
 
 fn best_insert_inner(
@@ -575,6 +765,7 @@ fn best_insert_inner(
     n_zones: usize,
     table: &[i32],
     detour: &[f64],
+    detour_cap: &[i32],
     stop_trip: &[i32],
     stop_kind: &[i32],
     new_idx: i32,
@@ -598,91 +789,255 @@ fn best_insert_inner(
     if new_idx < 0 || (new_idx as usize) >= n_trips {
         return None;
     }
-    let (depot, shift_start, shift_end, cap_p, cap_w, vflags, wmask, dstart, dend, dassist, has_driver, area) =
-        parse_veh(veh)?;
-    let m = stop_trip.len();
+    let w = world_from_veh(
+        travel,
+        n_zones,
+        table,
+        detour,
+        detour_cap,
+        n_trips,
+        veh,
+        unavail,
+    )?;
     let nt = trip_at(table, detour, new_idx as usize);
+    if !compat(
+        &nt,
+        w.cap_p,
+        w.cap_w,
+        w.vflags,
+        w.wmask,
+        w.shift_start,
+        w.shift_end,
+        w.area,
+    ) {
+        return None;
+    }
+    if (nt.flags & FLAG_ASSIST) != 0 && (!w.has_driver || !w.dassist) {
+        return None;
+    }
+    let m = stop_trip.len();
+    for &idx in stop_trip {
+        let u = idx as usize;
+        if u < pickup_dep.len() {
+            pickup_dep[u] = -1;
+        }
+    }
+    let nu = new_idx as usize;
+    if nu < pickup_dep.len() {
+        pickup_dep[nu] = -1;
+    }
+    let mut prefixes: Vec<(Cursor, Vec<(i32, i32)>)> = Vec::with_capacity(m + 1);
+    let mut cur = start_cursor(&w);
+    let mut onboard: Vec<(i32, i32)> = Vec::new();
+    prefixes.push((cur, onboard.clone()));
+    for s in 0..m {
+        if !apply_stop(
+            &w,
+            &mut cur,
+            pickup_dep,
+            stop_trip[s],
+            stop_kind[s],
+            false,
+            i32::MAX,
+            i32::MAX,
+            None,
+        ) {
+            return None;
+        }
+        if stop_kind[s] == 0 {
+            onboard.push((stop_trip[s], pickup_dep[stop_trip[s] as usize]));
+        } else if stop_kind[s] == 1 {
+            let tid = stop_trip[s];
+            onboard.retain(|(ti, _)| *ti != tid);
+        }
+        prefixes.push((cur, onboard.clone()));
+    }
     let has_via = nt.via >= 0;
     let mut best: Option<(i32, i32, i32, i32, i32, i32)> = None;
     let mut best_key: Option<(i32, i32, i32, i32, i32, i32)> = None;
+    let mut best_dur = i32::MAX;
+    let mut best_wait = i32::MAX;
     if has_via {
         for i in 0..=m {
+            load_prefix(stop_trip, new_idx, &prefixes[i].1, pickup_dep);
+            let mut walk_mid = prefixes[i].0;
+            if !apply_stop(
+                &w,
+                &mut walk_mid,
+                pickup_dep,
+                new_idx,
+                0,
+                true,
+                i32::MAX,
+                i32::MAX,
+                None,
+            ) {
+                continue;
+            }
             for mid in i..=m {
-                for j in mid..=m {
-                    if let Some((dur, wait, mx)) = simulate_inserted(
-                        travel,
-                        n_zones,
-                        table,
-                        detour,
-                        n_trips,
-                        stop_trip,
-                        stop_kind,
-                        new_idx,
-                        InsertMode::Via { i, mid, j },
-                        depot,
-                        shift_start,
-                        shift_end,
-                        cap_p,
-                        cap_w,
-                        vflags,
-                        wmask,
-                        dstart,
-                        dend,
-                        dassist,
-                        has_driver,
-                        unavail,
-                        area,
-                        pickup_dep,
-                        None,
-                    ) {
-                        let i32i = i as i32;
-                        let mid32 = mid as i32;
-                        let j32 = j as i32;
-                        let key = (dur, wait, -mx, i32i, mid32, j32);
-                        if best_key.map(|b| key < b).unwrap_or(true) {
-                            best_key = Some(key);
-                            best = Some((i32i, mid32, j32, dur, wait, mx));
+                let cap_mid = capture_dep(stop_trip, new_idx, pickup_dep);
+                let mut after_via = walk_mid;
+                if apply_stop(
+                    &w,
+                    &mut after_via,
+                    pickup_dep,
+                    new_idx,
+                    2,
+                    false,
+                    i32::MAX,
+                    i32::MAX,
+                    None,
+                ) {
+                    let mut walk_j = after_via;
+                    for j in mid..=m {
+                        let cap_j = capture_dep(stop_trip, new_idx, pickup_dep);
+                        let mut trial = walk_j;
+                        let scored = if apply_stop(
+                            &w,
+                            &mut trial,
+                            pickup_dep,
+                            new_idx,
+                            1,
+                            false,
+                            best_dur,
+                            best_wait,
+                            None,
+                        ) && apply_orig_range(
+                            &w,
+                            &mut trial,
+                            pickup_dep,
+                            stop_trip,
+                            stop_kind,
+                            j,
+                            m,
+                            best_dur,
+                            best_wait,
+                        ) {
+                            finish_return(&w, &trial)
+                        } else {
+                            None
+                        };
+                        restore_dep(&cap_j, pickup_dep);
+                        if let Some((dur, wait, mx)) = scored {
+                            let i32i = i as i32;
+                            let mid32 = mid as i32;
+                            let j32 = j as i32;
+                            consider_best(
+                                &mut best,
+                                &mut best_key,
+                                &mut best_dur,
+                                &mut best_wait,
+                                (dur, wait, -mx, i32i, mid32, j32),
+                                (i32i, mid32, j32, dur, wait, mx),
+                            );
+                        }
+                        if j < m
+                            && !apply_stop(
+                                &w,
+                                &mut walk_j,
+                                pickup_dep,
+                                stop_trip[j],
+                                stop_kind[j],
+                                false,
+                                i32::MAX,
+                                i32::MAX,
+                                None,
+                            )
+                        {
+                            break;
                         }
                     }
+                }
+                restore_dep(&cap_mid, pickup_dep);
+                if mid < m
+                    && !apply_stop(
+                        &w,
+                        &mut walk_mid,
+                        pickup_dep,
+                        stop_trip[mid],
+                        stop_kind[mid],
+                        false,
+                        i32::MAX,
+                        i32::MAX,
+                        None,
+                    )
+                {
+                    break;
                 }
             }
         }
     } else {
         for i in 0..=m {
+            load_prefix(stop_trip, new_idx, &prefixes[i].1, pickup_dep);
+            let mut walk = prefixes[i].0;
+            if !apply_stop(
+                &w,
+                &mut walk,
+                pickup_dep,
+                new_idx,
+                0,
+                true,
+                i32::MAX,
+                i32::MAX,
+                None,
+            ) {
+                continue;
+            }
             for j in i..=m {
-                if let Some((dur, wait, mx)) = simulate_inserted(
-                    travel,
-                    n_zones,
-                    table,
-                    detour,
-                    n_trips,
+                let cap_j = capture_dep(stop_trip, new_idx, pickup_dep);
+                let mut trial = walk;
+                let scored = if apply_stop(
+                    &w,
+                    &mut trial,
+                    pickup_dep,
+                    new_idx,
+                    1,
+                    false,
+                    best_dur,
+                    best_wait,
+                    None,
+                ) && apply_orig_range(
+                    &w,
+                    &mut trial,
+                    pickup_dep,
                     stop_trip,
                     stop_kind,
-                    new_idx,
-                    InsertMode::Pair { i, j },
-                    depot,
-                    shift_start,
-                    shift_end,
-                    cap_p,
-                    cap_w,
-                    vflags,
-                    wmask,
-                    dstart,
-                    dend,
-                    dassist,
-                    has_driver,
-                    unavail,
-                    area,
-                    pickup_dep,
-                    None,
+                    j,
+                    m,
+                    best_dur,
+                    best_wait,
                 ) {
+                    finish_return(&w, &trial)
+                } else {
+                    None
+                };
+                restore_dep(&cap_j, pickup_dep);
+                if let Some((dur, wait, mx)) = scored {
                     let i32i = i as i32;
                     let j32 = j as i32;
-                    let key = (dur, wait, -mx, i32i, j32, 0);
-                    if best_key.map(|b| key < b).unwrap_or(true) {
-                        best_key = Some(key);
-                        best = Some((i32i, -1, j32, dur, wait, mx));
-                    }
+                    consider_best(
+                        &mut best,
+                        &mut best_key,
+                        &mut best_dur,
+                        &mut best_wait,
+                        (dur, wait, -mx, i32i, j32, 0),
+                        (i32i, -1, j32, dur, wait, mx),
+                    );
+                }
+                if j < m
+                    && !apply_stop(
+                        &w,
+                        &mut walk,
+                        pickup_dep,
+                        stop_trip[j],
+                        stop_kind[j],
+                        false,
+                        i32::MAX,
+                        i32::MAX,
+                        None,
+                    )
+                {
+                    break;
                 }
             }
         }
@@ -709,6 +1064,7 @@ fn score_fleet_inner(
         return Vec::new();
     }
     let n_trips = table.len() / STRIDE;
+    let detour_cap = compute_detour_caps(travel, n_zones, table, detour);
     (0..n)
         .into_par_iter()
         .filter_map(|v| {
@@ -718,6 +1074,7 @@ fn score_fleet_inner(
                 n_zones,
                 table,
                 detour,
+                &detour_cap,
                 &stop_trips[v],
                 &stop_kinds[v],
                 new_idx,
@@ -774,10 +1131,11 @@ struct FleetVeh {
 
 #[pyclass(module = "mobiroute_native")]
 struct InsertionEngine {
-    travel: Vec<i32>,
+    travel: Arc<Vec<i32>>,
     n_zones: usize,
-    table: Vec<i32>,
-    detour: Vec<f64>,
+    table: Arc<Vec<i32>>,
+    detour: Arc<Vec<f64>>,
+    detour_cap: Arc<Vec<i32>>,
     fleet: Vec<FleetVeh>,
 }
 
@@ -796,11 +1154,13 @@ impl InsertionEngine {
         if trip_table.len() % STRIDE != 0 || detour.len() != trip_table.len() / STRIDE {
             return Err(PyValueError::new_err("trip table/detour mismatch"));
         }
+        let detour_cap = compute_detour_caps(&travel, n_zones, &trip_table, &detour);
         Ok(Self {
-            travel,
+            travel: Arc::new(travel),
             n_zones,
-            table: trip_table,
-            detour,
+            table: Arc::new(trip_table),
+            detour: Arc::new(detour),
+            detour_cap: Arc::new(detour_cap),
             fleet: Vec::new(),
         })
     }
@@ -822,6 +1182,7 @@ impl InsertionEngine {
                 self.n_zones,
                 &self.table,
                 &self.detour,
+                &self.detour_cap,
                 &stop_trip,
                 &stop_kind,
                 new_idx,
@@ -907,6 +1268,7 @@ impl InsertionEngine {
                         self.n_zones,
                         &self.table,
                         &self.detour,
+                        &self.detour_cap,
                         &fv.stop_trip,
                         &fv.stop_kind,
                         new_idx,
@@ -958,6 +1320,7 @@ impl InsertionEngine {
                 self.n_zones,
                 &self.table,
                 &self.detour,
+                &self.detour_cap,
                 fv,
                 i,
                 mid,
@@ -990,6 +1353,7 @@ impl InsertionEngine {
                 self.n_zones,
                 &self.table,
                 &self.detour,
+                &self.detour_cap,
                 fv,
                 i,
                 mid,
@@ -1022,17 +1386,20 @@ impl InsertionEngine {
         if row.len() != STRIDE {
             return Err(PyValueError::new_err("append_trip stride"));
         }
-        self.table.extend_from_slice(&row);
-        self.detour.push(detour);
+        let cap = compute_detour_caps(&self.travel, self.n_zones, &row, &[detour])[0];
+        Arc::make_mut(&mut self.table).extend_from_slice(&row);
+        Arc::make_mut(&mut self.detour).push(detour);
+        Arc::make_mut(&mut self.detour_cap).push(cap);
         Ok((self.detour.len() - 1) as i32)
     }
 
     fn fork(&self) -> Self {
         Self {
-            travel: self.travel.clone(),
+            travel: Arc::clone(&self.travel),
             n_zones: self.n_zones,
-            table: self.table.clone(),
-            detour: self.detour.clone(),
+            table: Arc::clone(&self.table),
+            detour: Arc::clone(&self.detour),
+            detour_cap: Arc::clone(&self.detour_cap),
             fleet: self.fleet.clone(),
         }
     }
@@ -1050,9 +1417,15 @@ impl InsertionEngine {
     )> {
         py.allow_threads(|| {
             let fv = self.fleet.get(fleet_i)?;
-            eval_stored(&self.travel, self.n_zones, &self.table, &self.detour, fv).map(
-                |(dur, wait, trace)| (dur, wait, trace.rides, trace.waits, trace.stops),
+            eval_stored(
+                &self.travel,
+                self.n_zones,
+                &self.table,
+                &self.detour,
+                &self.detour_cap,
+                fv,
             )
+            .map(|(dur, wait, trace)| (dur, wait, trace.rides, trace.waits, trace.stops))
         })
     }
 
@@ -1073,9 +1446,15 @@ impl InsertionEngine {
                 .into_par_iter()
                 .map(|v| {
                     let fv = &self.fleet[v];
-                    eval_stored(&self.travel, self.n_zones, &self.table, &self.detour, fv).map(
-                        |(dur, wait, trace)| (dur, wait, trace.rides, trace.waits, trace.stops),
+                    eval_stored(
+                        &self.travel,
+                        self.n_zones,
+                        &self.table,
+                        &self.detour,
+                        &self.detour_cap,
+                        fv,
                     )
+                    .map(|(dur, wait, trace)| (dur, wait, trace.rides, trace.waits, trace.stops))
                 })
                 .collect()
         })
@@ -1098,12 +1477,14 @@ fn best_insert(
 ) -> Option<(i32, i32, i32, i32, i32, i32)> {
     py.allow_threads(|| {
         let n_trips = trip_table.len() / STRIDE;
+        let detour_cap = compute_detour_caps(&travel, n_zones, &trip_table, &detour);
         let mut pickup_dep = vec![-1i32; n_trips];
         best_insert_inner(
             &travel,
             n_zones,
             &trip_table,
             &detour,
+            &detour_cap,
             &stop_trip,
             &stop_kind,
             new_idx,

@@ -39,14 +39,21 @@ Scoring is sequential and deterministic: lexicographic min of
 The winning `(i, mid, j)` is committed in the native fleet; Python builds
 `RoutePlan` from `eval_route` / `trial_eval` stop times. FIFO and the rare
 frozen-retry path still use `simulate_stop_sequence`.
-Trip table stride is **16** (`via`, `via_svc`). Native `best_insert` returns a
-6-tuple; `mid=-1` if there is no VIA. `score_fleet` returns one 7-tuple per
-feasible vehicle: `(fleet_index, i, mid, j, dur, wait, max_load)`.
+Trip table stride is **16** (`via`, `via_svc`). One trip row is 64 bytes (one
+cache line); the kernel keeps AoS because scoring is trip-at-a-time, not a
+PDX/SoA dimension scan (Kuffo/Krippner/Boncz, SIGMOD 2025). `best_insert`
+returns a 6-tuple; `mid=-1` if there is no VIA. `score_fleet` returns one
+7-tuple per feasible vehicle: `(fleet_index, i, mid, j, dur, wait, max_load)`.
 Candidates are simulated on a virtual insert (no copied stop arrays).
 The engine keeps a persistent fleet (`set_fleet` / `score_stored` / `commit_insert`)
 and can `eval_route` / `eval_fleet` an existing sequence (seed + emit) without
-Pydantic. Online insertion forks that engine and `append_trip` instead of
-repacking 3200 trips. Rebuild the wheel after ABI change.
+Pydantic. Online insertion forks that engine (`Arc` copy-on-write of travel and
+trip tables) and `append_trip` instead of repacking 3200 trips.
+`best_insert` reuses the original-route prefix (Savelsbergh concatenated
+evaluation; Hu/Omega 2026 linear-test analogue) and walks `(i, j)` / VIA
+incrementally. It is **not** Gschwind–Drexl O(1) FTS: VIA, stretcher, unavail
+occupancy, and appointment lobby snap break that auxiliary-data contract.
+Rebuild the wheel after ABI change.
 Pickup dwell is \(\max(\mathrm{board},5)\). Dropoff snaps to
 `appointment_start - 30` when that field is set (lobby cap, not cabin hold).
 VIA detour uses itinerary minutes including VIA service. Vehicle unavail covers
@@ -78,19 +85,20 @@ vehicles, then a disruption shake. Artifact:
 `benchmark/results/stress-2026-08-12/stress_200.json` (gitignored).
 Not real MAST trips. Greedy never `OPTIMAL`.
 
-Re-measured 2026-08-12 after persistent fleet, native `eval_route` seed/emit,
-online kernel fork, and passenger-indexed `quota_caps` (two consecutive runs,
-seed 42). Sample, not a SLA:
+Re-measured 2026-08-12 after prefix-state insert walk, Arc copy-on-write
+`fork`, persistent fleet, native `eval_route` seed/emit, and passenger-indexed
+`quota_caps` (two consecutive runs, seed 42). Sample, not a SLA:
 
 | Phase | Wall-clock | Served / active | Notary |
 | --- | --- | --- | --- |
-| Day-ahead greedy (Rust) | 5.4–5.8 s | 2589 / 3045 (`PARTIAL`) | pass |
-| Batch disruption (seeded replan) | 1.6–1.7 s | 2531 / 2999 (`PARTIAL`) | pass |
-| Traffic +8 min (seeded replan) | 5.8–6.5 s | 2247 / 2999 (`PARTIAL`) | pass |
-| 8 online medical inserts | 0.49–0.52 s | 8/8 accepted | pass |
-| **Pipeline total** | **13.4–14.6 s** | — | — |
+| Day-ahead greedy (Rust) | 3.9–4.3 s | 2589 / 3045 (`PARTIAL`) | pass |
+| Batch disruption (seeded replan) | 0.90–0.97 s | 2531 / 2999 (`PARTIAL`) | pass |
+| Traffic +8 min (seeded replan) | 4.5–4.7 s | 2247 / 2999 (`PARTIAL`) | pass |
+| 8 online medical inserts | 0.78–0.82 s | 8/8 accepted | pass |
+| **Pipeline total** | **10.1–10.8 s** | — | — |
 
-Earlier the same day, before this pass, the pipeline was about 95 s (then ~24 s
-after stored-fleet scoring). Treat **13–15 s** as the current observed band on
-this machine, not a product SLA. Greedy never `OPTIMAL`. Batch disruption
+Earlier the same day the pipeline was about 95 s, then ~24 s after stored-fleet
+scoring, then **13–15 s** after persistent eval. Treat **10–11 s** as the current
+observed band on this machine, not a product SLA. Served counts matched the
+13–15 s band (lockstep). Greedy never `OPTIMAL`. Batch disruption
 previously left one `QUOTA:` notary; that hole is closed.
