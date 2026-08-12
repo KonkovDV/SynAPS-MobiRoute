@@ -17,7 +17,7 @@ Manufacturing FJSP models from SynAPS are **not** imported into the DARP domain.
 | --- | --- |
 | `domain` | Passengers, vehicles, drivers, trips, priorities, fairness |
 | `adapters` | Synthetic data, fingerprints, SynAPS pin |
-| `solvers` | FIFO, greedy, CP-SAT tiny |
+| `solvers` | FIFO, nearest, greedy pooling insertion, beam, CP-SAT tiny; ALNS/LBBD/RHC stubs |
 | `validation` | Feasibility, accessibility, privacy |
 | `dispatch` | Online insertion, cancel/no-show, disruption |
 | `reporting` | JSON / MD / CSV |
@@ -25,8 +25,9 @@ Manufacturing FJSP models from SynAPS are **not** imported into the DARP domain.
 
 ## Modes
 
-- **Day-ahead:** solve full known request set.
-- **Continuous:** insert / cancel / breakdown → new plan version + diff + churn.
+- **Day-ahead:** solve full known request set (greedy pooling or CP-SAT tiny).
+- **Continuous:** insert into **existing** routes; cancel / traffic / breakdown → new plan version + diff + churn.
+- Frozen trips are not moved by online insert; if insert would move them, the new request is rejected with a reason code.
 
 ## Determinism
 

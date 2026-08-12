@@ -30,7 +30,7 @@
 
 | Layer | Evidence |
 | --- | --- |
-| algorithmic_capability | FIFO / nearest / greedy / CPSAT-tiny code + unit tests |
+| algorithmic_capability | FIFO / nearest / greedy pooling / beam / CPSAT-tiny + unit tests |
 | synthetic_benchmark | examples + `mobiroute demo` + pytest |
 | open_data_benchmark | MISSING |
 | customer_evidence | MISSING |
@@ -42,7 +42,7 @@
 | --- | --- |
 | SynAPS core | IMPLEMENTED |
 | MobiRoute domain | EXPERIMENTAL |
-| DARP solvers | PARTIAL |
+| DARP solvers | PARTIAL (greedy pooling + beam + CPSAT-tiny; ALNS/LBBD/RHC PLANNED) |
 | Integration | MISSING |
 | Customer | MISSING |
 | Production | MISSING |

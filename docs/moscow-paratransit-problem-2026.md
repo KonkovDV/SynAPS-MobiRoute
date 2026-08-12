@@ -24,8 +24,6 @@
 | Public dataset of real trips | MISSING | — |
 | Personal / medical data in real operations | VERIFIED (by nature of service) | implies privacy controls |
 
-**Qualitative evidence only (NOT algorithm proof):** app-store ratings, forum complaints about phone queues, opaque refusals, vehicle shortage perceptions — treat as pain signals for UX/org layers, not as solver KPIs.
-
 ## Twelve problem layers — what MobiRoute can / cannot own
 
 | # | Layer | Planner/dispatch core? | Needs other systems |
@@ -42,6 +40,17 @@
 | 10 | Feedback | No | CRM |
 | 11 | Quality control | Metrics **Yes** | Auditors |
 | 12 | Personal data protection | Redaction / isolation **Yes** | Legal DLP / certification |
+
+### Layer notes (ops, not algorithm proof)
+
+- **Intake:** phone 08:00–20:00, site, Android app, email; palliative ID has a separate line. Queue length is an org/UX problem.  
+- **Eligibility:** mos.ru / in-person registry. MobiRoute may carry `eligibility_class` as a **label**, never as a legal decision.  
+- **Planning–routing:** the only layer this kernel claims to compute.  
+- **Boarding:** dwell times and lift/ramp compatibility are constraints; driver courtesy is not.  
+- **Dispatch:** insertion into an existing plan + disruption recovery; live AVL is an adapter, not included.  
+- **Complaints:** os@santrans.ru / +7 (495) 215-03-80 — CRM, not the solver.
+
+**Qualitative evidence only (NOT algorithm proof):** app-store ratings, forum complaints about phone queues, opaque refusals, vehicle shortage perceptions — treat as pain signals for UX/org layers, not as solver KPIs.
 
 ## MobiRoute must NOT promise to fix
 

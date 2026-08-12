@@ -168,3 +168,50 @@ def test_no_builtin_hash_in_fingerprint():
     b = fingerprint({"b": [2, 3], "a": 1})
     assert a == b
     assert len(a) == 64
+
+
+def test_greedy_pooling_can_interleave_stops():
+    problem = generate_day("pooled_rides", seed=42)
+    greedy = solve_greedy(problem)
+    fifo = solve_fifo(problem)
+    assert greedy.verified_feasible
+    assert fifo.verified_feasible
+    assert greedy.status != "OPTIMAL"
+    assert greedy.solver_config.get("pooling") is True
+    # Pooling is allowed; sequential FIFO is the no-share baseline.
+    assert fifo.solver_config.get("pooling") is False
+
+
+def test_beam_never_optimal():
+    from mobiroute.solvers.beam import solve_beam
+
+    problem = generate_day("tiny", seed=9)
+    result = solve_beam(problem, beam_width=2)
+    assert result.solution_type == "BEAM"
+    assert result.status != "OPTIMAL"
+
+
+def test_online_insert_preserves_other_vehicle_assignments():
+    problem = generate_day("tiny", seed=5)
+    baseline = solve_greedy(problem)
+    before = {tid: rp.vehicle_id for rp in baseline.route_plans for tid in rp.passenger_assignments}
+    medical = TripRequest(
+        id="med-preserve-1",
+        pseudonymous_passenger_id="p-med",
+        pickup_zone="Z_CENTER",
+        dropoff_zone="Z_HOSP_A",
+        requested_at=0,
+        earliest_pickup=100,
+        latest_pickup=140,
+        appointment_end=180,
+        max_ride_time=55,
+        max_wait_time=20,
+        wheelchair_requirement=WheelchairType.NONE,
+        medical_priority=True,
+    )
+    _, res, diff = online_insert(problem, baseline, medical)
+    after = {tid: rp.vehicle_id for rp in res.route_plans for tid in rp.passenger_assignments}
+    for tid, vid in before.items():
+        assert after.get(tid) == vid
+    if "med-preserve-1" in res.served_requests:
+        assert "med-preserve-1" in diff.added_trips

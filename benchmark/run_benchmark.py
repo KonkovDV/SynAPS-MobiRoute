@@ -10,6 +10,7 @@ import time
 from pathlib import Path
 
 from mobiroute.adapters.synthetic_data import generate_day
+from mobiroute.solvers.beam import solve_beam
 from mobiroute.solvers.cpsat import solve_cpsat
 from mobiroute.solvers.greedy import solve_fifo, solve_greedy
 from mobiroute.solvers.nearest import solve_nearest
@@ -32,6 +33,7 @@ def main() -> None:
         ("FIFO", lambda: solve_fifo(problem)),
         ("NEAREST", lambda: solve_nearest(problem)),
         ("GREEDY", lambda: solve_greedy(problem)),
+        ("BEAM", lambda: solve_beam(problem, beam_width=3)),
         ("CPSAT", lambda: solve_cpsat(problem, time_limit_s=10.0)),
     ]:
         t0 = time.perf_counter()

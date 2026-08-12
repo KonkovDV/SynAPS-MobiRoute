@@ -29,14 +29,27 @@ Evidence tags: `VERIFIED` | `CLAIMED BY VENDOR` | `SECONDARY SOURCE` |
 | RU localization | NOT FOUND | NOT FOUND | NOT FOUND | NOT FOUND | NOT FOUND | NOT FOUND | N/A | CLAIMED BY VENDOR | VERIFIED (Moscow) |
 | Source code | NOT FOUND | NOT FOUND | NOT FOUND | NOT FOUND | NOT FOUND | NOT FOUND | VERIFIED (OSS/academic) | NOT FOUND | NOT FOUND |
 
-Notes:
+## Per-product notes (evidence discipline)
 
-- **RouteMatch** historically absorbed into TripSpark/Trapeze lineage — treat
-  brand pages carefully; do not assert missing features without primary source.
-- **«По пути»** is adjacent demand-responsive transit, not social-taxi eligibility
-  service — useful as DRT UX reference only.
-- Open solvers (OR-Tools routing, academic DARP repos) provide algorithms, not
-  ops platforms.
+Do **not** treat a blank marketing page as “feature absent”. Use `NOT VERIFIED` / `NOT FOUND`.
+
+| Product | Notes | Confirmed cases |
+| --- | --- | --- |
+| Ecolane | Vendor CAD/AVL + paratransit suite | CLAIMED BY VENDOR (US/CA agencies on vendor site) |
+| TripSpark NovusDR | Demand-response / paratransit | CLAIMED BY VENDOR |
+| RouteMatch | Historical brand; lineage with TripSpark/Trapeze | SECONDARY SOURCE — do not freeze 2026 feature list from old PDFs |
+| Trapeze | Large transit ITS / paratransit modules | CLAIMED BY VENDOR |
+| RideCo Paratransit | On-demand / microtransit vendor with paratransit offering | CLAIMED BY VENDOR |
+| TripMaster | NEMT / broker scheduling family | CLAIMED BY VENDOR |
+| NEMT platforms (generic) | Eligibility, billing, broker networks dominate | NOT VERIFIED as a class |
+| Open DARP / PDPTW | OR-Tools routing, academic repos, Cordeau-style codes | VERIFIED algorithms exist; not ops platforms |
+| RU social transport IT | Municipal stacks, 1C-adjacent dispatch, regional portals | NOT VERIFIED without named primary source |
+| Moscow personalized / social taxi ops | Мосавтосантранс + apps + phone | VERIFIED operator; planning algorithm NOT FOUND publicly |
+| «По пути» | Moscow DRT / ridepooling adjacent | VERIFIED as Moscow DRT product; **not** social-taxi eligibility |
+
+## NEMT vs social taxi
+
+Non-emergency medical transportation (NEMT) suites emphasize **payer eligibility and billing**. Moscow social taxi emphasizes **registry + accessible fleet + mixed individual/group trips**. MobiRoute models the **routing/dispatch kernel**, not claims adjudication.
 
 ## MobiRoute differentiation (honest)
 

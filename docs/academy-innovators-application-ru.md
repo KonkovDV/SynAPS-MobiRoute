@@ -19,7 +19,8 @@ reason codes и fairness для РФ почти нет. MobiRoute закрыва
 ## 3. Технологический проект и новизна
 
 - Формальная постановка accessible dynamic DARP с 26 hard-constraints.  
-- Портфель: FIFO / greedy / CP-SAT tiny / online insertion / disruption diff.  
+- Портфель: FIFO / nearest / greedy **pooling insertion** / beam / CP-SAT tiny / online insert / disruption diff.  
+- ALNS, logic-based Benders и rolling horizon — **PLANNED**, не заявлены как готовые.  
 - Независимый feasibility notary + обязательные reason codes.  
 - Fairness multi-metric, не один индекс.  
 - Privacy-by-design: только синтетика до DPA.  
