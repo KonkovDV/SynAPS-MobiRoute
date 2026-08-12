@@ -1,0 +1,27 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/KonkovDV/SynAPS-MobiRoute/schemas/mobiroute.problem.v1.json",
+  "title": "MobiRoute Day Problem v1",
+  "type": "object",
+  "required": ["problem_id", "seed", "vehicles", "drivers", "requests", "travel", "data_provenance"],
+  "properties": {
+    "problem_id": { "type": "string" },
+    "schema_version": { "type": "string" },
+    "seed": { "type": "integer" },
+    "passengers": { "type": "array" },
+    "vehicles": { "type": "array" },
+    "drivers": { "type": "array" },
+    "requests": { "type": "array" },
+    "travel": {
+      "type": "object",
+      "required": ["zones", "minutes"],
+      "properties": {
+        "zones": { "type": "array", "items": { "type": "string" } },
+        "minutes": { "type": "array", "items": { "type": "array", "items": { "type": "integer" } } }
+      }
+    },
+    "data_provenance": { "type": "string", "enum": ["synthetic", "anonymized", "aggregated", "customer_private", "unknown"] },
+    "claim_level": { "type": "string" }
+  },
+  "additionalProperties": true
+}

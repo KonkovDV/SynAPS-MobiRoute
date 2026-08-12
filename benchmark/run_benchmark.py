@@ -1,0 +1,68 @@
+#!/usr/bin/env python3
+"""Run baseline solvers on a synthetic instance and write metrics table."""
+
+from __future__ import annotations
+
+import argparse
+import csv
+import json
+import time
+from pathlib import Path
+
+from mobiroute.adapters.synthetic_data import generate_day
+from mobiroute.solvers.cpsat import solve_cpsat
+from mobiroute.solvers.greedy import solve_fifo, solve_greedy
+from mobiroute.solvers.nearest import solve_nearest
+
+
+def main() -> None:
+    p = argparse.ArgumentParser()
+    p.add_argument("--mode", default="tiny")
+    p.add_argument("--seed", type=int, default=42)
+    p.add_argument("--out-dir", type=Path, required=True)
+    args = p.parse_args()
+    problem = generate_day(args.mode, args.seed)
+    args.out_dir.mkdir(parents=True, exist_ok=True)
+    (args.out_dir / "problem.json").write_text(
+        json.dumps(problem.model_dump(mode="json"), indent=2, sort_keys=True),
+        encoding="utf-8",
+    )
+    rows = []
+    for name, fn in [
+        ("FIFO", lambda: solve_fifo(problem)),
+        ("NEAREST", lambda: solve_nearest(problem)),
+        ("GREEDY", lambda: solve_greedy(problem)),
+        ("CPSAT", lambda: solve_cpsat(problem, time_limit_s=10.0)),
+    ]:
+        t0 = time.perf_counter()
+        res = fn()
+        dt = time.perf_counter() - t0
+        rows.append(
+            {
+                "algorithm": name,
+                "seed": args.seed,
+                "mode": args.mode,
+                "status": res.status,
+                "verified_feasible": res.verified_feasible,
+                "served": len(res.served_requests),
+                "rejected": len(res.rejected_requests),
+                "runtime_s": round(dt, 4),
+                "input_hash": res.input_hash,
+                "config_hash": res.config_hash,
+                "synaps_commit": res.synaps_commit,
+                "claim_level": res.claim_level,
+            }
+        )
+        (args.out_dir / f"result_{name}.json").write_text(
+            json.dumps(res.model_dump(mode="json"), indent=2, sort_keys=True),
+            encoding="utf-8",
+        )
+    with (args.out_dir / "summary.csv").open("w", newline="", encoding="utf-8") as f:
+        w = csv.DictWriter(f, fieldnames=list(rows[0].keys()))
+        w.writeheader()
+        w.writerows(rows)
+    print(args.out_dir / "summary.csv")
+
+
+if __name__ == "__main__":
+    main()

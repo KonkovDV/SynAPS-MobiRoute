@@ -1,0 +1,26 @@
+name: Bug report
+description: Report a correctness, determinism, or privacy issue
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Do **not** include real passenger names, phones, addresses, medical details, or GPS tracks.
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+    validations:
+      required: true
+  - type: textarea
+    id: repro
+    attributes:
+      label: Reproduction (synthetic instance / seed)
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: MobiRoute version / commit
+    validations:
+      required: true

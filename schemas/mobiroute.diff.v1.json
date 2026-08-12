@@ -1,0 +1,19 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/KonkovDV/SynAPS-MobiRoute/schemas/mobiroute.diff.v1.json",
+  "title": "MobiRoute Plan Diff v1",
+  "type": "object",
+  "required": ["baseline_fingerprint", "new_fingerprint", "plan_churn"],
+  "properties": {
+    "baseline_fingerprint": { "type": "string" },
+    "new_fingerprint": { "type": "string" },
+    "added_trips": { "type": "array", "items": { "type": "string" } },
+    "removed_trips": { "type": "array", "items": { "type": "string" } },
+    "moved_trips": { "type": "array", "items": { "type": "string" } },
+    "unchanged_frozen_trips": { "type": "array", "items": { "type": "string" } },
+    "newly_rejected_trips": { "type": "array" },
+    "reason_codes": { "type": "object" },
+    "plan_churn": { "type": "object" }
+  },
+  "additionalProperties": true
+}
