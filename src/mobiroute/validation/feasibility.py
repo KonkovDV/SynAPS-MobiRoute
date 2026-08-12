@@ -88,11 +88,14 @@ def passenger_rides(plan: RoutePlan, trips: dict[str, TripRequest]) -> dict[str,
 
 
 def quota_caps(problem: DayProblem) -> dict[str, int]:
+    by_pid = {p.pseudonymous_id: p.quota_minutes_remaining for p in problem.passengers}
     caps: dict[str, int] = {}
     for t in problem.requests:
         if t.booking_status.value in {"CANCELLED", "NO_SHOW"}:
             continue
-        cap = trip_quota_remaining(problem, t)
+        cap = t.quota_minutes_remaining
+        if cap is None:
+            cap = by_pid.get(t.pseudonymous_passenger_id)
         if cap is None:
             continue
         pid = t.pseudonymous_passenger_id
@@ -109,10 +112,25 @@ def trial_exceeds_quota(
     previous_on_vehicle: dict[str, int],
 ) -> bool:
     """True if accepting this vehicle's trial would exceed any passenger-day cap."""
+    return trial_exceeds_quota_rides(
+        passenger_rides(trial, trips),
+        quota_cap=quota_cap,
+        used_now=used_now,
+        previous_on_vehicle=previous_on_vehicle,
+    )
+
+
+def trial_exceeds_quota_rides(
+    trial_rides: dict[str, int],
+    *,
+    quota_cap: dict[str, int],
+    used_now: dict[str, int],
+    previous_on_vehicle: dict[str, int],
+) -> bool:
     projected = dict(used_now)
     for pid, mins in previous_on_vehicle.items():
         projected[pid] = projected.get(pid, 0) - mins
-    for pid, mins in passenger_rides(trial, trips).items():
+    for pid, mins in trial_rides.items():
         cap = quota_cap.get(pid)
         if cap is None:
             continue
@@ -124,10 +142,8 @@ def trial_exceeds_quota(
 def trip_quota_remaining(problem: DayProblem, trip: TripRequest) -> int | None:
     if trip.quota_minutes_remaining is not None:
         return trip.quota_minutes_remaining
-    for p in problem.passengers:
-        if p.pseudonymous_id == trip.pseudonymous_passenger_id:
-            return p.quota_minutes_remaining
-    return None
+    by_pid = {p.pseudonymous_id: p.quota_minutes_remaining for p in problem.passengers}
+    return by_pid.get(trip.pseudonymous_passenger_id)
 
 
 def check_route(
@@ -348,7 +364,12 @@ def check_route(
     return violations
 
 
-def check_plan(problem: DayProblem, result: PlanningResult) -> FeasibilityReport:
+def check_plan(
+    problem: DayProblem,
+    result: PlanningResult,
+    *,
+    only_vehicles: set[str] | None = None,
+) -> FeasibilityReport:
     trips = {t.id: t for t in problem.requests}
     violations: list[str] = []
     assigned: dict[str, str] = {}
@@ -358,7 +379,8 @@ def check_plan(problem: DayProblem, result: PlanningResult) -> FeasibilityReport
         if route.vehicle_id in seen_vehicles:
             violations.append(f"DUPLICATE_VEHICLE_ROUTE:{route.vehicle_id}")
         seen_vehicles.add(route.vehicle_id)
-        violations.extend(check_route(problem, route, trips))
+        if only_vehicles is None or route.vehicle_id in only_vehicles:
+            violations.extend(check_route(problem, route, trips))
         if route.driver_id:
             if (
                 route.driver_id in drivers_used

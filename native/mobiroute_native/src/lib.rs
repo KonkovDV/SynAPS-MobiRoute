@@ -1,10 +1,13 @@
 //! MobiRoute insertion scoring kernel (SynAPS-style PyO3 hot path).
-//! Sequential, deterministic min over (duration, wait, -max_load, i, mid, j).
+//! Virtual insert (Hu/Omega 2026 linear test analogue) + persistent fleet
+//! (avoid recopying routes; Jaw/Cordeau) + rayon over vehicles.
+//! Not Gschwind–Drexl O(1) FTS. Heuristic, never OPTIMAL.
 //! ABI: trip stride 16; best_insert returns (i, mid, j, dur, wait, max_load); mid=-1 if no VIA.
 //! score_fleet returns (fleet_index, i, mid, j, dur, wait, max_load) per feasible vehicle.
 
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
+use rayon::prelude::*;
 
 const STRIDE: usize = 16;
 const FLAG_LIFT: i32 = 1;
@@ -190,6 +193,14 @@ fn via_at(
 enum InsertMode {
     Pair { i: usize, j: usize },
     Via { i: usize, mid: usize, j: usize },
+    AsIs,
+}
+
+#[derive(Default)]
+struct RouteTrace {
+    rides: Vec<(i32, i32)>,
+    waits: Vec<(i32, i32)>,
+    stops: Vec<(i32, i32, i32, i32)>,
 }
 
 fn simulate_inserted(
@@ -216,11 +227,13 @@ fn simulate_inserted(
     unavail: &[i32],
     area: &[i32],
     pickup_dep: &mut [i32],
+    mut trace: Option<&mut RouteTrace>,
 ) -> Option<(i32, i32, i32)> {
     let m = orig_t.len();
     let nstop = match mode {
         InsertMode::Pair { .. } => m + 2,
         InsertMode::Via { .. } => m + 3,
+        InsertMode::AsIs => m,
     };
     for &idx in orig_t {
         let u = idx as usize;
@@ -253,6 +266,7 @@ fn simulate_inserted(
         let (trip_i, kind) = match mode {
             InsertMode::Pair { i, j } => pair_at(orig_t, orig_k, new_idx, i, j, s),
             InsertMode::Via { i, mid, j } => via_at(orig_t, orig_k, new_idx, i, mid, j, s),
+            InsertMode::AsIs => (orig_t[s], orig_k[s]),
         };
         let idx = trip_i as usize;
         if idx >= n_trips {
@@ -273,7 +287,7 @@ fn simulate_inserted(
         let t_begin = tnow;
         let mut arrive = tnow + tt(travel, n_zones, loc, dest);
         let svc;
-        let is_new = trip_i == new_idx;
+        let is_new = matches!(mode, InsertMode::AsIs) || trip_i == new_idx;
         if kind == 0 {
             let mut hold = 0;
             let mut pwait = 0;
@@ -313,6 +327,9 @@ fn simulate_inserted(
                 stretcher_on += 1;
             }
             wait_sum += pwait;
+            if let Some(buf) = trace.as_mut() {
+                buf.waits.push((trip_i, pwait));
+            }
         } else if kind == 2 {
             if pickup_dep[idx] < 0 {
                 return None;
@@ -335,6 +352,9 @@ fn simulate_inserted(
                 }
             }
             let ride = arrive - pickup_dep[idx];
+            if let Some(buf) = trace.as_mut() {
+                buf.rides.push((trip_i, ride));
+            }
             if ride > t.max_ride {
                 return None;
             }
@@ -368,6 +388,9 @@ fn simulate_inserted(
         }
         if kind == 0 {
             pickup_dep[idx] = leave;
+        }
+        if let Some(buf) = trace.as_mut() {
+            buf.stops.push((arrive, leave, load, wload));
         }
         loc = dest;
         tnow = leave;
@@ -411,6 +434,140 @@ fn parse_veh(veh: &[i32]) -> Option<(i32, i32, i32, i32, i32, i32, i32, i32, i32
         veh[10] != 0,
         area,
     ))
+}
+
+fn eval_stored(
+    travel: &[i32],
+    n_zones: usize,
+    table: &[i32],
+    detour: &[f64],
+    fv: &FleetVeh,
+) -> Option<(i32, i32, RouteTrace)> {
+    if fv.stop_trip.is_empty() {
+        return Some((0, 0, RouteTrace::default()));
+    }
+    if table.len() % STRIDE != 0 || n_zones == 0 || travel.len() != n_zones * n_zones {
+        return None;
+    }
+    let n_trips = table.len() / STRIDE;
+    if detour.len() != n_trips {
+        return None;
+    }
+    let (
+        depot,
+        shift_start,
+        shift_end,
+        cap_p,
+        cap_w,
+        vflags,
+        wmask,
+        dstart,
+        dend,
+        dassist,
+        has_driver,
+        area,
+    ) = parse_veh(&fv.veh)?;
+    let mut pickup_dep = vec![-1i32; n_trips];
+    let mut trace = RouteTrace::default();
+    let (dur, wait, _mx) = simulate_inserted(
+        travel,
+        n_zones,
+        table,
+        detour,
+        n_trips,
+        &fv.stop_trip,
+        &fv.stop_kind,
+        -1,
+        InsertMode::AsIs,
+        depot,
+        shift_start,
+        shift_end,
+        cap_p,
+        cap_w,
+        vflags,
+        wmask,
+        dstart,
+        dend,
+        dassist,
+        has_driver,
+        &fv.unavail,
+        area,
+        &mut pickup_dep,
+        Some(&mut trace),
+    )?;
+    Some((dur, wait, trace))
+}
+
+fn trial_insert_trace(
+    travel: &[i32],
+    n_zones: usize,
+    table: &[i32],
+    detour: &[f64],
+    fv: &FleetVeh,
+    i: i32,
+    mid: i32,
+    j: i32,
+    new_idx: i32,
+) -> Option<(i32, i32, RouteTrace)> {
+    let n_trips = table.len() / STRIDE;
+    if n_trips == 0 {
+        return None;
+    }
+    let (
+        depot,
+        shift_start,
+        shift_end,
+        cap_p,
+        cap_w,
+        vflags,
+        wmask,
+        dstart,
+        dend,
+        dassist,
+        has_driver,
+        area,
+    ) = parse_veh(&fv.veh)?;
+    let mode = if mid < 0 {
+        InsertMode::Pair {
+            i: i.max(0) as usize,
+            j: j.max(0) as usize,
+        }
+    } else {
+        InsertMode::Via {
+            i: i.max(0) as usize,
+            mid: mid as usize,
+            j: j.max(0) as usize,
+        }
+    };
+    let mut pickup_dep = vec![-1i32; n_trips];
+    let mut trace = RouteTrace::default();
+    let (dur, wait, _mx) = simulate_inserted(
+        travel,
+        n_zones,
+        table,
+        detour,
+        n_trips,
+        &fv.stop_trip,
+        &fv.stop_kind,
+        new_idx,
+        mode,
+        depot,
+        shift_start,
+        shift_end,
+        cap_p,
+        cap_w,
+        vflags,
+        wmask,
+        dstart,
+        dend,
+        dassist,
+        has_driver,
+        &fv.unavail,
+        area,
+        &mut pickup_dep,
+        Some(&mut trace),
+    )?;
+    Some((dur, wait, trace))
 }
 
 fn best_insert_inner(
@@ -476,6 +633,7 @@ fn best_insert_inner(
                         unavail,
                         area,
                         pickup_dep,
+                        None,
                     ) {
                         let i32i = i as i32;
                         let mid32 = mid as i32;
@@ -516,6 +674,7 @@ fn best_insert_inner(
                     unavail,
                     area,
                     pickup_dep,
+                    None,
                 ) {
                     let i32i = i as i32;
                     let j32 = j as i32;
@@ -550,25 +709,67 @@ fn score_fleet_inner(
         return Vec::new();
     }
     let n_trips = table.len() / STRIDE;
-    let mut pickup_dep = vec![-1i32; n_trips];
-    let mut out = Vec::new();
-    for v in 0..n {
-        if let Some((i, mid, j, dur, wait, mx)) = best_insert_inner(
-            travel,
-            n_zones,
-            table,
-            detour,
-            &stop_trips[v],
-            &stop_kinds[v],
-            new_idx,
-            &vehs[v],
-            &unavails[v],
-            &mut pickup_dep,
-        ) {
-            out.push((v as i32, i, mid, j, dur, wait, mx));
+    (0..n)
+        .into_par_iter()
+        .filter_map(|v| {
+            let mut pickup_dep = vec![-1i32; n_trips];
+            best_insert_inner(
+                travel,
+                n_zones,
+                table,
+                detour,
+                &stop_trips[v],
+                &stop_kinds[v],
+                new_idx,
+                &vehs[v],
+                &unavails[v],
+                &mut pickup_dep,
+            )
+            .map(|(i, mid, j, dur, wait, mx)| (v as i32, i, mid, j, dur, wait, mx))
+        })
+        .collect()
+}
+
+fn materialize_insert(
+    orig_t: &[i32],
+    orig_k: &[i32],
+    new_idx: i32,
+    i: i32,
+    mid: i32,
+    j: i32,
+) -> (Vec<i32>, Vec<i32>) {
+    let iu = i.max(0) as usize;
+    let ju = j.max(0) as usize;
+    if mid < 0 {
+        let n = orig_t.len() + 2;
+        let mut t = Vec::with_capacity(n);
+        let mut k = Vec::with_capacity(n);
+        for s in 0..n {
+            let (ti, ki) = pair_at(orig_t, orig_k, new_idx, iu, ju, s);
+            t.push(ti);
+            k.push(ki);
         }
+        (t, k)
+    } else {
+        let n = orig_t.len() + 3;
+        let mu = mid as usize;
+        let mut t = Vec::with_capacity(n);
+        let mut k = Vec::with_capacity(n);
+        for s in 0..n {
+            let (ti, ki) = via_at(orig_t, orig_k, new_idx, iu, mu, ju, s);
+            t.push(ti);
+            k.push(ki);
+        }
+        (t, k)
     }
-    out
+}
+
+#[derive(Clone)]
+struct FleetVeh {
+    stop_trip: Vec<i32>,
+    stop_kind: Vec<i32>,
+    veh: Vec<i32>,
+    unavail: Vec<i32>,
 }
 
 #[pyclass(module = "mobiroute_native")]
@@ -577,6 +778,7 @@ struct InsertionEngine {
     n_zones: usize,
     table: Vec<i32>,
     detour: Vec<f64>,
+    fleet: Vec<FleetVeh>,
 }
 
 #[pymethods]
@@ -599,6 +801,7 @@ impl InsertionEngine {
             n_zones,
             table: trip_table,
             detour,
+            fleet: Vec::new(),
         })
     }
 
@@ -652,6 +855,229 @@ impl InsertionEngine {
                 &unavails,
                 new_idx,
             )
+        })
+    }
+
+    fn set_fleet(
+        &mut self,
+        stop_trips: Vec<Vec<i32>>,
+        stop_kinds: Vec<Vec<i32>>,
+        vehs: Vec<Vec<i32>>,
+        unavails: Vec<Vec<i32>>,
+    ) -> PyResult<()> {
+        let n = stop_trips.len();
+        if n != stop_kinds.len() || n != vehs.len() || n != unavails.len() {
+            return Err(PyValueError::new_err("set_fleet length mismatch"));
+        }
+        self.fleet = (0..n)
+            .map(|i| FleetVeh {
+                stop_trip: stop_trips[i].clone(),
+                stop_kind: stop_kinds[i].clone(),
+                veh: vehs[i].clone(),
+                unavail: unavails[i].clone(),
+            })
+            .collect();
+        Ok(())
+    }
+
+    fn set_vehicle(&mut self, fleet_i: usize, veh: Vec<i32>, unavail: Vec<i32>) -> PyResult<()> {
+        let slot = self
+            .fleet
+            .get_mut(fleet_i)
+            .ok_or_else(|| PyValueError::new_err("set_vehicle index"))?;
+        slot.veh = veh;
+        slot.unavail = unavail;
+        Ok(())
+    }
+
+    fn score_stored(
+        &self,
+        py: Python<'_>,
+        new_idx: i32,
+    ) -> Vec<(i32, i32, i32, i32, i32, i32, i32)> {
+        py.allow_threads(|| {
+            let n_trips = self.table.len() / STRIDE;
+            (0..self.fleet.len())
+                .into_par_iter()
+                .filter_map(|v| {
+                    let fv = &self.fleet[v];
+                    let mut pickup_dep = vec![-1i32; n_trips];
+                    best_insert_inner(
+                        &self.travel,
+                        self.n_zones,
+                        &self.table,
+                        &self.detour,
+                        &fv.stop_trip,
+                        &fv.stop_kind,
+                        new_idx,
+                        &fv.veh,
+                        &fv.unavail,
+                        &mut pickup_dep,
+                    )
+                    .map(|(i, mid, j, dur, wait, mx)| (v as i32, i, mid, j, dur, wait, mx))
+                })
+                .collect()
+        })
+    }
+
+    fn commit_insert(
+        &mut self,
+        fleet_i: usize,
+        i: i32,
+        mid: i32,
+        j: i32,
+        new_idx: i32,
+    ) -> PyResult<()> {
+        let slot = self
+            .fleet
+            .get_mut(fleet_i)
+            .ok_or_else(|| PyValueError::new_err("commit_insert index"))?;
+        let (t, k) = materialize_insert(&slot.stop_trip, &slot.stop_kind, new_idx, i, mid, j);
+        slot.stop_trip = t;
+        slot.stop_kind = k;
+        Ok(())
+    }
+
+    fn fleet_len(&self) -> usize {
+        self.fleet.len()
+    }
+
+    fn trial_rides(
+        &self,
+        py: Python<'_>,
+        fleet_i: usize,
+        i: i32,
+        mid: i32,
+        j: i32,
+        new_idx: i32,
+    ) -> Option<Vec<(i32, i32)>> {
+        py.allow_threads(|| {
+            let fv = self.fleet.get(fleet_i)?;
+            trial_insert_trace(
+                &self.travel,
+                self.n_zones,
+                &self.table,
+                &self.detour,
+                fv,
+                i,
+                mid,
+                j,
+                new_idx,
+            )
+            .map(|(_dur, _wait, trace)| trace.rides)
+        })
+    }
+
+    fn trial_eval(
+        &self,
+        py: Python<'_>,
+        fleet_i: usize,
+        i: i32,
+        mid: i32,
+        j: i32,
+        new_idx: i32,
+    ) -> Option<(
+        i32,
+        i32,
+        Vec<(i32, i32)>,
+        Vec<(i32, i32)>,
+        Vec<(i32, i32, i32, i32)>,
+    )> {
+        py.allow_threads(|| {
+            let fv = self.fleet.get(fleet_i)?;
+            trial_insert_trace(
+                &self.travel,
+                self.n_zones,
+                &self.table,
+                &self.detour,
+                fv,
+                i,
+                mid,
+                j,
+                new_idx,
+            )
+            .map(|(dur, wait, trace)| (dur, wait, trace.rides, trace.waits, trace.stops))
+        })
+    }
+
+    fn set_route(
+        &mut self,
+        fleet_i: usize,
+        stop_trip: Vec<i32>,
+        stop_kind: Vec<i32>,
+    ) -> PyResult<()> {
+        if stop_trip.len() != stop_kind.len() {
+            return Err(PyValueError::new_err("set_route length mismatch"));
+        }
+        let slot = self
+            .fleet
+            .get_mut(fleet_i)
+            .ok_or_else(|| PyValueError::new_err("set_route index"))?;
+        slot.stop_trip = stop_trip;
+        slot.stop_kind = stop_kind;
+        Ok(())
+    }
+
+    fn append_trip(&mut self, row: Vec<i32>, detour: f64) -> PyResult<i32> {
+        if row.len() != STRIDE {
+            return Err(PyValueError::new_err("append_trip stride"));
+        }
+        self.table.extend_from_slice(&row);
+        self.detour.push(detour);
+        Ok((self.detour.len() - 1) as i32)
+    }
+
+    fn fork(&self) -> Self {
+        Self {
+            travel: self.travel.clone(),
+            n_zones: self.n_zones,
+            table: self.table.clone(),
+            detour: self.detour.clone(),
+            fleet: self.fleet.clone(),
+        }
+    }
+
+    fn eval_route(
+        &self,
+        py: Python<'_>,
+        fleet_i: usize,
+    ) -> Option<(
+        i32,
+        i32,
+        Vec<(i32, i32)>,
+        Vec<(i32, i32)>,
+        Vec<(i32, i32, i32, i32)>,
+    )> {
+        py.allow_threads(|| {
+            let fv = self.fleet.get(fleet_i)?;
+            eval_stored(&self.travel, self.n_zones, &self.table, &self.detour, fv).map(
+                |(dur, wait, trace)| (dur, wait, trace.rides, trace.waits, trace.stops),
+            )
+        })
+    }
+
+    fn eval_fleet(
+        &self,
+        py: Python<'_>,
+    ) -> Vec<
+        Option<(
+            i32,
+            i32,
+            Vec<(i32, i32)>,
+            Vec<(i32, i32)>,
+            Vec<(i32, i32, i32, i32)>,
+        )>,
+    > {
+        py.allow_threads(|| {
+            (0..self.fleet.len())
+                .into_par_iter()
+                .map(|v| {
+                    let fv = &self.fleet[v];
+                    eval_stored(&self.travel, self.n_zones, &self.table, &self.detour, fv).map(
+                        |(dur, wait, trace)| (dur, wait, trace.rides, trace.waits, trace.stops),
+                    )
+                })
+                .collect()
         })
     }
 }

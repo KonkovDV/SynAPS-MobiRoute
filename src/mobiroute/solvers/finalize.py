@@ -46,15 +46,16 @@ def finalize_result(
     proven_optimal: bool = False,
     exact: bool = False,
     explanations: list[TripExplanation] | None = None,
+    changed_vehicle_ids: set[str] | None = None,
 ) -> PlanningResult:
-    result = enrich_planning_result(problem, result)
+    result = enrich_planning_result(problem, result, only_vehicles=changed_vehicle_ids)
     result = _account_inactive(problem, result)
     if explanations:
         result = result.model_copy(update={"explanations": explanations})
     elif not result.explanations:
         result = result.model_copy(update={"explanations": default_explanations(problem, result)})
 
-    report = check_plan(problem, result)
+    report = check_plan(problem, result, only_vehicles=changed_vehicle_ids)
     result.verified_feasible = report.feasible
     result.objective_values = {
         **result.objective_values,

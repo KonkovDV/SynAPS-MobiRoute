@@ -22,6 +22,8 @@ from mobiroute.solvers.native_accel import (
     best_insert,
     native_available,
     score_fleet,
+    score_stored,
+    set_fleet,
 )
 from mobiroute.validation.feasibility import check_plan
 from tests.factories import driver, problem, trip, vehicle
@@ -172,6 +174,55 @@ def test_score_fleet_matches_per_vehicle_best_insert():
             assert i not in by_idx
         else:
             assert by_idx[i] == one
+
+
+def test_stored_fleet_matches_score_fleet() -> None:
+    if not native_available():
+        pytest.skip("mobiroute_native not built")
+    p = generate_day("tiny", seed=42)
+    k = attach_native(ProblemKernel.from_problem(p))
+    new_idx = 0
+    stop_trips = [[] for _ in p.vehicles]
+    stop_kinds = [[] for _ in p.vehicles]
+    vehs: list[list[int]] = []
+    unavails: list[list[int]] = []
+    for v in p.vehicles:
+        vk = k.vehicles[v.id]
+        dk = k.drivers[p.drivers[0].id]
+        veh, una = vehicle_payload(vk, dk)
+        vehs.append(veh)
+        unavails.append(una)
+    copied = score_fleet(k, stop_trips, stop_kinds, vehs, unavails, new_idx)
+    set_fleet(k, stop_trips, stop_kinds, vehs, unavails)
+    stored = score_stored(k, new_idx)
+    assert sorted(copied) == sorted(stored)
+
+
+def test_eval_route_matches_pydantic_times() -> None:
+    if not native_available():
+        pytest.skip("mobiroute_native not built")
+    from mobiroute.solvers.greedy import route_plan_from_eval
+    from mobiroute.solvers.native_accel import eval_route
+
+    p = generate_day("tiny", seed=7)
+    res = solve_greedy(p)
+    assert res.route_plans
+    k = attach_native(ProblemKernel.from_problem(p))
+    rp = res.route_plans[0]
+    v = next(x for x in p.vehicles if x.id == rp.vehicle_id)
+    core = service_stops(list(rp.ordered_stops))
+    st, sk = k.stops_to_arrays(core)
+    dk = k.drivers.get(rp.driver_id) if rp.driver_id else None
+    veh, una = vehicle_payload(k.vehicles[v.id], dk)
+    set_fleet(k, [st], [sk], [veh], [una])
+    row = eval_route(k, 0)
+    native_plan = route_plan_from_eval(v, rp.driver_id, core, k, row)
+    py_plan = simulate_stop_sequence(p, v, rp.driver_id, core, {t.id: t for t in p.requests})
+    assert native_plan is not None
+    assert py_plan is not None
+    assert native_plan.route_duration == py_plan.route_duration
+    assert native_plan.ride_times == py_plan.ride_times
+    assert native_plan.waiting_times == py_plan.waiting_times
 
 
 def test_greedy_small_finishes_quickly():

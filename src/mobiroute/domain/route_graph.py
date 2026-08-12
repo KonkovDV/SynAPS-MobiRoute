@@ -173,8 +173,16 @@ def enrich_route(problem: DayProblem, route: RoutePlan) -> RoutePlan:
     )
 
 
-def enrich_planning_result(problem: DayProblem, result: PlanningResult) -> PlanningResult:
-    routes = [enrich_route(problem, rp) for rp in result.route_plans]
+def enrich_planning_result(
+    problem: DayProblem,
+    result: PlanningResult,
+    *,
+    only_vehicles: set[str] | None = None,
+) -> PlanningResult:
+    routes = [
+        enrich_route(problem, rp) if only_vehicles is None or rp.vehicle_id in only_vehicles else rp
+        for rp in result.route_plans
+    ]
     assignments = [rp.driver_assignment for rp in routes if rp.driver_assignment is not None]
     late: list[str] = []
     trips = {t.id: t for t in problem.requests}
