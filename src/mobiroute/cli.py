@@ -6,11 +6,12 @@ import argparse
 import json
 from pathlib import Path
 
-from mobiroute.adapters.synthetic_data import generate_day
+from mobiroute.adapters.synthetic_data import MODES, generate_day
 from mobiroute.dispatch.online_insertion import online_insert, recover_disruption
 from mobiroute.domain.models import ServicePriority, WheelchairType
 from mobiroute.domain.requests import TripRequest
 from mobiroute.reporting.json_report import write_csv_metrics, write_json, write_markdown
+from mobiroute.solvers.alns import solve_alns
 from mobiroute.solvers.beam import solve_beam
 from mobiroute.solvers.cpsat import solve_cpsat
 from mobiroute.solvers.greedy import solve_fifo, solve_greedy
@@ -31,7 +32,7 @@ def main(argv: list[str] | None = None) -> int:
     s.add_argument("--problem", type=Path, required=True)
     s.add_argument(
         "--solver",
-        choices=["fifo", "greedy", "nearest", "cpsat", "beam"],
+        choices=["fifo", "greedy", "nearest", "cpsat", "beam", "alns"],
         default="greedy",
     )
     s.add_argument("--out-dir", type=Path, required=True)
@@ -41,9 +42,19 @@ def main(argv: list[str] | None = None) -> int:
     d.add_argument("--out-dir", type=Path, required=True)
     d.add_argument("--seed", type=int, default=42)
 
+    o = sub.add_parser(
+        "ops-benchmark",
+        help="Synthetic Moscow-policy ops suite (not real MAST trips)",
+    )
+    o.add_argument("--out-dir", type=Path, required=True)
+    o.add_argument("--seed", type=int, default=42)
+
     args = p.parse_args(argv)
 
     if args.cmd == "generate":
+        if args.mode not in MODES:
+            print(log_safe(f"unknown mode {args.mode}; allowed: {', '.join(MODES)}"))
+            return 2
         day = generate_day(mode=args.mode, seed=args.seed)
         args.out.parent.mkdir(parents=True, exist_ok=True)
         args.out.write_text(
@@ -65,6 +76,8 @@ def main(argv: list[str] | None = None) -> int:
             result = solve_nearest(problem)
         elif args.solver == "beam":
             result = solve_beam(problem)
+        elif args.solver == "alns":
+            result = solve_alns(problem)
         else:
             result = solve_greedy(problem)
         args.out_dir.mkdir(parents=True, exist_ok=True)
@@ -124,6 +137,18 @@ def main(argv: list[str] | None = None) -> int:
         write_markdown(res4, out / "04_after_breakdown.md", diff4)
         write_json(res4, out / "04_after_breakdown.json")
         print(log_safe(f"demo complete -> {out}"))
+        return 0
+
+    if args.cmd == "ops-benchmark":
+        from mobiroute.reporting.ops_benchmark import run_suite, write_suite
+
+        rows = run_suite(args.seed)
+        write_suite(rows, args.out_dir, seed=args.seed)
+        print(
+            log_safe(
+                f"ops-benchmark -> {args.out_dir} rows={len(rows)} claim_level=synthetic_benchmark"
+            )
+        )
         return 0
 
     return 1

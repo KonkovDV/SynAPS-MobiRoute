@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from pydantic import Field
+from pydantic import Field, PrivateAttr
 
 from mobiroute.domain.models import (
     BookingStatus,
@@ -16,6 +16,7 @@ from mobiroute.domain.models import (
     WheelchairType,
     ZoneId,
 )
+from mobiroute.domain.travel_graph import floyd_warshall, reconstruct_path
 
 
 class AccessibilityRequirements(StrictModel):
@@ -37,6 +38,8 @@ class PassengerProfile(StrictModel):
     medical_priority: bool = False
     privacy_class: PrivacyClass = PrivacyClass.PUBLIC_SYNTHETIC
     data_provenance: DataProvenance = DataProvenance.SYNTHETIC
+    # Remaining entitlement minutes for this planning day. None = unlimited.
+    quota_minutes_remaining: int | None = None
 
 
 class Vehicle(StrictModel):
@@ -47,6 +50,8 @@ class Vehicle(StrictModel):
     lift_available: bool = False
     ramp_available: bool = False
     accessible_features: list[str] = Field(default_factory=list)
+    # Empty → MANUAL and POWER only (not SCOOTER/STRETCHER).
+    compatible_wheelchair_types: list[WheelchairType] = Field(default_factory=list)
     depot_id: str
     shift_start: TimeMin
     shift_end: TimeMin
@@ -63,6 +68,18 @@ class Driver(StrictModel):
     language_capabilities: list[str] = Field(default_factory=list)
     accessibility_training: bool = False
     availability: bool = True
+    # Empty → any vehicle_type at the same depot.
+    qualified_vehicle_types: list[str] = Field(default_factory=list)
+
+
+class DriverAssignment(StrictModel):
+    driver_id: str
+    vehicle_id: str
+    shift_start: TimeMin
+    shift_end: TimeMin
+    qualification_match: bool = True
+    accessibility_training: bool = False
+    assignment_status: str = "ASSIGNED"
 
 
 class TimeWindow(StrictModel):
@@ -94,10 +111,21 @@ class TripRequest(StrictModel):
     needs_boarding_assistance: bool = False
     medical_priority: bool = False
     frozen: bool = False
+    max_detour_ratio: float = Field(default=3.0, gt=0)
     data_provenance: DataProvenance = DataProvenance.SYNTHETIC
     # Coordinates only allowed in protected/private mode — omit in open synthetic.
     pickup_coordinates: tuple[float, float] | None = None
     dropoff_coordinates: tuple[float, float] | None = None
+    # Policy-shaped labels for synthetic ops scenarios (not legal eligibility).
+    trip_purpose: str = "OTHER"
+    channel: str = "STANDARD"
+    same_vehicle_as: str | None = None
+    insert_immediately_after: str | None = None
+    # Optional third stop (clinic then pharmacy). Passenger stays onboard.
+    via_zone: ZoneId | None = None
+    via_service_duration: TimeMin = 2
+    # Remaining entitlement minutes (door-to-door ride). None = unlimited.
+    quota_minutes_remaining: int | None = None
 
 
 class Stop(StrictModel):
@@ -111,6 +139,39 @@ class Stop(StrictModel):
     wheelchair_load_delta: int = 0
 
 
+class PassengerItinerary(StrictModel):
+    trip_id: str
+    vehicle_id: str
+    driver_id: str | None = None
+    pickup_stop_id: str
+    dropoff_stop_id: str
+    pickup_time: TimeMin
+    dropoff_time: TimeMin
+    ride_time: TimeMin
+    waiting_time: TimeMin = 0
+    appointment_slack: TimeMin | None = None
+    travel_path: list[ZoneId] = Field(default_factory=list)
+
+
+class TripExplanation(StrictModel):
+    trip_id: str
+    accepted: bool
+    vehicle_id: str | None = None
+    driver_id: str | None = None
+    pickup_stop_id: str | None = None
+    dropoff_stop_id: str | None = None
+    pickup_time: TimeMin | None = None
+    dropoff_time: TimeMin | None = None
+    waiting_time: TimeMin | None = None
+    ride_time: TimeMin | None = None
+    appointment_slack: TimeMin | None = None
+    active_constraints: list[str] = Field(default_factory=list)
+    why_this_route: str = ""
+    alternatives_considered: list[str] = Field(default_factory=list)
+    alternatives_rejected: list[str] = Field(default_factory=list)
+    reason_code: str = ""
+
+
 class RoutePlan(StrictModel):
     vehicle_id: str
     driver_id: str | None
@@ -122,6 +183,12 @@ class RoutePlan(StrictModel):
     ride_times: dict[str, TimeMin] = Field(default_factory=dict)
     route_distance: float = 0.0
     route_duration: TimeMin = 0
+    passenger_load_after_stop: dict[str, int] = Field(default_factory=dict)
+    wheelchair_load_after_stop: dict[str, int] = Field(default_factory=dict)
+    deadhead_time: TimeMin = 0
+    frozen_stop_ids: list[str] = Field(default_factory=list)
+    driver_assignment: DriverAssignment | None = None
+    passenger_itineraries: list[PassengerItinerary] = Field(default_factory=list)
 
 
 class RejectedTrip(StrictModel):
@@ -134,13 +201,22 @@ class FairnessMetrics(StrictModel):
     acceptance_rate_by_zone: dict[str, float] = Field(default_factory=dict)
     acceptance_rate_by_eligibility: dict[str, float] = Field(default_factory=dict)
     medical_on_time_rate: float | None = None
+    wheelchair_on_time_rate: float | None = None
     mean_wait_by_group: dict[str, float] = Field(default_factory=dict)
     wait_dispersion: float | None = None
     worst_group_wait: float | None = None
+    average_waiting: float | None = None
+    p95_waiting: float | None = None
+    average_ride_time: float | None = None
+    p95_ride_time: float | None = None
+    rejected_rate: float | None = None
     cancel_share: float | None = None
     unexplained_reject_share: float | None = None
     jain_index: float | None = None
     max_disparity: float | None = None
+    service_coverage: float | None = None
+    manual_override_disparity: float | None = None
+    fair_by_single_metric: bool = False
 
 
 class PlanningResult(StrictModel):
@@ -154,6 +230,13 @@ class PlanningResult(StrictModel):
     objective_values: dict[str, float] = Field(default_factory=dict)
     fairness_metrics: FairnessMetrics = Field(default_factory=FairnessMetrics)
     reason_codes: dict[str, str] = Field(default_factory=dict)
+    explanations: list[TripExplanation] = Field(default_factory=list)
+    driver_assignments: list[DriverAssignment] = Field(default_factory=list)
+    plan_id: str = ""
+    base_plan_id: str | None = None
+    event_id: str | None = None
+    event_type: str = "DAY_AHEAD"
+    event_timestamp: TimeMin = 0
     input_hash: str
     config_hash: str
     solver_config: dict[str, object] = Field(default_factory=dict)
@@ -194,13 +277,34 @@ class DispatchScenario(StrictModel):
 
 class TravelMatrix(StrictModel):
     zones: list[ZoneId]
-    # minutes[i][j] between zones[i] and zones[j]
+    # Direct edge minutes[i][j] between zones[i] and zones[j].
     minutes: list[list[TimeMin]]
+    _hop: list[list[int]] | None = PrivateAttr(default=None)
+    _nxt: list[list[int]] | None = PrivateAttr(default=None)
+
+    def _ensure_graph(self) -> tuple[list[list[int]], list[list[int]]]:
+        if self._hop is None or self._nxt is None:
+            self._hop, self._nxt = floyd_warshall(self.minutes)
+        return self._hop, self._nxt
 
     def travel(self, a: ZoneId, b: ZoneId) -> TimeMin:
-        i = self.zones.index(a)
-        j = self.zones.index(b)
-        return self.minutes[i][j]
+        try:
+            i = self.zones.index(a)
+            j = self.zones.index(b)
+        except ValueError as exc:
+            raise KeyError(f"UNKNOWN_ZONE:{a}->{b}") from exc
+        hop, _nxt = self._ensure_graph()
+        return hop[i][j]
+
+    def shortest_path(self, a: ZoneId, b: ZoneId) -> list[ZoneId]:
+        try:
+            i = self.zones.index(a)
+            j = self.zones.index(b)
+        except ValueError as exc:
+            raise KeyError(f"UNKNOWN_ZONE:{a}->{b}") from exc
+        _hop, nxt = self._ensure_graph()
+        idx = reconstruct_path(nxt, i, j)
+        return [self.zones[k] for k in idx]
 
 
 class DayProblem(StrictModel):

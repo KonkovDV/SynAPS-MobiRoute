@@ -2,10 +2,15 @@
 
 from __future__ import annotations
 
+from mobiroute import SYNAPS_COMMIT, __version__
+from mobiroute.adapters.fingerprint import fingerprint
+from mobiroute.domain.models import ReasonCode, SolutionStatus
 from mobiroute.domain.priorities import trip_sort_key
-from mobiroute.domain.requests import DayProblem, PlanningResult, TripRequest
+from mobiroute.domain.requests import DayProblem, PlanningResult, RejectedTrip, TripRequest
+from mobiroute.solvers.finalize import finalize_result
 from mobiroute.solvers.greedy import _assign_driver, _simulate_route
 from mobiroute.validation.feasibility import accessibility_compatible
+from mobiroute.validation.reasons import diagnose_rejection, non_empty_reason
 
 
 def solve_nearest(problem: DayProblem) -> PlanningResult:
@@ -15,40 +20,44 @@ def solve_nearest(problem: DayProblem) -> PlanningResult:
 
 
 def _nearest_core(problem: DayProblem, ordered: list[TripRequest]) -> PlanningResult:
-    """Assign each trip to the compatible vehicle with minimal depot→pickup travel."""
-    from mobiroute import SYNAPS_COMMIT, __version__
-    from mobiroute.adapters.fingerprint import fingerprint
-    from mobiroute.domain.fairness import compute_fairness
-    from mobiroute.domain.models import ReasonCode, SolutionStatus
-    from mobiroute.domain.requests import PlanningResult, RejectedTrip, RoutePlan
-    from mobiroute.validation.feasibility import check_plan
+    from mobiroute.domain.requests import RoutePlan
 
     routes: dict[str, list[TripRequest]] = {v.id: [] for v in problem.vehicles}
+    vehicle_driver: dict[str, str | None] = {v.id: None for v in problem.vehicles}
     served: list[str] = []
     rejected: list[RejectedTrip] = []
     reasons: dict[str, str] = {}
 
     for trip in ordered:
         candidates = []
+        occupied = {d for d in vehicle_driver.values() if d}
         for v in problem.vehicles:
             if accessibility_compatible(v, trip) is not None:
                 continue
+            occ = occupied - ({vehicle_driver[v.id]} if vehicle_driver[v.id] else set())
+            driver_id = vehicle_driver[v.id] or _assign_driver(
+                problem,
+                v.id,
+                needs_accessibility=trip.needs_boarding_assistance,
+                occupied_driver_ids=occ,
+                preferred_id=vehicle_driver[v.id],
+            )
+            if driver_id is None:
+                continue
             dist = problem.travel.travel(v.depot_id, trip.pickup_zone)
             trial = routes[v.id] + [trip]
-            plan = _simulate_route(problem, v, _assign_driver(problem, v.id), trial)
+            plan = _simulate_route(problem, v, driver_id, trial)
             if plan is not None:
-                candidates.append((dist, plan.route_duration, v.id))
+                candidates.append((dist, plan.route_duration, v.id, driver_id))
         if not candidates:
-            code = ReasonCode.TIME_WINDOW_CONFLICT.value
-            if all(accessibility_compatible(v, trip) is not None for v in problem.vehicles):
-                r0 = accessibility_compatible(problem.vehicles[0], trip)
-                code = r0.value if r0 else ReasonCode.NO_COMPATIBLE_VEHICLE.value
+            code = non_empty_reason(diagnose_rejection(problem, trip))
             rejected.append(RejectedTrip(trip_id=trip.id, reason_code=code))
             reasons[trip.id] = code
             continue
         candidates.sort(key=lambda x: (x[0], x[1], x[2]))
-        vid = candidates[0][2]
+        _dist, _dur, vid, did = candidates[0]
         routes[vid].append(trip)
+        vehicle_driver[vid] = did
         served.append(trip.id)
         reasons[trip.id] = ReasonCode.ACCEPTED.value
 
@@ -56,7 +65,18 @@ def _nearest_core(problem: DayProblem, ordered: list[TripRequest]) -> PlanningRe
     for v in problem.vehicles:
         if not routes[v.id]:
             continue
-        plan = _simulate_route(problem, v, _assign_driver(problem, v.id), routes[v.id])
+        occ = {d for vid, d in vehicle_driver.items() if d and vid != v.id}
+        plan = _simulate_route(
+            problem,
+            v,
+            _assign_driver(
+                problem,
+                v.id,
+                occupied_driver_ids=occ,
+                preferred_id=vehicle_driver[v.id],
+            ),
+            routes[v.id],
+        )
         if plan is not None:
             route_plans.append(plan)
         else:
@@ -67,6 +87,7 @@ def _nearest_core(problem: DayProblem, ordered: list[TripRequest]) -> PlanningRe
                 rejected.append(
                     RejectedTrip(trip_id=tid, reason_code=ReasonCode.TIME_WINDOW_CONFLICT.value)
                 )
+                reasons[tid] = ReasonCode.TIME_WINDOW_CONFLICT.value
 
     result = PlanningResult(
         status=SolutionStatus.HEURISTIC_FEASIBLE.value,
@@ -79,19 +100,11 @@ def _nearest_core(problem: DayProblem, ordered: list[TripRequest]) -> PlanningRe
         reason_codes=reasons,
         input_hash=fingerprint(problem.model_dump(mode="json")),
         config_hash=fingerprint({"solver": "NEAREST_FEASIBLE", "version": __version__}),
-        solver_config={"name": "NEAREST_FEASIBLE"},
+        solver_config={"name": "NEAREST_FEASIBLE", "pooling": False},
         mobiroute_version=__version__,
         synaps_commit=SYNAPS_COMMIT,
         data_provenance=problem.data_provenance,
         claim_level="synthetic_benchmark",
+        event_type="DAY_AHEAD",
     )
-    report = check_plan(problem, result)
-    result.verified_feasible = report.feasible
-    if not report.feasible:
-        result.status = SolutionStatus.NOT_VERIFIED.value
-    elif rejected:
-        result.status = SolutionStatus.PARTIAL.value
-    else:
-        result.status = SolutionStatus.HEURISTIC_FEASIBLE.value
-    result.fairness_metrics = compute_fairness(problem, result)
-    return result
+    return finalize_result(problem, result)

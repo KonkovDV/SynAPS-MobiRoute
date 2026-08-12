@@ -127,14 +127,57 @@ Statuses for transfer: transferable pattern vs data-locked.
 | Transfer | Continuous reopt under ADA-style constraints |
 | Method risk | US ADA ≠ Russian social-taxi rules; do not copy eligibility law |
 
-## Synthesis for MobiRoute portfolio
+## Policy analogues (not Moscow law) — confirmed 2026-08-12
 
-| Scale | Primary method | Status in v0.1.1 |
+| Topic | Primary | Use in MobiRoute | Forbidden transfer |
+| --- | --- | --- | --- |
+| Next-day vs 24 h-before-clock | 49 CFR 37.131(b); FTA ADA circular webinar | `channel=NEXT_DAY` vs Moscow 24 h/3 d intake | Treat Moscow as ADA |
+| Pickup negotiation ≤ 1 h | 49 CFR 37.131(b)(2) | Window encoding | Copy US denial statute |
+| Pickup window ≤ 30 min; ~5 min driver wait after window start | DREDF OTP guide | 30 min span; planning dwell \(\max(\mathrm{board},5)\); live no-show timer is CRM | Call it Moscow OTP |
+| Appointment drop-off −30/0 | DREDF OTP | earliest alight \(start-30\); `appointment_end` hard; no cabin-until-slot | Copy agency % |
+| Will-call / open return is premium | ADA practice | Explicit wait-return, 60 min Moscow cap | Promise will-call as a right |
+| Subscription ≤ 50% of capacity unless excess | 49 CFR 37.133 | Frozen vs leftover next-day **label** | Enforce 50% as RF law |
+| Capacity constraint = pattern of denials / lateness / long rides | 49 CFR 37.131(f) | Non-empty reason codes | “We solved ADA capacity” |
+| Wheelchair dwell longer than ambulatory | STM Montréal dwell (TRR 2020) | wheelchair 8; ambulatory \(\max(3,5)=5\) | Copy STM as MAST |
+| Productivity / OTP reporting | TCRP Synthesis 168 | Served, P95, coverage | Copy published % to Moscow |
+
+Ops encoding and measured numbers: [`docs/ops-cases-and-benchmark-2026-08-12.md`](../ops-cases-and-benchmark-2026-08-12.md).
+
+## Synthesis for MobiRoute portfolio (v0.2.0)
+
+| Scale | Primary method | Status |
 | --- | --- | --- |
-| Tiny | CP-SAT exact / prove OPTIMAL when solver does | IMPLEMENTED |
-| Medium | CP-SAT + Benders-style decomposition | PLANNED |
-| Large | Greedy pooling insertion → beam → ALNS → RHC | PARTIAL (greedy pooling + beam; ALNS/RHC stubs) |
-| Online | Insert into existing routes; frozen preservation; explainable reject | PARTIAL |
+| Tiny | Sequential CP-SAT; OPTIMAL only if OR-Tools OPTIMAL and notary | EXPERIMENTAL |
+| Medium | Greedy pooling insertion / beam; Benders **PLANNED** | PARTIAL |
+| Large | Greedy → beam → ALNS heuristic → RHC | PARTIAL (ALNS heuristic; RHC stub) |
+| Online | Insert into existing routes; `plan_id` / `event_type`; frozen preservation | PARTIAL |
+
+### Mapping: paper → MobiRoute (2026-08-12)
+
+| Work | In MobiRoute | Missing | Can add | Needs customer data | Benchmark | Allowed claim |
+| --- | --- | --- | --- | --- | --- | --- |
+| CP 2026 Savannah paratransit | Tiny sequential CP-SAT + shifts as windows | Joint shift design, operator rules | Medium CP / column generation | Yes for KPI transfer | Synthetic zones only | Pattern transfer, not Savannah % |
+| Activated Benders 2026 | Stub `benders.py` | LBBD, stochastic 2nd stage | After tiny CP-SAT stable | Disruption distributions | Author instances ≠ Moscow | PLANNED only |
+| OR Spectrum 2026 dynamic insertion | Greedy/online PD insertion | Sampling, clustering, parallel reopt | Insertion speed-ups | No for algorithm; yes for SL | 2700-instance paper ≠ ours | Insertion exists; not their curves |
+| SmartTransit.AI | Kernel-only JSON contracts | Apps, CAD/AVL, cloud suite | Integration adapters | Agency ops | Demo city ≠ Moscow | Not a passenger app |
+| Continuous dynamic ADA paratransit | Event-driven replan + frozen | ADA legal engine, live AVL | Repair without full re-solve | Eligibility + AVL | ADA traces | Pattern only |
+| Equity-aware DARP | Multi-metric fairness, Jain, P95, coverage | Proven equity, override disparity | Lex fairness after hard constraints | Group labels | Synthetic stress mode | Never “fair” from one metric |
+| Robust / chance-constrained DARP | Deterministic buffers | Uncertainty sets, CVaR | Later | Travel-time samples | — | OUT OF SCOPE v0.2 |
+| Dynamic ridepooling | PARTIAL load-based insertion | Shareability network | Detour-aware ALNS (heuristic exists) | Demand | pooled_rides mode | Not a ridepooling product |
+| Disruption recovery | Cancel / no-show / traffic / vehicle / driver | Recourse optimality | Incremental repair | Ops logs | disruption / breakdown modes | Heuristic replan only |
+| Omega 2026 TD-DARP ALNS | Adaptive LNS: Shaw/worst/route/random + SA; greedy repair | Time-dependent \(\tau\), regret-k, zero-split, tabu | After live travel | Yes for KPI | Omega instances ≠ Moscow | Heuristic pattern only |
+
+### 11. ALNS for DARP (pattern transfer, not a new paper)
+
+| Field | Content |
+| --- | --- |
+| Citations | Ropke & Pisinger, *Transportation Science* 2006 (ALNS); Shaw 1998 relatedness; Hu, Wang, Hao, Chen, Li, Jin, *Omega* 2026, [10.1016/j.omega.2026.103577](https://doi.org/10.1016/j.omega.2026.103577) (TD-DARP ALNS: random / Shaw / worst / route / zero-split; greedy + regret repair; SA) |
+| Transfer | Destroy operators + roulette weights + SA on equal-served duration. Repair stays greedy reinsert (native-scored). SynAPS `alns_solver.py` is the engineering pattern (not FJSP). |
+| Do not transfer | Time-dependent travel, regret-k, zero-split, tabu polish, MAB/UCB1, CP-SAT repair, Omega benchmark % |
+| Method risk | Heuristic only — never `OPTIMAL` |
+
+Do not copy published percentages without identical methodology and data.
+
 
 ## Explicit non-claims
 

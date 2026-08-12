@@ -15,9 +15,9 @@ Manufacturing FJSP models from SynAPS are **not** imported into the DARP domain.
 
 | Package | Role |
 | --- | --- |
-| `domain` | Passengers, vehicles, drivers, trips, priorities, fairness |
+| `domain` | Passengers, vehicles, `DriverAssignment`, route graph, fairness |
 | `adapters` | Synthetic data, fingerprints, SynAPS pin |
-| `solvers` | FIFO, nearest, greedy pooling insertion, beam, CP-SAT tiny; ALNS/LBBD/RHC stubs |
+| `solvers` | FIFO, nearest, greedy pooling insertion (Rust `mobiroute_native`), beam, CP-SAT tiny, adaptive ALNS (Shaw/worst/route/random + SA); LBBD/RHC stubs |
 | `validation` | Feasibility, accessibility, privacy |
 | `dispatch` | Online insertion, cancel/no-show, disruption |
 | `reporting` | JSON / MD / CSV |

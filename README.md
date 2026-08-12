@@ -11,9 +11,9 @@ fairness, and disruption recovery).
 
 Language: **EN** | [RU](README_RU.md)
 
-> MobiRoute is **not** a full social-taxi operations platform, passenger app,
-> eligibility CRM, or certified personal-data system. It is an **integrable
-> planning/dispatch core** designed to sit beside an operator stack.
+> MobiRoute is an **open, explainable and integrable optimization kernel** for
+> accessible demand-responsive transport — **not** a passenger app, CRM, CAD/AVL,
+> or billing suite.
 
 **TRL honesty (2026-08-12):** engineering prototype. SynAPS scheduling patterns
 are reused; the DARP domain is new and validated on **synthetic** Moscow-zone
@@ -34,12 +34,20 @@ Pinned SynAPS reference commit: [`5168fc7`](https://github.com/KonkovDV/SynAPS/c
 
 ```bash
 python -m pip install -e ".[dev]"
+python -m pip install maturin
+python -m maturin develop --release --manifest-path native/mobiroute_native/Cargo.toml
 mobiroute generate --mode tiny --seed 42 --out examples/tiny_day.json
 mobiroute solve --problem examples/tiny_day.json --solver greedy --out-dir benchmark/results/tiny_greedy
 mobiroute demo --out-dir benchmark/results/demo
+mobiroute ops-benchmark --seed 42 --out-dir benchmark/results/ops-2026-08-12
 pytest -q
 ruff check src tests benchmark
 ```
+
+Greedy / beam / ALNS / online insertion **require** the Rust kernel
+(`mobiroute_native`). Python SoA is an algebra oracle, not a solver backend.
+See [`docs/native-acceleration.md`](docs/native-acceleration.md).
+Do not quote an unverified ×N speedup.
 
 ## Solvers (portfolio)
 
@@ -47,12 +55,14 @@ ruff check src tests benchmark
 | --- | --- | --- |
 | FIFO | baseline, no pooling | No |
 | Nearest feasible | baseline | No |
-| Greedy insertion | small/medium; **pooling insertion** | No |
+| Greedy insertion | small/medium; **pooling insertion** (Rust `mobiroute_native`) | No |
 | Beam (width 3) | limited branching over insertions | No |
-| CP-SAT tiny | ≤40 trips / ≤12 vehicles | Yes, only if OR-Tools proves OPTIMAL **and** independent feasibility passes |
+| CP-SAT tiny | ≤40 trips / ≤12 vehicles; **sequential pairs, not pooling** | Yes, only if OR-Tools proves OPTIMAL **and** independent feasibility+completeness pass; otherwise `NOT_VERIFIED` |
+| CP-SAT fallback | larger instances → greedy | **Never** OPTIMAL (`HEURISTIC_FEASIBLE` / `PARTIAL`) |
 | Online insertion / disruption | insert into existing routes | No |
 | Incremental repair | named disruption replan | No |
-| ALNS / LBBD / RHC | large / medium | **PLANNED** (stubs only) |
+| ALNS | adaptive LNS on greedy; Shaw/worst/route | **Never** OPTIMAL |
+| LBBD / RHC | medium / rolling | **PLANNED** (stubs only) |
 
 ## Repository layout
 
@@ -63,8 +73,12 @@ See [`docs/architecture.md`](docs/architecture.md). Domain code lives under
 
 | Doc | Purpose |
 | --- | --- |
-| [`docs/synaps-audit-2026-08-12.md`](docs/synaps-audit-2026-08-12.md) | Upstream SynAPS audit |
+| [`docs/implementation-audit-2026-08-12.md`](docs/implementation-audit-2026-08-12.md) | Code vs claims audit (0.1.1 baseline) |
+| [`docs/native-acceleration.md`](docs/native-acceleration.md) | Optional PyO3 insertion kernel |
 | [`docs/moscow-paratransit-problem-2026.md`](docs/moscow-paratransit-problem-2026.md) | Moscow social taxi problem map |
+| [`docs/ops-cases-and-benchmark-2026-08-12.md`](docs/ops-cases-and-benchmark-2026-08-12.md) | Ops cases, world analogues, Academy 10th cohort, measured suite |
+| [`docs/edge-cases-algebra-synaps-2026-08-12.md`](docs/edge-cases-algebra-synaps-2026-08-12.md) | Edge cases, DARP algebra, SynAPS pin mapping |
+| [`docs/redteam-algebra-2026-08-12.md`](docs/redteam-algebra-2026-08-12.md) | Red Team: notary holes, sort-order traps, pipeline |
 | [`docs/research/paratransit-research-2024-2026.md`](docs/research/paratransit-research-2024-2026.md) | Academic review |
 | [`docs/market/competitors-2026.md`](docs/market/competitors-2026.md) | Market positioning |
 | [`docs/mathematical-formulation.md`](docs/mathematical-formulation.md) | Formal DARP formulation |

@@ -48,10 +48,18 @@ jobs:
           python-version: ${{ matrix.python-version }}
           cache: pip
           cache-dependency-path: pyproject.toml
-      - name: Install
+      - name: Install Python dependencies
         run: |
           python -m pip install --upgrade pip
           python -m pip install -e ".[dev]"
+          python -m pip install maturin
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+      - name: Build native insertion kernel
+        run: |
+          mkdir -p native-dist
+          python -m maturin build --manifest-path native/mobiroute_native/Cargo.toml --release --out native-dist
+          python -m pip install --force-reinstall native-dist/*.whl
       - name: Pytest
         run: pytest --cov=mobiroute --cov-report=term-missing
       - name: CLI smoke
@@ -77,3 +85,38 @@ jobs:
           python -m pip install -e ".[dev]"
       - name: Mypy
         run: mypy
+
+  native-accelerator:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: pyproject.toml
+      - name: Install Python dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -e ".[dev]"
+          python -m pip install maturin
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+      - name: Build native insertion kernel
+        run: |
+          mkdir -p native-dist
+          python -m maturin build --manifest-path native/mobiroute_native/Cargo.toml --release --out native-dist
+          python -m pip install --force-reinstall native-dist/*.whl
+      - name: Verify native backend
+        run: |
+          python - <<'PY'
+          from mobiroute.solvers.native_accel import acceleration_status
+          status = acceleration_status()
+          print(status)
+          assert status["native_available"] is True
+          assert status["insertion_backend"] == "native"
+          PY
+      - name: Native parity tests
+        run: pytest -q tests/test_insertion_kernel.py tests/test_pooling.py tests/test_residuals.py tests/test_alns.py

@@ -1,0 +1,5 @@
+# Prefer self-contained LLD on Windows GNU (Cyrillic user profile paths).
+# MSVC remains the default host; this only applies if the GNU target is used.
+[target.x86_64-pc-windows-gnu]
+linker = "rust-lld"
+rustflags = ["-C", "link-self-contained=yes"]

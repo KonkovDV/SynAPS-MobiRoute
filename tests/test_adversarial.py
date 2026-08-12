@@ -258,7 +258,7 @@ def test_traffic_and_driver_disruption():
     _, res, diff = recover_disruption(
         problem, baseline, traffic_delay_minutes=15, driver_unavailable_id=problem.drivers[0].id
     )
-    assert res.solution_type == "GREEDY_INSERTION"
+    assert res.solution_type == "DISRUPTION_RECOVERY"
     assert diff.plan_churn is not None
 
 

@@ -4,6 +4,26 @@
 **Not** proof of algorithm quality.  
 **Not** customer data.
 
+## Booking and service rules (mgovos.ru how-to, retrieved 2026-08-12)
+
+These are **operator-published** rules, encoded in synthetic ops scenarios as policy shapes. They are not a live MAST integration.
+
+| Rule | Value | Kernel? |
+| --- | --- | --- |
+| Service hours | Daily **06:00–19:00** | Shift + depot return |
+| Booking phone | +7 (495) 129-03-30 daily **08:00–20:00** | Intake, not kernel |
+| Regular lead time | Not earlier than 3 calendar days, not later than 24 h | CRM calendar |
+| Airport / station lead time | 24 h–**30 calendar days** | `trip_purpose=AIRPORT` label |
+| Destination wait / return | Requested at booking; **total wait ≤ 60 min** | `same_vehicle_as` + exclusive insert |
+| Companions | **Up to 2** | Seats = 1 + companions |
+| Hour quotas | 80 h work/study; unlimited treatment/rehab; 20 h other; no roll-over | Billing / CRM |
+| Fare | 210 ₽/h Moscow; 420 ₽/h oblast; min 30 min | Not kernel |
+| Vehicle class asked | Sedan vs ramp; unaided transfer? | Lift/ramp/WAV flags |
+| Child restraint | Asked at booking | Not a hard field yet |
+
+Edge-case algebra, SynAPS mapping, and six extra scripts (`ops_stretcher` … `ops_agency_missed`):
+[`docs/edge-cases-algebra-synaps-2026-08-12.md`](edge-cases-algebra-synaps-2026-08-12.md).
+
 ## Verified operational context (Aug 2026)
 
 | Fact | Status | Source |
@@ -19,7 +39,7 @@
 | Android social-taxi app; also «Московский транспорт» historically referenced | CLAIMED BY OPERATOR / SECONDARY | taxi.santrans.ru; transport.mos.ru (older phone/email may be stale — prefer santrans contacts post-Apr 2026) |
 | Fleet gallery: Москвич 3, Largus, Ford Transit, Газель, MAN bus | CLAIMED BY OPERATOR | taxi.santrans.ru |
 | Destinations: medical, education, stations/airports, rehab, public offices | CLAIMED BY OPERATOR | taxi.santrans.ru |
-| Advance booking rules (e.g. not later than ~24h) | SECONDARY / CLAIMED | mgovos.ru how-to page — confirm on current FAQ before ops use |
+| Advance booking: 3 calendar days … 24 h; airports/stations 30 d … 24 h; service 06:00–19:00; dest wait ≤ 60 min; 2 companions | CLAIMED BY OPERATOR (how-to page) | mgovos.ru how-to, retrieved 2026-08-12 |
 | Complaints: +7 (495) 215-03-80 / os@santrans.ru | VERIFIED | taxi.santrans.ru |
 | Public dataset of real trips | MISSING | — |
 | Personal / medical data in real operations | VERIFIED (by nature of service) | implies privacy controls |

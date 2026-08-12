@@ -9,7 +9,7 @@ Hard checks (optimizer may not violate for cost):
 | Ramp | `trip.needs_ramp` → ramp or lift |
 | Boarding assistance | `driver.accessibility_training` |
 | Companions | seats = 1 + `companion_count` |
-| Service area | optional zone allow-list |
+| Service area | `vehicle.service_area` (empty = unrestricted; else pickup **and** dropoff) |
 | Shift | pickup/dropoff within driver/vehicle shift |
 
 Priority hierarchy is explicit in `domain/priorities.py` — not opaque weights.

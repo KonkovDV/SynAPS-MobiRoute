@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "synaps-mobiroute"
-version = "0.1.1"
+version = "0.2.0"
 description = "Explainable accessible Dial-a-Ride / paratransit planning and dispatch optimization kernel"
 readme = "README.md"
 requires-python = ">=3.12"
@@ -49,6 +49,9 @@ dev = [
   "mypy>=1.13",
   "types-jsonschema>=4.20",
 ]
+native = [
+  "maturin>=1.7,<2",
+]
 
 [project.urls]
 Homepage = "https://github.com/KonkovDV/SynAPS-MobiRoute"
@@ -69,7 +72,7 @@ mobiroute = ["py.typed"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-pythonpath = ["src"]
+pythonpath = ["src", "."]
 addopts = "-q"
 
 [tool.ruff]
@@ -92,10 +95,14 @@ mypy_path = "src"
 warn_unused_ignores = true
 
 [[tool.mypy.overrides]]
+module = ["mobiroute_native"]
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
 module = ["ortools.*"]
 ignore_missing_imports = true
 disallow_untyped_calls = false
 
 [[tool.mypy.overrides]]
 module = ["mobiroute.solvers.cpsat"]
-disable_error_code = ["attr-defined", "type-arg"]
+disable_error_code = ["attr-defined", "type-arg", "operator", "misc"]

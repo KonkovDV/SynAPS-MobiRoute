@@ -1,0 +1,20 @@
+[package]
+name = "mobiroute_native"
+version = "0.2.0"
+edition = "2021"
+description = "Required PyO3 hot path for MobiRoute DARP insertion scoring"
+license = "MIT"
+
+[lib]
+name = "mobiroute_native"
+crate-type = ["cdylib"]
+
+[dependencies]
+pyo3 = { version = "0.24", features = ["extension-module"] }
+
+[profile.release]
+lto = "fat"
+codegen-units = 1
+opt-level = 3
+panic = "abort"
+strip = true
