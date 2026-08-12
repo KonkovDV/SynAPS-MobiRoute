@@ -1,0 +1,26 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/KonkovDV/SynAPS-MobiRoute/schemas/mobiroute.trip.v1.json",
+  "title": "MobiRoute Trip Request v1",
+  "type": "object",
+  "required": ["id", "pseudonymous_passenger_id", "pickup_zone", "dropoff_zone", "earliest_pickup", "latest_pickup", "max_ride_time", "max_wait_time"],
+  "properties": {
+    "id": { "type": "string" },
+    "pseudonymous_passenger_id": { "type": "string" },
+    "pickup_zone": { "type": "string" },
+    "dropoff_zone": { "type": "string" },
+    "pickup_coordinates": { "type": ["array", "null"] },
+    "dropoff_coordinates": { "type": ["array", "null"] },
+    "earliest_pickup": { "type": "integer" },
+    "latest_pickup": { "type": "integer" },
+    "appointment_start": { "type": ["integer", "null"] },
+    "appointment_end": { "type": ["integer", "null"] },
+    "max_ride_time": { "type": "integer" },
+    "max_wait_time": { "type": "integer" },
+    "wheelchair_requirement": { "type": "string" },
+    "companion_count": { "type": "integer", "minimum": 0 },
+    "service_priority": { "type": "string" },
+    "data_provenance": { "type": "string" }
+  },
+  "additionalProperties": true
+}

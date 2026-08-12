@@ -1,0 +1,28 @@
+name: Feature request
+description: Propose a kernel capability (not a full ops platform)
+labels: ["enhancement"]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed kernel capability
+    validations:
+      required: true
+  - type: dropdown
+    id: layer
+    attributes:
+      label: Evidence layer this would unlock
+      options:
+        - algorithmic_capability
+        - synthetic_benchmark
+        - open_data_benchmark
+        - customer_evidence
+        - production_evidence
+    validations:
+      required: true

@@ -1,0 +1,28 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/KonkovDV/SynAPS-MobiRoute/schemas/mobiroute.result.v1.json",
+  "title": "MobiRoute Planning Result v1",
+  "type": "object",
+  "required": ["status", "solution_type", "verified_feasible", "served_requests", "rejected_requests", "route_plans", "input_hash", "config_hash", "mobiroute_version", "synaps_commit", "claim_level"],
+  "properties": {
+    "status": {
+      "type": "string",
+      "enum": ["OPTIMAL", "FEASIBLE", "HEURISTIC_FEASIBLE", "PARTIAL", "INFEASIBLE", "ERROR", "NOT_VERIFIED", "MANUAL_REVIEW_REQUIRED"]
+    },
+    "solution_type": { "type": "string" },
+    "verified_feasible": { "type": "boolean" },
+    "served_requests": { "type": "array", "items": { "type": "string" } },
+    "rejected_requests": { "type": "array" },
+    "route_plans": { "type": "array" },
+    "objective_values": { "type": "object" },
+    "fairness_metrics": { "type": "object" },
+    "reason_codes": { "type": "object" },
+    "input_hash": { "type": "string" },
+    "config_hash": { "type": "string" },
+    "mobiroute_version": { "type": "string" },
+    "synaps_commit": { "type": "string" },
+    "data_provenance": { "type": "string" },
+    "claim_level": { "type": "string" }
+  },
+  "additionalProperties": true
+}

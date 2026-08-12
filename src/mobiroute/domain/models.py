@@ -1,0 +1,107 @@
+"""Core domain enums and shared types for accessible DARP."""
+
+from __future__ import annotations
+
+from enum import StrEnum
+
+from pydantic import BaseModel, ConfigDict
+
+
+class StrictModel(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=False)
+
+
+class EligibilityClass(StrEnum):
+    STANDARD = "STANDARD"
+    MEDICAL = "MEDICAL"
+    PALLIATIVE = "PALLIATIVE"
+    CHILD = "CHILD"
+    ORGANIZATION = "ORGANIZATION"
+
+
+class WheelchairType(StrEnum):
+    NONE = "NONE"
+    MANUAL = "MANUAL"
+    POWER = "POWER"
+    SCOOTER = "SCOOTER"
+    STRETCHER = "STRETCHER"
+
+
+class ServicePriority(StrEnum):
+    SAFETY = "SAFETY"
+    MEDICAL_URGENT = "MEDICAL_URGENT"
+    APPOINTMENT_PROTECTED = "APPOINTMENT_PROTECTED"
+    STANDARD = "STANDARD"
+    FLEXIBLE = "FLEXIBLE"
+
+
+class BookingStatus(StrEnum):
+    REQUESTED = "REQUESTED"
+    CONFIRMED = "CONFIRMED"
+    FROZEN = "FROZEN"
+    IN_PROGRESS = "IN_PROGRESS"
+    CANCELLED = "CANCELLED"
+    NO_SHOW = "NO_SHOW"
+    REJECTED = "REJECTED"
+    COMPLETED = "COMPLETED"
+
+
+class StopType(StrEnum):
+    DEPOT_START = "DEPOT_START"
+    PICKUP = "PICKUP"
+    DROPOFF = "DROPOFF"
+    DEPOT_END = "DEPOT_END"
+
+
+class ReasonCode(StrEnum):
+    NO_COMPATIBLE_VEHICLE = "NO_COMPATIBLE_VEHICLE"
+    NO_CAPACITY = "NO_CAPACITY"
+    NO_WHEELCHAIR_CAPACITY = "NO_WHEELCHAIR_CAPACITY"
+    NO_DRIVER = "NO_DRIVER"
+    TIME_WINDOW_CONFLICT = "TIME_WINDOW_CONFLICT"
+    MAX_RIDE_TIME_CONFLICT = "MAX_RIDE_TIME_CONFLICT"
+    DEPOT_REACHABILITY_CONFLICT = "DEPOT_REACHABILITY_CONFLICT"
+    DISRUPTION = "DISRUPTION"
+    ELIGIBILITY_REVIEW_REQUIRED = "ELIGIBILITY_REVIEW_REQUIRED"
+    MANUAL_REVIEW_REQUIRED = "MANUAL_REVIEW_REQUIRED"
+    CANCELLED = "CANCELLED"
+    NO_SHOW = "NO_SHOW"
+    ACCEPTED = "ACCEPTED"
+
+
+class SolutionStatus(StrEnum):
+    OPTIMAL = "OPTIMAL"
+    FEASIBLE = "FEASIBLE"
+    HEURISTIC_FEASIBLE = "HEURISTIC_FEASIBLE"
+    PARTIAL = "PARTIAL"
+    INFEASIBLE = "INFEASIBLE"
+    ERROR = "ERROR"
+    NOT_VERIFIED = "NOT_VERIFIED"
+    MANUAL_REVIEW_REQUIRED = "MANUAL_REVIEW_REQUIRED"
+
+
+class ClaimLevel(StrEnum):
+    ALGORITHMIC = "algorithmic_capability"
+    SYNTHETIC = "synthetic_benchmark"
+    OPEN_DATA = "open_data_benchmark"
+    CUSTOMER = "customer_evidence"
+    PRODUCTION = "production_evidence"
+
+
+class DataProvenance(StrEnum):
+    SYNTHETIC = "synthetic"
+    ANONYMIZED = "anonymized"
+    AGGREGATED = "aggregated"
+    CUSTOMER_PRIVATE = "customer_private"
+    UNKNOWN = "unknown"
+
+
+class PrivacyClass(StrEnum):
+    PUBLIC_SYNTHETIC = "PUBLIC_SYNTHETIC"
+    INTERNAL = "INTERNAL"
+    RESTRICTED = "RESTRICTED"
+    MEDICAL_SENSITIVE = "MEDICAL_SENSITIVE"
+
+
+TimeMin = int  # minutes from planning day start
+ZoneId = str

@@ -1,0 +1,101 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "synaps-mobiroute"
+version = "0.1.0"
+description = "Explainable accessible Dial-a-Ride / paratransit planning and dispatch optimization kernel"
+readme = "README.md"
+requires-python = ">=3.12"
+license = { text = "MIT" }
+authors = [{ name = "SynAPS-MobiRoute contributors" }]
+maintainers = [{ name = "SynAPS-MobiRoute contributors" }]
+keywords = [
+  "dial-a-ride",
+  "DARP",
+  "PDPTW",
+  "paratransit",
+  "accessible-transport",
+  "optimization",
+  "constraint-programming",
+  "operations-research",
+  "dispatch",
+]
+classifiers = [
+  "Development Status :: 3 - Alpha",
+  "Intended Audience :: Science/Research",
+  "Intended Audience :: Developers",
+  "License :: OSI Approved :: MIT License",
+  "Operating System :: OS Independent",
+  "Programming Language :: Python :: 3 :: Only",
+  "Programming Language :: Python :: 3.12",
+  "Programming Language :: Python :: 3.13",
+  "Typing :: Typed",
+  "Topic :: Scientific/Engineering",
+  "Topic :: Scientific/Engineering :: Artificial Intelligence",
+]
+dependencies = [
+  "pydantic>=2.7",
+  "ortools>=9.10",
+  "jsonschema>=4.20",
+]
+
+[project.optional-dependencies]
+dev = [
+  "pytest>=8.0",
+  "pytest-cov>=6.0",
+  "ruff>=0.8",
+  "mypy>=1.13",
+  "types-jsonschema>=4.20",
+]
+
+[project.urls]
+Homepage = "https://github.com/KonkovDV/SynAPS-MobiRoute"
+Repository = "https://github.com/KonkovDV/SynAPS-MobiRoute"
+Documentation = "https://github.com/KonkovDV/SynAPS-MobiRoute/tree/master/docs"
+Issues = "https://github.com/KonkovDV/SynAPS-MobiRoute/issues"
+Changelog = "https://github.com/KonkovDV/SynAPS-MobiRoute/blob/master/CHANGELOG.md"
+Security = "https://github.com/KonkovDV/SynAPS-MobiRoute/blob/master/SECURITY.md"
+
+[project.scripts]
+mobiroute = "mobiroute.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+mobiroute = ["py.typed"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]
+addopts = "-q"
+
+[tool.ruff]
+target-version = "py312"
+line-length = 100
+src = ["src", "tests", "benchmark"]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "UP", "B", "SIM", "C4", "RUF"]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["T20"]
+"benchmark/**" = ["T20"]
+
+[tool.mypy]
+python_version = "3.12"
+strict = true
+packages = ["mobiroute"]
+mypy_path = "src"
+warn_unused_ignores = true
+
+[[tool.mypy.overrides]]
+module = ["ortools.*"]
+ignore_missing_imports = true
+disallow_untyped_calls = false
+
+[[tool.mypy.overrides]]
+module = ["mobiroute.solvers.cpsat"]
+disable_error_code = ["attr-defined", "type-arg"]
