@@ -359,13 +359,13 @@ def append_trip(k: ProblemKernel, trip: TripRequest, zmap: dict[str, int]) -> in
 
 
 def stash_kernel(result: PlanningResult, k: ProblemKernel) -> None:
-    key = result.plan_id or result.input_hash
+    key = result.event_id or result.plan_id or result.input_hash
     if key:
         _KERNELS[key] = k
 
 
 def kernel_for(result: PlanningResult) -> ProblemKernel | None:
-    key = result.plan_id or result.input_hash
+    key = result.event_id or result.plan_id or result.input_hash
     if not key:
         return None
     return _KERNELS.get(key)

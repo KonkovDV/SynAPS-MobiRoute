@@ -4,7 +4,8 @@
 
 Method: independent notary vs every solver path, then adversarial combinations a dispatcher would not enumerate (sort-order starvation, empty-vehicle idle, stretcher cabin, vehicle overtime with a longer driver shift, frozen explained-reject, disruption churn).
 
-Pytest after the residual close: see `tests/test_residuals.py` + `tests/test_alns.py`. Package `mypy` on `src/mobiroute`.
+Pytest after the residual close: see `tests/test_residuals.py`, `tests/test_alns.py`,
+`tests/test_redteam_combat.py`. Package `mypy` on `src/mobiroute`.
 
 ## P0 / P1 closed in this pass
 
@@ -38,6 +39,10 @@ Pytest after the residual close: see `tests/test_residuals.py` + `tests/test_aln
 | RT-26 | Online insert ignored remaining hour quota | Second same-day trip reused the raw cap | Subtract baseline ride minutes; `QUOTA_EXCEEDED` |
 | RT-27 | Notary allowed unexplained idle at VIA/dropoff | Solver never waits there without a window | `UNEXPLAINED_WAIT`; depot unavail wait aligned with simulator |
 | RT-28 | Seeded disruption left one `QUOTA:` notary on `stress_200` | Cancel left wait-return orphans; seed kept over-cap clocks | Cancel cascade; seed peel; final quota lockstep |
+| RT-29 | Online insert stashed the forked engine under the baseline `plan_id` | Two inserts from the same day plan reused a mutated fleet (`ASSIGNED_NOT_SERVED`) | Stash key is `event_id`; online gets a new `plan_id`; fleet re-synced before stash |
+| RT-30 | `recover_disruption(..., emergency_trip=)` skipped the replan and inserted into the stale baseline | Combined cancel+emergency left cancelled trips on routes | Structural disruptions replan first, then online insert |
+| RT-31 | `quota_caps` scanned every passenger for every request | Online insert paid ~0.3 s × 8; notary looked slow | Index remaining minutes by passenger id |
+| RT-32 | Incremental `check_plan(only_vehicles=)` could bless `verified_feasible` without walking other routes | Speed path after native eval | Finalize still enriches the changed vehicle only; notary is full-plan again |
 
 ## Measured after the fix (seed 42, this machine)
 

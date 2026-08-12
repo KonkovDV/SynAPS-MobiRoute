@@ -460,6 +460,7 @@ def online_insert(
     )
     new_result = baseline.model_copy(
         update={
+            "plan_id": "",
             "solution_type": "ONLINE_INSERTION",
             "served_requests": sorted([*baseline.served_requests, new_trip.id]),
             "route_plans": routes,
@@ -508,6 +509,12 @@ def online_insert(
         changed_vehicle_ids={vid},
     )
     new_result = _stamp_version(baseline, new_result, event_type="NEW_REQUEST", event_id=eid)
+    fleet_stops: dict[str, list[Stop]] = {v.id: [] for v in updated.vehicles}
+    fleet_drivers: dict[str, str | None] = {v.id: None for v in updated.vehicles}
+    for rp in new_result.route_plans:
+        fleet_stops[rp.vehicle_id] = service_stops(list(rp.ordered_stops))
+        fleet_drivers[rp.vehicle_id] = rp.driver_id
+    _sync_native_fleet(kernel, updated, fleet_stops, fleet_drivers)
     stash_kernel(new_result, kernel)
     diff = compute_diff(baseline, new_result, frozen | {t.id for t in updated.requests if t.frozen})
     return updated, new_result, diff
@@ -560,6 +567,28 @@ def recover_disruption(
         event_type = "APPOINTMENT_CHANGED"
         payload = appointment_trip_id
     if emergency_trip is not None:
+        structural = bool(
+            cancel_trip_id
+            or no_show_trip_id
+            or vehicle_unavailable_id
+            or driver_unavailable_id
+            or traffic_delay_minutes
+            or appointment_trip_id
+        )
+        if structural:
+            updated, mid, _diff = recover_disruption(
+                problem,
+                baseline,
+                cancel_trip_id=cancel_trip_id,
+                no_show_trip_id=no_show_trip_id,
+                vehicle_unavailable_id=vehicle_unavailable_id,
+                driver_unavailable_id=driver_unavailable_id,
+                traffic_delay_minutes=traffic_delay_minutes,
+                appointment_trip_id=appointment_trip_id,
+                appointment_start=appointment_start,
+                appointment_end=appointment_end,
+            )
+            return online_insert(updated, mid, emergency_trip, protect_frozen=True)
         return online_insert(updated, baseline, emergency_trip, protect_frozen=True)
 
     seed_stops: dict[str, list[Stop]] | None = None
