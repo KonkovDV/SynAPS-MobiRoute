@@ -605,6 +605,90 @@ def _strip_trip_ids(stops: list[Stop], drop: set[str]) -> list[Stop]:
     return [s for s in stops if s.trip_id not in drop]
 
 
+def _tail_trip_id(stops: list[Stop]) -> str | None:
+    """Trip occupying the end of the timeline (last dropoff, else last pickup)."""
+    last_pu: str | None = None
+    for s in service_stops(stops):
+        if s.stop_type == StopType.PICKUP and s.trip_id:
+            last_pu = s.trip_id
+    for s in reversed(service_stops(stops)):
+        if s.stop_type == StopType.DROPOFF and s.trip_id:
+            return s.trip_id
+    return last_pu
+
+
+def _pickup_order(stops: list[Stop]) -> list[str]:
+    order: list[str] = []
+    seen: set[str] = set()
+    for s in service_stops(stops):
+        if s.stop_type == StopType.PICKUP and s.trip_id and s.trip_id not in seen:
+            seen.add(s.trip_id)
+            order.append(s.trip_id)
+    return order
+
+
+def _child_trip_ids(trips_by_id: dict[str, TripRequest], root: str) -> set[str]:
+    found = {root}
+    changed = True
+    while changed:
+        changed = False
+        for t in trips_by_id.values():
+            if t.id in found:
+                continue
+            parent = t.same_vehicle_as or t.insert_immediately_after
+            if parent in found:
+                found.add(t.id)
+                changed = True
+    return found
+
+
+def _consider_scored(
+    part: list[tuple[int, int, int, int, int, int, int]],
+    *,
+    fleet_ids: list[str],
+    vehicle_driver: dict[str, str | None],
+    tentative: dict[str, str],
+    kernel: ProblemKernel,
+    new_idx: int,
+    merged: dict[str, TripRequest],
+    quota_cap: dict[str, int],
+    used_now: dict[str, int],
+    veh_used: dict[str, dict[str, int]],
+    alt_no: list[str],
+    picked_key: tuple[int, int, int],
+) -> tuple[
+    tuple[int, int, int, int, str, str, dict[str, int], int, int, int] | None,
+    bool,
+    tuple[int, int, int],
+]:
+    """First quota-feasible row that beats picked_key. Lex (dur, wait, fleet_i)."""
+    quota_blocked = False
+    for fleet_i, i, mid, j, dur, wait_s, _mx in sorted(part, key=lambda r: (r[4], r[5], r[0])):
+        if (dur, wait_s, fleet_i) >= picked_key:
+            break
+        vid = fleet_ids[fleet_i]
+        did = vehicle_driver[vid] or tentative.get(vid)
+        if not did:
+            alt_no.append(f"{vid}:NO_DRIVER")
+            continue
+        ride_pairs = trial_rides(kernel, fleet_i, i, mid, j, new_idx)
+        if ride_pairs is None:
+            continue
+        trial_used = _rides_by_pid(ride_pairs, kernel, merged)
+        if trial_exceeds_quota_rides(
+            trial_used,
+            quota_cap=quota_cap,
+            used_now=used_now,
+            previous_on_vehicle=veh_used.get(vid, {}),
+        ):
+            quota_blocked = True
+            continue
+        ride_t = next((mins for idx, mins in ride_pairs if idx == new_idx), 0)
+        picked = (fleet_i, i, mid, j, vid, did, trial_used, wait_s, dur, ride_t)
+        return picked, False, (dur, wait_s, fleet_i)
+    return None, quota_blocked, picked_key
+
+
 def _unserve_trips(
     served: list[str],
     rejected: list[RejectedTrip],
@@ -849,14 +933,28 @@ def _greedy_core(
             occupied_driver_ids=occ,
             preferred_id=vehicle_driver[v.id],
         )
+    peeled: dict[str, list[str]] = {v.id: [] for v in problem.vehicles}
     _sync_native_fleet(kernel, problem, route_stops, vehicle_driver)
     seed_evals = eval_fleet(kernel)
     for fi, v in enumerate(problem.vehicles):
         if not route_stops[v.id]:
             continue
+        original_order = _pickup_order(route_stops[v.id])
         row = seed_evals[fi] if fi < len(seed_evals) else None
         did = vehicle_driver[v.id]
-        while row is not None:
+        while True:
+            if row is None:
+                tail = _tail_trip_id(route_stops[v.id])
+                if not tail:
+                    break
+                drop = _child_trip_ids(trips_by_id, tail)
+                route_stops[v.id] = _strip_trip_ids(route_stops[v.id], drop)
+                if not service_stops(route_stops[v.id]):
+                    break
+                st, sk = kernel.stops_to_arrays(service_stops(route_stops[v.id]))
+                set_route(kernel, fi, st, sk)
+                row = eval_route(kernel, fi)
+                continue
             trial_used = _rides_by_pid(row[2], kernel, trips_by_id)
             over = {
                 pid
@@ -875,12 +973,15 @@ def _greedy_core(
             row = eval_route(kernel, fi)
         seed_plan = route_plan_from_eval(v, did, route_stops[v.id], kernel, row)
         if seed_plan is None or not seed_plan.passenger_assignments:
+            peeled[v.id] = list(original_order)
             route_stops[v.id] = []
             vehicle_driver[v.id] = None
             _clear_native_slot(kernel, fi, v.id)
             continue
         vehicle_driver[v.id] = seed_plan.driver_id
         route_stops[v.id] = list(seed_plan.ordered_stops)
+        kept = set(seed_plan.passenger_assignments)
+        peeled[v.id] = [tid for tid in original_order if tid not in kept]
         for tid in seed_plan.passenger_assignments:
             if tid not in served:
                 served.append(tid)
@@ -894,6 +995,64 @@ def _greedy_core(
 
     fleet_ids = [v.id for v in problem.vehicles]
     _sync_native_fleet(kernel, problem, route_stops, vehicle_driver)
+    native_driver: dict[int, str | None] = {
+        i: vehicle_driver[v.id] for i, v in enumerate(problem.vehicles)
+    }
+    for v in problem.vehicles:
+        fi = vid_index[v.id]
+        if not vehicle_driver[v.id] or not peeled[v.id]:
+            continue
+        onboard = {s.trip_id for s in route_stops[v.id] if s.trip_id}
+        for tid in peeled[v.id]:
+            if tid in served:
+                continue
+            trip = trips_by_id.get(tid)
+            if trip is None:
+                continue
+            parent = trip.same_vehicle_as or trip.insert_immediately_after
+            if parent and parent not in onboard:
+                continue
+            new_idx = kernel.id_to_idx.get(tid)
+            if new_idx is None:
+                continue
+            qleft = quota_left.get(trip.pseudonymous_passenger_id)
+            if qleft is not None and _direct_ride_minutes(problem, trip) > qleft:
+                continue
+            merged = {**trips_by_id, trip.id: trip}
+            cand, _, _ = _consider_scored(
+                score_stored(kernel, new_idx, [fi]),
+                fleet_ids=fleet_ids,
+                vehicle_driver=vehicle_driver,
+                tentative={},
+                kernel=kernel,
+                new_idx=new_idx,
+                merged=merged,
+                quota_cap=quota_cap,
+                used_now=used_now,
+                veh_used=veh_used,
+                alt_no=[],
+                picked_key=(10**9, 10**9, 10**9),
+            )
+            if cand is None:
+                continue
+            fleet_i, i, mid, j, best_vid, did, trial_used, _wait_s, _picked_dur, _ride_t = cand
+            pu, do = _pair_stops(trip)
+            via = _via_stop(trip)
+            commit_insert(kernel, fleet_i, i, mid, j, new_idx)
+            route_stops[best_vid] = _materialize_insert(
+                service_stops(route_stops[best_vid]), pu, via, do, i, mid, j
+            )
+            vehicle_driver[best_vid] = did
+            served.append(trip.id)
+            reasons[trip.id] = ReasonCode.ACCEPTED.value
+            onboard.add(trip.id)
+            for pid, mins in veh_used.get(best_vid, {}).items():
+                used_now[pid] = used_now.get(pid, 0) - mins
+            veh_used[best_vid] = trial_used
+            for pid, mins in veh_used[best_vid].items():
+                used_now[pid] = used_now.get(pid, 0) + mins
+                if pid in quota_cap:
+                    quota_left[pid] = quota_cap[pid] - used_now[pid]
 
     for trip in ordered:
         if trip.id in served:
@@ -962,42 +1121,34 @@ def _greedy_core(
                     alt_no.append(f"{v.id}:NO_DRIVER")
                     continue
                 tentative[v.id] = did0
+                if native_driver.get(fi) == did0:
+                    continue
                 vk = kernel.vehicles[v.id]
                 dk = kernel.drivers.get(did0)
                 veh, una = vehicle_payload(vk, dk)
                 set_vehicle(kernel, fi, veh, una)
-            scored = score_stored(kernel, new_idx)
-            scored.sort(key=lambda r: (r[4], r[5], r[0]))
+                native_driver[fi] = did0
             merged = {**trips_by_id, trip.id: trip}
             pu, do = _pair_stops(trip)
             via = _via_stop(trip)
-            quota_blocked = False
-            n_feas = 0
-            picked: tuple[int, int, int, int, str, str, dict[str, int], int, int] | None = None
-            for fleet_i, i, mid, j, _dur, wait_s, _mx in scored:
-                vid = fleet_ids[fleet_i]
-                if allowed_vids is not None and vid not in allowed_vids:
-                    continue
-                n_feas += 1
-                did = vehicle_driver[vid] or tentative.get(vid)
-                if not did:
-                    alt_no.append(f"{vid}:NO_DRIVER")
-                    continue
-                ride_pairs = trial_rides(kernel, fleet_i, i, mid, j, new_idx)
-                if ride_pairs is None:
-                    continue
-                trial_used = _rides_by_pid(ride_pairs, kernel, merged)
-                if trial_exceeds_quota_rides(
-                    trial_used,
-                    quota_cap=quota_cap,
-                    used_now=used_now,
-                    previous_on_vehicle=veh_used.get(vid, {}),
-                ):
-                    quota_blocked = True
-                    continue
-                ride_t = next((mins for idx, mins in ride_pairs if idx == new_idx), 0)
-                picked = (fleet_i, i, mid, j, vid, did, trial_used, wait_s, ride_t)
-                break
+            part = score_stored(kernel, new_idx)
+            if allowed_vids is not None:
+                part = [row for row in part if fleet_ids[row[0]] in allowed_vids]
+            n_feas = len(part)
+            picked, quota_blocked, _picked_key = _consider_scored(
+                part,
+                fleet_ids=fleet_ids,
+                vehicle_driver=vehicle_driver,
+                tentative=tentative,
+                kernel=kernel,
+                new_idx=new_idx,
+                merged=merged,
+                quota_cap=quota_cap,
+                used_now=used_now,
+                veh_used=veh_used,
+                alt_no=alt_no,
+                picked_key=(10**9, 10**9, 10**9),
+            )
             if picked is None:
                 code = (
                     ReasonCode.QUOTA_EXCEEDED.value
@@ -1017,7 +1168,7 @@ def _greedy_core(
                     )
                 )
                 continue
-            fleet_i, i, mid, j, best_vid, did, trial_used, wait_s, ride_t = picked
+            fleet_i, i, mid, j, best_vid, did, trial_used, wait_s, _picked_dur, ride_t = picked
             commit_insert(kernel, fleet_i, i, mid, j, new_idx)
             seq = _materialize_insert(service_stops(route_stops[best_vid]), pu, via, do, i, mid, j)
             route_stops[best_vid] = seq

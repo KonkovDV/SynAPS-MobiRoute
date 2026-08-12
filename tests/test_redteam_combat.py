@@ -459,3 +459,62 @@ def test_score_stored_is_deterministic_across_calls() -> None:
     a = sorted(score_stored(k, 0))
     b = sorted(score_stored(k, 0))
     assert a == b
+
+
+def test_traffic_peel_keeps_feasible_prefix() -> None:
+    p = problem(
+        [vehicle("v1")],
+        [driver("d1")],
+        [
+            trip(
+                "early",
+                "Z_NORTH",
+                "Z_CENTER",
+                earliest=60,
+                latest=200,
+                max_ride=120,
+                max_wait=80,
+            ),
+            trip(
+                "late",
+                "Z_SOUTH",
+                "Z_HOSP_A",
+                earliest=250,
+                latest=260,
+                max_ride=70,
+                max_wait=15,
+                appt_end=280,
+            ),
+        ],
+    )
+    base = solve_greedy(p)
+    if "early" not in base.served_requests:
+        pytest.skip("prefix trip was not served on the seed plan")
+    delayed, rec, _diff = recover_disruption(p, base, traffic_delay_minutes=8)
+    _assert_notary(delayed, rec)
+    assert "early" in rec.served_requests
+    assert rec.status != "OPTIMAL"
+
+
+def test_quota_blocked_near_vehicle_still_uses_second_vehicle() -> None:
+    p = problem(
+        [vehicle("v1"), vehicle("v2")],
+        [driver("d1"), driver("d2")],
+        [
+            trip("a", "Z_NORTH", "Z_SOUTH", earliest=60, latest=400, max_ride=400, quota=20),
+            trip("b", "Z_EAST", "Z_WEST", earliest=80, latest=400, max_ride=400),
+        ],
+    )
+    res = solve_greedy(p)
+    _assert_notary(p, res)
+    assert "b" in res.served_requests
+    if "a" in res.served_requests:
+        va = next(rp.vehicle_id for rp in res.route_plans if "a" in rp.passenger_assignments)
+        vb = next(rp.vehicle_id for rp in res.route_plans if "b" in rp.passenger_assignments)
+        ride_a = next(
+            rp.ride_times["a"] for rp in res.route_plans if "a" in rp.passenger_assignments
+        )
+        if ride_a > 20:
+            raise AssertionError("notary should have rejected over-quota A")
+        if va == vb:
+            assert ride_a <= 20

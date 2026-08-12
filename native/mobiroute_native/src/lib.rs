@@ -9,6 +9,7 @@
 //! ABI: trip stride 16; best_insert returns (i, mid, j, dur, wait, max_load); mid=-1 if no VIA.
 //! score_fleet returns (fleet_index, i, mid, j, dur, wait, max_load) per feasible vehicle.
 
+use std::cell::RefCell;
 use std::sync::Arc;
 
 use pyo3::exceptions::PyValueError;
@@ -23,6 +24,22 @@ const FLAG_STRETCHER: i32 = 8;
 const WT_NONE: i32 = 0;
 const CURB_WAIT: i32 = 5;
 const EARLY_DROPOFF_SLACK: i32 = 30;
+
+thread_local! {
+    static PICKUP_DEP: RefCell<Vec<i32>> = const { RefCell::new(Vec::new()) };
+}
+
+fn with_pickup_dep<R>(n_trips: usize, f: impl FnOnce(&mut [i32]) -> R) -> R {
+    PICKUP_DEP.with(|slot| {
+        let mut buf = slot.borrow_mut();
+        if buf.len() < n_trips {
+            buf.resize(n_trips, -1);
+        }
+        f(&mut buf[..n_trips])
+    })
+}
+
+const SEQ_SCORE: usize = 8;
 
 struct TripView {
     pu: i32,
@@ -678,18 +695,20 @@ fn eval_stored(
         &fv.veh,
         &fv.unavail,
     )?;
-    let mut pickup_dep = vec![-1i32; n_trips];
-    let mut trace = RouteTrace::default();
-    let (dur, wait, _mx) = simulate_inserted(
-        &w,
-        &fv.stop_trip,
-        &fv.stop_kind,
-        -1,
-        InsertMode::AsIs,
-        &mut pickup_dep,
-        Some(&mut trace),
-    )?;
-    Some((dur, wait, trace))
+    with_pickup_dep(n_trips, |pickup_dep| {
+        pickup_dep.fill(-1);
+        let mut trace = RouteTrace::default();
+        simulate_inserted(
+            &w,
+            &fv.stop_trip,
+            &fv.stop_kind,
+            -1,
+            InsertMode::AsIs,
+            pickup_dep,
+            Some(&mut trace),
+        )
+        .map(|(dur, wait, _mx)| (dur, wait, trace))
+    })
 }
 
 fn trial_insert_trace(
@@ -730,18 +749,20 @@ fn trial_insert_trace(
             j: j.max(0) as usize,
         }
     };
-    let mut pickup_dep = vec![-1i32; n_trips];
-    let mut trace = RouteTrace::default();
-    let (dur, wait, _mx) = simulate_inserted(
-        &w,
-        &fv.stop_trip,
-        &fv.stop_kind,
-        new_idx,
-        mode,
-        &mut pickup_dep,
-        Some(&mut trace),
-    )?;
-    Some((dur, wait, trace))
+    with_pickup_dep(n_trips, |pickup_dep| {
+        pickup_dep.fill(-1);
+        let mut trace = RouteTrace::default();
+        simulate_inserted(
+            &w,
+            &fv.stop_trip,
+            &fv.stop_kind,
+            new_idx,
+            mode,
+            pickup_dep,
+            Some(&mut trace),
+        )
+        .map(|(dur, wait, _mx)| (dur, wait, trace))
+    })
 }
 
 fn consider_best(
@@ -771,6 +792,7 @@ fn best_insert_inner(
     new_idx: i32,
     veh: &[i32],
     unavail: &[i32],
+    max_dur: i32,
     pickup_dep: &mut [i32],
 ) -> Option<(i32, i32, i32, i32, i32, i32)> {
     if table.len() % STRIDE != 0 || n_zones == 0 {
@@ -855,8 +877,15 @@ fn best_insert_inner(
     let has_via = nt.via >= 0;
     let mut best: Option<(i32, i32, i32, i32, i32, i32)> = None;
     let mut best_key: Option<(i32, i32, i32, i32, i32, i32)> = None;
-    let mut best_dur = i32::MAX;
+    let mut best_dur = max_dur;
     let mut best_wait = i32::MAX;
+    if max_dur < i32::MAX && m > 0 {
+        if let Some((dur, _, _)) = finish_return(&w, &prefixes[m].0) {
+            if dur > max_dur {
+                return None;
+            }
+        }
+    }
     if has_via {
         for i in 0..=m {
             load_prefix(stop_trip, new_idx, &prefixes[i].1, pickup_dep);
@@ -918,7 +947,7 @@ fn best_insert_inner(
                             None
                         };
                         restore_dep(&cap_j, pickup_dep);
-                        if let Some((dur, wait, mx)) = scored {
+                        if let Some((dur, wait, mx)) = scored.filter(|(dur, _, _)| *dur <= best_dur) {
                             let i32i = i as i32;
                             let mid32 = mid as i32;
                             let j32 = j as i32;
@@ -1012,7 +1041,7 @@ fn best_insert_inner(
                     None
                 };
                 restore_dep(&cap_j, pickup_dep);
-                if let Some((dur, wait, mx)) = scored {
+                if let Some((dur, wait, mx)) = scored.filter(|(dur, _, _)| *dur <= best_dur) {
                     let i32i = i as i32;
                     let j32 = j as i32;
                     consider_best(
@@ -1068,21 +1097,23 @@ fn score_fleet_inner(
     (0..n)
         .into_par_iter()
         .filter_map(|v| {
-            let mut pickup_dep = vec![-1i32; n_trips];
-            best_insert_inner(
-                travel,
-                n_zones,
-                table,
-                detour,
-                &detour_cap,
-                &stop_trips[v],
-                &stop_kinds[v],
-                new_idx,
-                &vehs[v],
-                &unavails[v],
-                &mut pickup_dep,
-            )
-            .map(|(i, mid, j, dur, wait, mx)| (v as i32, i, mid, j, dur, wait, mx))
+            with_pickup_dep(n_trips, |pickup_dep| {
+                best_insert_inner(
+                    travel,
+                    n_zones,
+                    table,
+                    detour,
+                    &detour_cap,
+                    &stop_trips[v],
+                    &stop_kinds[v],
+                    new_idx,
+                    &vehs[v],
+                    &unavails[v],
+                    i32::MAX,
+                    pickup_dep,
+                )
+                .map(|(i, mid, j, dur, wait, mx)| (v as i32, i, mid, j, dur, wait, mx))
+            })
         })
         .collect()
 }
@@ -1176,20 +1207,22 @@ impl InsertionEngine {
     ) -> Option<(i32, i32, i32, i32, i32, i32)> {
         py.allow_threads(|| {
             let n_trips = self.table.len() / STRIDE;
-            let mut pickup_dep = vec![-1i32; n_trips];
-            best_insert_inner(
-                &self.travel,
-                self.n_zones,
-                &self.table,
-                &self.detour,
-                &self.detour_cap,
-                &stop_trip,
-                &stop_kind,
-                new_idx,
-                &veh,
-                &unavail,
-                &mut pickup_dep,
-            )
+            with_pickup_dep(n_trips, |pickup_dep| {
+                best_insert_inner(
+                    &self.travel,
+                    self.n_zones,
+                    &self.table,
+                    &self.detour,
+                    &self.detour_cap,
+                    &stop_trip,
+                    &stop_kind,
+                    new_idx,
+                    &veh,
+                    &unavail,
+                    i32::MAX,
+                    pickup_dep,
+                )
+            })
         })
     }
 
@@ -1251,18 +1284,29 @@ impl InsertionEngine {
         Ok(())
     }
 
+    #[pyo3(signature = (new_idx, fleet_idx=None, max_dur=None))]
     fn score_stored(
         &self,
         py: Python<'_>,
         new_idx: i32,
+        fleet_idx: Option<Vec<i32>>,
+        max_dur: Option<i32>,
     ) -> Vec<(i32, i32, i32, i32, i32, i32, i32)> {
         py.allow_threads(|| {
             let n_trips = self.table.len() / STRIDE;
-            (0..self.fleet.len())
-                .into_par_iter()
-                .filter_map(|v| {
-                    let fv = &self.fleet[v];
-                    let mut pickup_dep = vec![-1i32; n_trips];
+            let n = self.fleet.len();
+            let cap = max_dur.unwrap_or(i32::MAX);
+            let indices: Vec<usize> = match fleet_idx {
+                Some(xs) => xs
+                    .into_iter()
+                    .filter_map(|i| if i >= 0 { Some(i as usize) } else { None })
+                    .filter(|i| *i < n)
+                    .collect(),
+                None => (0..n).collect(),
+            };
+            let score_one = |v: usize| {
+                let fv = &self.fleet[v];
+                with_pickup_dep(n_trips, |pickup_dep| {
                     best_insert_inner(
                         &self.travel,
                         self.n_zones,
@@ -1274,11 +1318,17 @@ impl InsertionEngine {
                         new_idx,
                         &fv.veh,
                         &fv.unavail,
-                        &mut pickup_dep,
+                        cap,
+                        pickup_dep,
                     )
                     .map(|(i, mid, j, dur, wait, mx)| (v as i32, i, mid, j, dur, wait, mx))
                 })
-                .collect()
+            };
+            if indices.len() <= SEQ_SCORE {
+                indices.into_iter().filter_map(score_one).collect()
+            } else {
+                indices.into_par_iter().filter_map(score_one).collect()
+            }
         })
     }
 
@@ -1478,20 +1528,22 @@ fn best_insert(
     py.allow_threads(|| {
         let n_trips = trip_table.len() / STRIDE;
         let detour_cap = compute_detour_caps(&travel, n_zones, &trip_table, &detour);
-        let mut pickup_dep = vec![-1i32; n_trips];
-        best_insert_inner(
-            &travel,
-            n_zones,
-            &trip_table,
-            &detour,
-            &detour_cap,
-            &stop_trip,
-            &stop_kind,
-            new_idx,
-            &veh,
-            &unavail,
-            &mut pickup_dep,
-        )
+        with_pickup_dep(n_trips, |pickup_dep| {
+            best_insert_inner(
+                &travel,
+                n_zones,
+                &trip_table,
+                &detour,
+                &detour_cap,
+                &stop_trip,
+                &stop_kind,
+                new_idx,
+                &veh,
+                &unavail,
+                i32::MAX,
+                pickup_dep,
+            )
+        })
     })
 }
 

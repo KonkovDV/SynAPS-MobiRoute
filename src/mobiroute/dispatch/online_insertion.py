@@ -315,9 +315,12 @@ def online_insert(
     fleet_ids = [v.id for v in updated.vehicles]
     alt_no: list[str] = []
     tentative: dict[str, str] = {}
+    scored_idx: list[int] = []
     for fi, v in enumerate(updated.vehicles):
         existing = baseline_by_v.get(v.id)
         if existing is not None and existing.driver_id:
+            if accessibility_compatible(v, new_trip) is None:
+                scored_idx.append(fi)
             continue
         if accessibility_compatible(v, new_trip) is not None:
             alt_no.append(f"{v.id}:NO_COMPATIBLE_VEHICLE")
@@ -336,8 +339,9 @@ def online_insert(
         dk = kernel.drivers.get(did0)
         veh, una = vehicle_payload(kernel.vehicles[v.id], dk)
         set_vehicle(kernel, fi, veh, una)
+        scored_idx.append(fi)
 
-    scored = score_stored(kernel, new_idx)
+    scored = score_stored(kernel, new_idx, scored_idx) if scored_idx else []
     scored.sort(key=lambda r: (r[4], r[5], r[0]))
     pu, do = _pair_stops(new_trip)
     via = _via_stop(new_trip)

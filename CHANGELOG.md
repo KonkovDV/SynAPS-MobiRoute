@@ -15,9 +15,9 @@
 - Harsh synthetic day `stress_200`: 200 vehicles / 3200 requests, mixed WAV/VIA/
   wait-return/quota/unavail/breakdowns, plus a disruption shake benchmark
   (`python benchmark/run_stress_day.py`). Not real MAST. Greedy never OPTIMAL.
-  On this machine, seed 42: day-ahead greedy about **4 s**; the same run with
+  On this machine, seed 42: day-ahead greedy about **4.0–4.1 s**; the same run with
   breakdowns, cancellations, traffic replan, and 8 urgent inserts about
-  **10–11 s**. Sample, not a SLA. Prefix-state insert walk, persistent native
+  **8.1 s** (was 10–11 s). Sample, not a SLA. Prefix-state insert walk, persistent native
   fleet, `eval_route` seed/emit, Arc copy-on-write fork, and O(1) passenger
   quota lookup. Greedy never OPTIMAL.
 - Red Team of the speed path: online stash no longer overwrites the baseline
@@ -32,6 +32,12 @@
 - Seeded disruption recovery: cancel/no-show cascade to wait-return children;
   greedy peels seed passengers who already exceed the day cap and locksteps
   quota before emit so the notary cannot see a leftover `QUOTA:`.
+  Traffic/+unavail seeds that fail `eval_route` peel the last dropoff and its
+  wait-return children, then try the peeled trips back onto the same vehicle
+  before the global insert loop. Wiping the bus was a near-full re-greedy.
+  `score_stored` can take a vehicle index list and a duration cap. Greedy never OPTIMAL.
+  GPU is the wrong tool for this kernel (13×13 zone matrix, sequential
+  branchy insert); see `docs/native-acceleration.md`.
 - Unknown vehicle depot is `ValueError` (not a travel-matrix `KeyError`).
   Online insert and beam report `insertion_backend` like greedy.
 - Versioned online plans (`plan_id`, `base_plan_id`, `event_type`) including appointment change.

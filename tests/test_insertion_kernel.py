@@ -198,6 +198,34 @@ def test_stored_fleet_matches_score_fleet() -> None:
     assert sorted(copied) == sorted(stored)
 
 
+def test_score_stored_subset_and_max_dur_keep_winner() -> None:
+    if not native_available():
+        pytest.skip("mobiroute_native not built")
+    p = generate_day("tiny", seed=42)
+    k = attach_native(ProblemKernel.from_problem(p))
+    stop_trips = [[] for _ in p.vehicles]
+    stop_kinds = [[] for _ in p.vehicles]
+    vehs: list[list[int]] = []
+    unavails: list[list[int]] = []
+    for v in p.vehicles:
+        vk = k.vehicles[v.id]
+        dk = k.drivers[p.drivers[0].id]
+        veh, una = vehicle_payload(vk, dk)
+        vehs.append(veh)
+        unavails.append(una)
+    set_fleet(k, stop_trips, stop_kinds, vehs, unavails)
+    full = score_stored(k, 0)
+    assert full
+    subset = score_stored(k, 0, list(range(min(2, len(p.vehicles)))))
+    by_idx = {row[0]: row for row in full}
+    for row in subset:
+        assert row == by_idx[row[0]]
+    best = min(full, key=lambda r: (r[4], r[5], r[0]))
+    capped = score_stored(k, 0, max_dur=best[4])
+    assert all(row[4] <= best[4] for row in capped)
+    assert any(row[0] == best[0] and row[4] == best[4] for row in capped)
+
+
 def test_eval_route_matches_pydantic_times() -> None:
     if not native_available():
         pytest.skip("mobiroute_native not built")

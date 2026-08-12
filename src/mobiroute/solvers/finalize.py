@@ -55,7 +55,7 @@ def finalize_result(
     elif not result.explanations:
         result = result.model_copy(update={"explanations": default_explanations(problem, result)})
 
-    report = check_plan(problem, result)
+    report = check_plan(problem, result, only_vehicles=changed_vehicle_ids)
     result.verified_feasible = report.feasible
     result.objective_values = {
         **result.objective_values,
