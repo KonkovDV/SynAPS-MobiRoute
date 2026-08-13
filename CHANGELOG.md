@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.2.1 — 2026-08-13
+
+- Rolling-horizon day-ahead composition (`solve_rolling_horizon`, CLI `--solver rhc`):
+  greedy pooling insertion per time window with seeded previous routes.
+  Heuristic only — never `OPTIMAL`. LBBD / Activated Benders remain PLANNED.
+- Research cards 6 and 10 filled from primary sources (TRC 169/104801; TCRP Synthesis 168).
+- README stress_200 pipeline sample aligned with the measured **8.1 s** band
+  (not a SLA). Not real MAST trips.
+
 ## 0.2.0 — 2026-08-12
 
 - Implementation audit of 0.1.1 (`docs/implementation-audit-2026-08-12.md`).

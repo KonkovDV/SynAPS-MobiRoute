@@ -50,8 +50,8 @@ See [`docs/native-acceleration.md`](docs/native-acceleration.md).
 Do not quote an unverified ×N speedup.
 
 Measured on this machine, synthetic `stress_200` (200 vehicles / 3200 requests,
-seed 42): overnight greedy about **5–6 s**; the same run including breakdowns,
-cancellations, traffic replan, and 8 urgent inserts about **13–15 s**.
+seed 42): day-ahead greedy about **4.0–4.1 s**; the same run including breakdowns,
+cancellations, traffic replan, and 8 urgent inserts about **8.1 s**.
 Sample, not a SLA. Not real MAST trips. Details:
 [`docs/native-acceleration.md`](docs/native-acceleration.md).
 
@@ -68,7 +68,8 @@ Sample, not a SLA. Not real MAST trips. Details:
 | Online insertion / disruption | insert into existing routes | No |
 | Incremental repair | named disruption replan | No |
 | ALNS | adaptive LNS on greedy; Shaw/worst/route | **Never** OPTIMAL |
-| LBBD / RHC | medium / rolling | **PLANNED** (stubs only) |
+| Rolling horizon | day-ahead windows over greedy insertion | **Never** OPTIMAL |
+| LBBD / Benders | medium decomposition | **PLANNED** (stub only) |
 
 ## Repository layout
 

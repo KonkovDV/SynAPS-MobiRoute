@@ -16,6 +16,7 @@ from mobiroute.solvers.beam import solve_beam
 from mobiroute.solvers.cpsat import solve_cpsat
 from mobiroute.solvers.greedy import solve_fifo, solve_greedy
 from mobiroute.solvers.nearest import solve_nearest
+from mobiroute.solvers.rolling_horizon import solve_rolling_horizon
 from mobiroute.validation.privacy import log_safe
 
 
@@ -32,7 +33,7 @@ def main(argv: list[str] | None = None) -> int:
     s.add_argument("--problem", type=Path, required=True)
     s.add_argument(
         "--solver",
-        choices=["fifo", "greedy", "nearest", "cpsat", "beam", "alns"],
+        choices=["fifo", "greedy", "nearest", "cpsat", "beam", "alns", "rhc"],
         default="greedy",
     )
     s.add_argument("--out-dir", type=Path, required=True)
@@ -78,6 +79,8 @@ def main(argv: list[str] | None = None) -> int:
             result = solve_beam(problem)
         elif args.solver == "alns":
             result = solve_alns(problem)
+        elif args.solver == "rhc":
+            result = solve_rolling_horizon(problem)
         else:
             result = solve_greedy(problem)
         args.out_dir.mkdir(parents=True, exist_ok=True)

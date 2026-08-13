@@ -6,4 +6,4 @@ from typing import Any, NoReturn
 
 
 def solve_benders(*_args: Any, **_kwargs: Any) -> NoReturn:
-    raise NotImplementedError("Benders decomposition is PLANNED for MobiRoute >0.1")
+    raise NotImplementedError("Activated / logic-based Benders is PLANNED")
