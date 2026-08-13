@@ -35,7 +35,7 @@ Accessible dynamic DARP / PDPTW: pairing, time windows, appointment window, capa
 
 ## Новизна (честно)
 
-Открытое **объяснимое** ядро с notary и reason codes на синтетике. Не заявлена новизна относительно Savannah CP 2026 или Activated Benders как «уже внедрённый метод». ALNS — адаптивный LNS (Shaw/worst/route/random + SA), не OPTIMAL. LBBD/RHC — PLANNED.
+Открытое **объяснимое** ядро с notary и reason codes на синтетике. Не заявлена новизна относительно Savannah CP 2026 или Activated Benders как «уже внедрённый метод». ALNS и RHC — эвристики, не OPTIMAL. LBBD — PLANNED.
 
 ## Конкуренты
 

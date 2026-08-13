@@ -63,7 +63,8 @@ SynAPS is **MO-FJSP-SDST-ARC** (jobs, machines, sequence-dependent setup). It do
 | CP-SAT `OPTIMAL` only if proven | ADR determinism | Tiny sequential CP-SAT ∧ notary | EXPERIMENTAL |
 | IncrementalRepair freeze neighbourhood | Disruption | `recover_disruption` + `frozen` | PARTIAL (full re-greedy) |
 | ALNS | Adaptive LNS: Shaw / worst / route / random, SA | `solvers/alns.py` (SynAPS pattern, DARP operators) | IMPLEMENTED (never OPTIMAL) |
-| LBBD / RHC | Implemented upstream | Stubs `NotImplementedError` | PLANNED |
+| RHC | Window + overlap + seeded routes | `solvers/rolling_horizon.py` | IMPLEMENTED (never OPTIMAL) |
+| LBBD | Implemented upstream | Stub `NotImplementedError` | PLANNED |
 | SDST changeover | Setup between ops on a lane | Boarding dwell + deadhead \(\tau\) | Analog only |
 | Aux resources | Tools/fixtures | Lift, WAV seat, trained driver | Analog only |
 | Compile DARP into FJSP | — | Forbidden | NOT_ENABLED |

@@ -14,12 +14,14 @@ from mobiroute.solvers.greedy import solve_greedy
 from mobiroute.validation.privacy import assert_no_pii_fields, log_safe, redact_problem_for_open
 
 
-def test_cli_generate_solve_exit_zero(tmp_path: Path) -> None:
+def test_cli_rhc_solve_exit_zero(tmp_path: Path) -> None:
     out = tmp_path / "p.json"
-    assert main(["generate", "--mode", "tiny", "--seed", "1", "--out", str(out)]) == 0
-    dest = tmp_path / "run"
-    assert main(["solve", "--problem", str(out), "--solver", "fifo", "--out-dir", str(dest)]) == 0
-    assert (dest / "result.json").exists()
+    assert main(["generate", "--mode", "tiny", "--seed", "2", "--out", str(out)]) == 0
+    dest = tmp_path / "rhc"
+    assert main(["solve", "--problem", str(out), "--solver", "rhc", "--out-dir", str(dest)]) == 0
+    data = json.loads((dest / "result.json").read_text(encoding="utf-8"))
+    assert data["solution_type"] == "RHC"
+    assert data["status"] != "OPTIMAL"
 
 
 def test_cli_unknown_mode_exit_two(tmp_path: Path) -> None:

@@ -1,4 +1,4 @@
-# Claims review — 2026-08-12 (v0.2.0)
+# Claims review — 2026-08-13 (v0.2.1)
 
 **Status sentence:** экспериментальный объяснимый оптимизационный контур доступного транспорта по требованию. Проверяется только на синтетических сценариях зон Москвы.
 
@@ -24,24 +24,24 @@
 | --- | --- |
 | Improved Moscow social taxi KPIs / «внедрено» / «улучшило социальное такси» | FORBIDDEN |
 | Deployed at Мосавтосантранс | FORBIDDEN |
-| GREEDY / NEAREST / FIFO / BEAM / online / disruption is OPTIMAL | FORBIDDEN |
+| GREEDY / NEAREST / FIFO / BEAM / RHC / ALNS / online / disruption is OPTIMAL | FORBIDDEN |
 | CP-SAT fallback is OPTIMAL | FORBIDDEN |
 | Tiny CP-SAT is optimal for the **pooling** DARP | FORBIDDEN |
 | Synthetic data = real Moscow trips or GPS | FORBIDDEN |
 | Fair because one metric moved | FORBIDDEN |
 | Certified 152-FZ / personal-data system | FORBIDDEN |
 | Compatible with live Moscow APIs | FORBIDDEN (no integration test) |
-| ALNS is OPTIMAL / LBBD / RHC implemented | FORBIDDEN (ALNS is a heuristic; LBBD/RHC PLANNED) |
+| ALNS or RHC is OPTIMAL / LBBD implemented | FORBIDDEN (heuristics; LBBD PLANNED) |
 | Unmeasured native ×N speedup | FORBIDDEN |
 | Customer validation / production dispatch | FORBIDDEN |
 | Mix with GridPlan, AeroBIM, SynAPS Energy in one Academy application | FORBIDDEN |
 
-## Evidence ladder (v0.2.0)
+## Evidence ladder (v0.2.1)
 
 | Layer | Evidence | Status |
 | --- | --- | --- |
-| algorithmic_capability | FIFO, nearest, greedy pooling insertion (Rust native scoring), beam, CPSAT-tiny sequential, ALNS destroy/repair, online insert, disruption | PARTIAL |
-| synthetic_benchmark | examples + pytest (126 tests) + `mobiroute demo` + `mobiroute ops-benchmark` | IMPLEMENTED |
+| algorithmic_capability | FIFO, nearest, greedy pooling insertion (Rust native scoring), beam, CPSAT-tiny sequential, ALNS, RHC windows, online insert, disruption | PARTIAL |
+| synthetic_benchmark | examples + pytest + `mobiroute demo` + `mobiroute ops-benchmark` | IMPLEMENTED |
 | open_data_benchmark | — | MISSING |
 | customer_evidence | — | MISSING |
 | production_evidence | — | MISSING |
@@ -59,4 +59,5 @@
 | Online insertion | PARTIAL (`P_k` versioning) | No |
 | Disruption recovery | PARTIAL (seeded greedy; unrelated routes kept) | No |
 | ALNS | IMPLEMENTED adaptive LNS (Shaw/worst/route/random + SA) | Never |
-| LBBD / RHC | PLANNED | — |
+| RHC | IMPLEMENTED windowed greedy composition | Never |
+| LBBD / Benders | PLANNED | — |

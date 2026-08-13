@@ -90,11 +90,15 @@ Statuses for transfer: transferable pattern vs data-locked.
 
 | Field | Content |
 | --- | --- |
-| Venue | *Transportation Research Part C*, 2024 |
-| Problem | Online DARP with demand prediction **and** prediction-failure risk; spatial correlation |
-| Transfer | ML only for travel/demand **priors**; hard constraints remain |
-| Do not transfer | Forecasts as facts; ML as assignment authority |
-| Method risk | Over-trusting forecasts → mandatory independent feasibility check |
+| Citation | Wu, Zou, Liu. *Transportation Research Part C* 169 (2024) 104801 |
+| DOI | [10.1016/j.trc.2024.104801](https://doi.org/10.1016/j.trc.2024.104801) |
+| Problem | Online DARP as MDP; request selection/cancellation; **prediction-failure risk** and spatial OD correlation |
+| Data | Computational study with predicted + actual demand mix (not Moscow) |
+| Constraints | Online scheduling; cancellations; correlated sparse OD demand |
+| Algorithm | Approximate dynamic programming + scenario approach; deep quantile regression; Gaussian copula; prediction-error correction |
+| Transfer | ML only for travel/demand **priors**; hard constraints and independent notary remain |
+| Do not transfer | Forecasts as facts; ADP policy as assignment authority; copula as a Moscow demand model |
+| Method risk | Over-trusting forecasts; value-function bias in rolling ADP |
 
 ### 7. Equity-aware Dial-a-Ride
 
@@ -108,24 +112,32 @@ Statuses for transfer: transferable pattern vs data-locked.
 
 | Field | Content |
 | --- | --- |
+| Status | Active family (chance-constrained TW, robust travel times) |
 | Transfer | Later stochastic time windows / travel-time robustness |
-| v0.1 | OUT OF SCOPE beyond deterministic buffers |
-| Method risk | Ambiguous “robust” claims without specified uncertainty set |
+| v0.2 | OUT OF SCOPE beyond deterministic buffers and occupancy lockstep |
+| Method risk | Ambiguous “robust” claims without a specified uncertainty set |
 
 ### 9. Dynamic insertion + rolling horizon
 
 | Field | Content |
 | --- | --- |
-| Analog | e.g. ATMOS 2021 rolling-horizon event graph (Gaul et al., OASIcs); SynAPS RHC patterns |
-| Transfer | Maps to MobiRoute online insertion now; RHC composition **PLANNED** |
-| Method risk | Plan churn vs service quality; event MILP scale |
+| Analog | Gaul et al. ATMOS / OASIcs rolling-horizon event graph; SynAPS RHC window+overlap |
+| Transfer | MobiRoute **RHC**: greedy insertion per time window with seeded previous routes; leftovers retry |
+| Do not transfer | Event-MILP optimality or SynAPS FJSP RHC coverage claims |
+| Method risk | Plan churn vs service quality; window size is a heuristic parameter |
 
 ### 10. Continuous Dynamic Optimization in ADA paratransit
 
 | Field | Content |
 | --- | --- |
-| Transfer | Continuous reopt under ADA-style constraints |
-| Method risk | US ADA ≠ Russian social-taxi rules; do not copy eligibility law |
+| Citation | Rodman & Blume. TCRP Synthesis 168, TRB / National Academies, 2023 |
+| URL | [NAP 26907](https://nap.nationalacademies.org/catalog/26907) |
+| Problem | Practice synthesis: vendor CDO re-optimizes ADA paratransit during the service day |
+| Data | Survey/interviews of 11 US agencies (March–June 2022) |
+| Metrics | Agencies that shared before/after data reported productivity and OTP changes — **not transferable as Moscow KPIs** |
+| Transfer | Event-driven replan + frozen pickup windows; human override remains |
+| Do not transfer | US ADA law, vendor CDO product, published % as MobiRoute effect |
+| Method risk | Self-reported agency metrics; vendor-specific CDO; ADA ≠ Russian social-taxi rules |
 
 ## Policy analogues (not Moscow law) — confirmed 2026-08-12
 
@@ -143,13 +155,13 @@ Statuses for transfer: transferable pattern vs data-locked.
 
 Ops encoding and measured numbers: [`docs/ops-cases-and-benchmark-2026-08-12.md`](../ops-cases-and-benchmark-2026-08-12.md).
 
-## Synthesis for MobiRoute portfolio (v0.2.0)
+## Synthesis for MobiRoute portfolio (v0.2.1)
 
 | Scale | Primary method | Status |
 | --- | --- | --- |
 | Tiny | Sequential CP-SAT; OPTIMAL only if OR-Tools OPTIMAL and notary | EXPERIMENTAL |
 | Medium | Greedy pooling insertion / beam; Benders **PLANNED** | PARTIAL |
-| Large | Greedy → beam → ALNS heuristic → RHC | PARTIAL (ALNS heuristic; RHC stub) |
+| Large | Greedy → beam → ALNS heuristic → RHC windows | PARTIAL (heuristics; LBBD stub) |
 | Online | Insert into existing routes; `plan_id` / `event_type`; frozen preservation | PARTIAL |
 
 ### Mapping: paper → MobiRoute (2026-08-12)
@@ -160,7 +172,7 @@ Ops encoding and measured numbers: [`docs/ops-cases-and-benchmark-2026-08-12.md`
 | Activated Benders 2026 | Stub `benders.py` | LBBD, stochastic 2nd stage | After tiny CP-SAT stable | Disruption distributions | Author instances ≠ Moscow | PLANNED only |
 | OR Spectrum 2026 dynamic insertion | Greedy/online PD insertion | Sampling, clustering, parallel reopt | Insertion speed-ups | No for algorithm; yes for SL | 2700-instance paper ≠ ours | Insertion exists; not their curves |
 | SmartTransit.AI | Kernel-only JSON contracts | Apps, CAD/AVL, cloud suite | Integration adapters | Agency ops | Demo city ≠ Moscow | Not a passenger app |
-| Continuous dynamic ADA paratransit | Event-driven replan + frozen | ADA legal engine, live AVL | Repair without full re-solve | Eligibility + AVL | ADA traces | Pattern only |
+| Dynamic insertion + RHC | Rolling-horizon greedy windows + online insert | Exact event MILP | Window size / overlap | Yes for KPI | Synthetic zones | Heuristic composition, never OPTIMAL |
 | Equity-aware DARP | Multi-metric fairness, Jain, P95, coverage | Proven equity, override disparity | Lex fairness after hard constraints | Group labels | Synthetic stress mode | Never “fair” from one metric |
 | Robust / chance-constrained DARP | Deterministic buffers | Uncertainty sets, CVaR | Later | Travel-time samples | — | OUT OF SCOPE v0.2 |
 | Dynamic ridepooling | PARTIAL load-based insertion | Shareability network | Detour-aware ALNS (heuristic exists) | Demand | pooled_rides mode | Not a ridepooling product |

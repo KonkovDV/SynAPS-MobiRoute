@@ -105,7 +105,7 @@ Separate repo `SynAPS-MobiRoute` with:
 | --- | --- |
 | SynAPS core readiness | IMPLEMENTED (scheduling kernel) |
 | MobiRoute domain readiness | EXPERIMENTAL (v0.1 prototype) |
-| DARP solver readiness | PARTIAL (FIFO/greedy/CPSAT-tiny; ALNS/LBBD/RHC PLANNED) |
+| DARP solver readiness | PARTIAL (FIFO/greedy/beam/ALNS/RHC/CPSAT-tiny; LBBD PLANNED) |
 | Integration readiness | MISSING |
 | Customer readiness | MISSING |
 | Production readiness | MISSING |

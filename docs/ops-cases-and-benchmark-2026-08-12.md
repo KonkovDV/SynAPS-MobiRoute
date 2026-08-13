@@ -174,5 +174,5 @@ Statuses: greedy rows are `HEURISTIC_FEASIBLE` or `PARTIAL`. Zero `OPTIMAL`.
 - Do not treat P95 wait as ADA on-time performance.
 - Do not treat `APPOINTMENT_CONFLICT` on the WAV script as “the city has no wheelchairs” — it means the remaining compatible vehicle cannot hit the window.
 - ALNS is adaptive LNS (`mobiroute solve --solver alns`): Shaw / worst / route / random destroy, greedy repair, SA on duration at equal served; never OPTIMAL.
-- LBBD / RHC remain PLANNED.
+- RHC is windowed greedy composition (`--solver rhc`); never OPTIMAL. LBBD remains PLANNED.
 - Fare, annual 80h ledger, registry, and 152-FZ are out of this kernel. Remaining minutes (`quota_minutes_remaining`) are in-kernel.
