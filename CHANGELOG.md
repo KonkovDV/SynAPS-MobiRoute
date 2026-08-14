@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased — 2026-08-14
+
+- Documented honestly: LBBD/Activated Benders remain **out of scope** (stub);
+  GPU insertion is **refused** (13×13 zones, branchy VIA/quota insert);
+  CI already builds `mobiroute_native` (`test` + `native-accelerator`).
+  `stress_200` 8.1 s → 2–3 s is **not** claimed this drop; day-ahead ~4 s
+  sequential lex insert is the remaining tail. Native/Python lockstep unchanged.
+
 ## 0.2.1 — 2026-08-13
 
 - Rolling-horizon day-ahead composition (`solve_rolling_horizon`, CLI `--solver rhc`):

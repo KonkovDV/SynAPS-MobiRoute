@@ -7,7 +7,13 @@
 - Optimality of greedy / beam / RHC / online insertion / disruption recovery
 - Tiny CP-SAT as optimum of the **pooling** DARP (it is sequential)
 - ALNS as OPTIMAL (adaptive LNS on greedy: Shaw / worst / route / random + SA)
-- LBBD / Activated Benders (stub remains)
+- LBBD / Activated Benders — **out of scope** for v0.2.x (stub remains
+  `NotImplementedError`; not a hidden solver)
+- GPU insertion — **refused**: 13×13 zone tables, sequential/branchy insert
+  with VIA/quota/unavail occupancy. The hot path stays CPU native. Do not
+  claim a CUDA/OpenCL DARP engine.
+- Third stop / hour quotas / live graph / ALNS OPTIMAL: `ops_via` and
+  `ops_quota` exist; ALNS is never OPTIMAL (RT-20 residual)
 - Stochastic travel times (deterministic buffers only)
 - Fairness as a single score
 - Personal-data certification / 152-FZ
