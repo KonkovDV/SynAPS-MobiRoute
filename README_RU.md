@@ -11,8 +11,16 @@
 Актуальная формулировка готовности и запрещённые заявления — в [`README.md`](README.md)
 и [`docs/limitations.md`](docs/limitations.md) / [`docs/claims-review-2026-08-12.md`](docs/claims-review-2026-08-12.md).
 
+| | |
+| --- | --- |
+| Version | **0.2.1** |
+| Ветка | `master` |
+| SynAPS pin | [`5168fc7`](https://github.com/KonkovDV/SynAPS/commit/5168fc71005653945097e1f07ada1ce9cbc02eec) |
+| Зрелость | ISO 16290 TRL 4 (синтетическая лаборатория). Не пилот оператора. |
+
 Базовый движок-паттерн: [SynAPS](https://github.com/KonkovDV/SynAPS)
-(commit `5168fc71005653945097e1f07ada1ce9cbc02eec`).
+(commit `5168fc71005653945097e1f07ada1ce9cbc02eec`). Lag относительно HEAD ядра
+допустим: это DARP-ядро со своим чекером, не COVER 50k.
 
 ## Быстрый старт
 
