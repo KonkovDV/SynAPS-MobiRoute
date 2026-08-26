@@ -15,7 +15,7 @@ Language: **EN** | [RU](README_RU.md)
 | --- | --- |
 | Version | **0.2.1** |
 | Default branch | `master` |
-| SynAPS pin | [`5168fc7`](https://github.com/KonkovDV/SynAPS/commit/5168fc71005653945097e1f07ada1ce9cbc02eec) (engineering reference / adapter; lag vs kernel HEAD is allowed under [ADR-0004](https://github.com/KonkovDV/SynAPS/blob/master/docs/adr/0004-domain-repo-standard.md)) |
+| SynAPS pin | [`5168fc7`](https://github.com/KonkovDV/SynAPS/commit/5168fc71005653945097e1f07ada1ce9cbc02eec) (engineering reference / adapter). Lag vs kernel HEAD is allowed **until 2026-09-09**; [KI-N12](https://github.com/KonkovDV/SynAPS/blob/master/KNOWN_ISSUES.md) then requires a pin bump that passes fail-closed coverage, calendar refuse, and claims-lint. Open-ended lag after that date is not allowed. |
 | Maturity | ISO 16290 TRL 4 (synthetic lab). Not an operator pilot. |
 | Rust | **Required** for greedy / beam / ALNS / online insertion (`mobiroute_native`). Python SoA is an oracle, not a solver backend. |
 | Status words | `heuristic_feasible` / `verified` / `optimal` only if CP-SAT proved OPTIMAL **and** the independent notary is empty |
