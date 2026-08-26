@@ -48,8 +48,8 @@ def solve_rolling_horizon(
     """Day-ahead RHC over greedy pooling insertion. Never OPTIMAL."""
     active = [t for t in problem.requests if t.booking_status.value not in {"CANCELLED", "NO_SHOW"}]
     if not active:
-        result = solve_greedy(problem)
-        return _stamp_rhc(result, window_minutes, overlap_minutes, windows=0)
+        empty = solve_greedy(problem)
+        return _stamp_rhc(empty, window_minutes, overlap_minutes, windows=0)
 
     t0 = min(t.earliest_pickup for t in active)
     t_last = max(t.earliest_pickup for t in active)
