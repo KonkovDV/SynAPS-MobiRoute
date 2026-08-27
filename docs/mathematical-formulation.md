@@ -36,7 +36,9 @@ v0 implements the **deterministic** core (stochastic travel as future extension)
 8–9. Passenger and wheelchair capacity along the route
 10–11. Wheelchair type / lift / ramp compatibility
 12. Companion seats
-13–14. Driver qualifications and shift
+13–14. Driver qualifications, shift, and optional rest/unavailable occupancy
+   (policy intervals on ``driver.unavailable_intervals``; not a labour-law
+   certificate)
 15. No double-booking of vehicle time
 16–17. Travel and boarding/alighting times
 18–19. Depot start / **return by** \(\min(T_v,T_d)\)

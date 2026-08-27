@@ -19,6 +19,9 @@
 - Personal-data certification / 152-FZ
 - Vehicle shortage resolution
 - Full passenger/driver mobile apps
+- Driver rest as labour-law certificate (ГОСТ 70314 / 580-ФЗ). The field is
+  policy occupancy windows, same algebra as vehicle shop-out. Multi-day
+  rostering is not modelled.
 
 Kernel note (SynAPS ADR-0005, pin `5168fc7`): `WorkCenter.calendar` is clipped
 only on greedy-family kernel configs; CP-SAT/ALNS/LBBD refuse a non-empty

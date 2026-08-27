@@ -16,6 +16,7 @@ HARD_CONSTRAINT_IDS = [
     "COMPANION_CAPACITY",
     "DRIVER_QUALIFICATION",
     "DRIVER_SHIFT",
+    "DRIVER_REST",
     "NO_VEHICLE_DOUBLE_BOOK",
     "TRAVEL_TIME",
     "BOARDING_ALIGHTING",
@@ -62,6 +63,17 @@ def occupancy_overlaps(
 ) -> bool:
     """True if [start, end) overlaps any unavailable interval."""
     return any(start < u1 and end > u0 for u0, u1 in intervals)
+
+
+def combine_unavail(
+    vehicle_intervals: list[tuple[int, int]] | tuple[tuple[int, int], ...],
+    driver_intervals: list[tuple[int, int]] | tuple[tuple[int, int], ...] = (),
+) -> tuple[tuple[int, int], ...]:
+    """Union of vehicle shop windows and driver rest/unavail (policy data)."""
+    merged = tuple((int(a), int(b)) for a, b in vehicle_intervals)
+    if not driver_intervals:
+        return merged
+    return merged + tuple((int(a), int(b)) for a, b in driver_intervals)
 
 
 def push_past_unavail(

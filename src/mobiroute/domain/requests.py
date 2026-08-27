@@ -70,6 +70,9 @@ class Driver(StrictModel):
     availability: bool = True
     # Empty → any vehicle_type at the same depot.
     qualified_vehicle_types: list[str] = Field(default_factory=list)
+    # Policy rest / lunch / shop-out windows. Same occupancy algebra as
+    # vehicle.unavailable_intervals. Not ГОСТ 70314 / 580-FZ certification.
+    unavailable_intervals: list[tuple[TimeMin, TimeMin]] = Field(default_factory=list)
 
 
 class DriverAssignment(StrictModel):

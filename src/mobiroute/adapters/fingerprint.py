@@ -82,6 +82,7 @@ def fingerprint_problem(problem: Any) -> str:
                     d.availability,
                     d.accessibility_training,
                     tuple(d.qualified_vehicle_types),
+                    list(d.unavailable_intervals),
                 )
                 for d in problem.drivers
             ],

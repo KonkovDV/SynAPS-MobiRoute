@@ -74,6 +74,7 @@ Ops greedy served counts for the original sixteen scripts are unchanged vs the e
 | Jain index on tiny served sets | `fair_by_single_metric` remains false |
 | Manual override does not retime the residual route | Status `MANUAL_REVIEW_REQUIRED`, notary false — intentional HITL |
 | Annual 80h / fare / registry | Billing CRM; kernel only sees remaining minutes |
+| Driver rest as ГОСТ 70314 / 580-FZ | Policy `unavailable_intervals` only; not a duty-time certificate; no multi-day roster |
 
 ## Pipeline (from / to)
 
