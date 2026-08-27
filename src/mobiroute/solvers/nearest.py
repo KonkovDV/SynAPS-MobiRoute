@@ -104,7 +104,7 @@ def _nearest_core(problem: DayProblem, ordered: list[TripRequest]) -> PlanningRe
         mobiroute_version=__version__,
         synaps_commit=SYNAPS_COMMIT,
         data_provenance=problem.data_provenance,
-        claim_level="synthetic_benchmark",
+        claim_level=problem.claim_level,
         event_type="DAY_AHEAD",
     )
     return finalize_result(problem, result)
