@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 
 from mobiroute.domain.constraints import (
+    combine_unavail,
     detour_limit,
     earliest_alight_time,
     occupancy_overlaps,
@@ -166,6 +167,9 @@ def check_route(
     prev_loc = vehicle.depot_id
     prev_dep = vehicle.shift_start
     driver = dmap.get(route.driver_id) if route.driver_id else None
+    veh_unavail = vehicle.unavailable_intervals
+    drv_unavail = driver.unavailable_intervals if driver is not None else ()
+    merged_unavail = combine_unavail(veh_unavail, drv_unavail)
 
     if route.driver_id:
         if driver is None:
@@ -187,7 +191,7 @@ def check_route(
             violations.append(f"MISSING_TIMES:{stop.id}")
             continue
         if load == 0 and prev_loc == vehicle.depot_id and stop.stop_type != StopType.DEPOT_START:
-            prev_dep = push_past_unavail(prev_dep, vehicle.unavailable_intervals)
+            prev_dep = push_past_unavail(prev_dep, merged_unavail)
         try:
             tt = problem.travel.travel(prev_loc, stop.location)
         except KeyError:
@@ -252,8 +256,10 @@ def check_route(
                     violations.append(f"NO_DRIVER:{tid}")
                 elif not driver.accessibility_training:
                     violations.append(f"DRIVER_QUAL:{tid}")
-            if occupancy_overlaps(prev_dep, dep, vehicle.unavailable_intervals):
+            if occupancy_overlaps(prev_dep, dep, veh_unavail):
                 violations.append(f"VEHICLE_UNAVAILABLE:{tid}")
+            elif occupancy_overlaps(prev_dep, dep, drv_unavail):
+                violations.append(f"DRIVER_REST:{tid}")
             if dep - arr < pickup_service_minutes(trip.boarding_duration):
                 violations.append(f"CURB_WAIT:{tid}")
             onboard.add(tid)
@@ -276,8 +282,10 @@ def check_route(
             seen_via.add(tid)
             if arr > expected:
                 violations.append(f"UNEXPLAINED_WAIT:{tid}")
-            if occupancy_overlaps(prev_dep, dep, vehicle.unavailable_intervals):
+            if occupancy_overlaps(prev_dep, dep, veh_unavail):
                 violations.append(f"VEHICLE_UNAVAILABLE:{tid}")
+            elif occupancy_overlaps(prev_dep, dep, drv_unavail):
+                violations.append(f"DRIVER_REST:{tid}")
         elif stop.stop_type == StopType.DROPOFF and stop.trip_id:
             tid = stop.trip_id
             trip = trips.get(tid)
@@ -331,8 +339,10 @@ def check_route(
                 floor = max(expected, early_do)
             if arr > floor:
                 violations.append(f"UNEXPLAINED_WAIT:{tid}")
-            if occupancy_overlaps(prev_dep, dep, vehicle.unavailable_intervals):
+            if occupancy_overlaps(prev_dep, dep, veh_unavail):
                 violations.append(f"VEHICLE_UNAVAILABLE:{tid}")
+            elif occupancy_overlaps(prev_dep, dep, drv_unavail):
+                violations.append(f"DRIVER_REST:{tid}")
             load -= seats
             wload -= _wheelchair_units(trip.wheelchair_requirement)
             if load < 0 or wload < 0:

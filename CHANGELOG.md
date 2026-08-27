@@ -2,6 +2,10 @@
 
 ## Unreleased — 2026-08-27
 
+- Driver ``unavailable_intervals`` use the same occupancy algebra as vehicle
+  shop windows (Python SoA, native payload union, notary ``DRIVER_REST``).
+  Policy data only — not ГОСТ 70314 / 580-FZ certification. Multi-day
+  rostering remains out of scope. LBBD stays a stub.
 - Cordeau (2006) ``a2-16`` loader + instance SHA-256 gate. Literature BKS
   294.25 (Ho et al. 2018) is cited, not claimed: integer travel, 5 min curb
   wait, Floyd-Warshall on rounded edges. Not aicenter NYC/Chicago dumps.

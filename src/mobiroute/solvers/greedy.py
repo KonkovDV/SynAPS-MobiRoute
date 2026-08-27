@@ -5,6 +5,7 @@ from __future__ import annotations
 from mobiroute import SYNAPS_COMMIT, __version__
 from mobiroute.adapters.fingerprint import fingerprint, fingerprint_problem
 from mobiroute.domain.constraints import (
+    combine_unavail,
     detour_limit,
     earliest_alight_time,
     occupancy_overlaps,
@@ -141,6 +142,10 @@ def simulate_stop_sequence(
     onboard: set[str] = set()
     dmap = {d.id: d for d in problem.drivers}
     driver = dmap.get(driver_id) if driver_id else None
+    unavail = combine_unavail(
+        vehicle.unavailable_intervals,
+        driver.unavailable_intervals if driver is not None else (),
+    )
     if driver is not None:
         tnow = max(tnow, driver.shift_start)
         loc_shift_end = min(vehicle.shift_end, driver.shift_end)
@@ -152,7 +157,7 @@ def simulate_stop_sequence(
             return None
         trip = trips_by_id[stop.trip_id]
         if load == 0 and loc == vehicle.depot_id:
-            tnow = push_past_unavail(tnow, vehicle.unavailable_intervals)
+            tnow = push_past_unavail(tnow, unavail)
         t_begin = tnow
         try:
             tt = problem.travel.travel(loc, stop.location)
@@ -201,7 +206,7 @@ def simulate_stop_sequence(
             leave = arrive + svc_via
             if leave > loc_shift_end:
                 return None
-            if occupancy_overlaps(t_begin, leave, vehicle.unavailable_intervals):
+            if occupancy_overlaps(t_begin, leave, unavail):
                 return None
             arr[stop.id] = arrive
             dep[stop.id] = leave
@@ -245,7 +250,7 @@ def simulate_stop_sequence(
             leave = arrive + stop.service_duration
         if leave > loc_shift_end:
             return None
-        if occupancy_overlaps(t_begin, leave, vehicle.unavailable_intervals):
+        if occupancy_overlaps(t_begin, leave, unavail):
             return None
         arr[stop.id] = arrive
         dep[stop.id] = leave
@@ -260,7 +265,7 @@ def simulate_stop_sequence(
         tnow += problem.travel.travel(loc, vehicle.depot_id)
     except KeyError:
         return None
-    if occupancy_overlaps(t_ret, tnow, vehicle.unavailable_intervals):
+    if occupancy_overlaps(t_ret, tnow, unavail):
         return None
     if tnow > loc_shift_end:
         return None
