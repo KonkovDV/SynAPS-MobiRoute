@@ -335,7 +335,7 @@ def solve_cpsat(problem: DayProblem, time_limit_s: float = 10.0) -> PlanningResu
         mobiroute_version=__version__,
         synaps_commit=SYNAPS_COMMIT,
         data_provenance=problem.data_provenance,
-        claim_level="synthetic_benchmark",
+        claim_level=problem.claim_level,
         event_type="DAY_AHEAD",
     )
     return finalize_result(
