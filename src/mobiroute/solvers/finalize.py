@@ -82,6 +82,8 @@ def finalize_result(
     else:
         status = SolutionStatus.HEURISTIC_FEASIBLE.value
     result.status = status
+    result.claim_level = problem.claim_level
+    result.data_provenance = problem.data_provenance
     if not result.plan_id:
         result.plan_id = _plan_id(result)
     result.fairness_metrics = compute_fairness(problem, result)
