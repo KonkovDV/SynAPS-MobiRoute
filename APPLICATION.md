@@ -1,7 +1,7 @@
 # Заявка: SynAPS-MobiRoute
 
 Репозиторий: https://github.com/KonkovDV/SynAPS-MobiRoute
-Версия пакета: **0.2.1**. Ветка: `master`.
+Версия пакета: **0.2.1**. Ветка: `main`.
 SynAPS pin: [`5168fc71005653945097e1f07ada1ce9cbc02eec`](https://github.com/KonkovDV/SynAPS/commit/5168fc71005653945097e1f07ada1ce9cbc02eec).
 Пин отстаёт от HEAD ядра до **2026-09-09** (KI-N12); бессрочный lag после этой даты не допускается.
 

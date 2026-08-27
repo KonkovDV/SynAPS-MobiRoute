@@ -2,6 +2,8 @@
 
 ## Unreleased — 2026-08-27
 
+- GitHub default branch is ``main`` (CI push/PR triggers). Pin remains a
+  full SHA; this repo does not float on the kernel default branch.
 - Driver ``unavailable_intervals`` use the same occupancy algebra as vehicle
   shop windows (Python SoA, native payload union, notary ``DRIVER_REST``).
   Policy data only — not ГОСТ 70314 / 580-FZ certification. Multi-day
