@@ -200,7 +200,7 @@ def solve_beam(problem: DayProblem, beam_width: int = 3) -> PlanningResult:
         mobiroute_version=__version__,
         synaps_commit=SYNAPS_COMMIT,
         data_provenance=problem.data_provenance,
-        claim_level="synthetic_benchmark",
+        claim_level=problem.claim_level,
         event_type="DAY_AHEAD",
     )
     return finalize_result(problem, result)
