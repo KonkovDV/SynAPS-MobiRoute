@@ -45,6 +45,7 @@ def driver(
     types: list[str] | None = None,
     shift_start: int = 0,
     shift_end: int = 12 * 60,
+    unavail: list[tuple[int, int]] | None = None,
 ) -> Driver:
     return Driver(
         id=did,
@@ -55,6 +56,7 @@ def driver(
         accessibility_training=trained,
         availability=available,
         qualified_vehicle_types=types or ["car", "minibus"],
+        unavailable_intervals=unavail or [],
     )
 
 

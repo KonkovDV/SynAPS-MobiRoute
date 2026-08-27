@@ -12,6 +12,7 @@ from typing import TypedDict
 from mobiroute.domain.constraints import (
     CURB_WAIT_MINUTES,
     EARLY_DROPOFF_SLACK,
+    combine_unavail,
     detour_limit,
     occupancy_overlaps,
     push_past_unavail,
@@ -81,6 +82,7 @@ class DriverKernel:
     shift_start: int
     shift_end: int
     assist: bool
+    unavail: tuple[tuple[int, int], ...] = ()
 
 
 @dataclass(slots=True)
@@ -194,6 +196,7 @@ class ProblemKernel:
                 shift_start=d.shift_start,
                 shift_end=d.shift_end,
                 assist=d.accessibility_training,
+                unavail=tuple((int(a), int(b)) for a, b in d.unavailable_intervals),
             )
         return cls(
             n_zones=n,
@@ -377,7 +380,7 @@ def simulate_score(
     cap_p = vk.cap_p
     cap_w = vk.cap_w
     depot = vk.depot
-    unavail = vk.unavail
+    unavail = combine_unavail(vk.unavail, dk.unavail if dk is not None else ())
     assist_ok = dk is not None and dk.assist
     for s in range(nstop):
         idx = stop_trip[s]
@@ -611,7 +614,7 @@ def packed_trip_table(k: ProblemKernel) -> list[int]:
 
 def vehicle_payload(vk: VehicleKernel, dk: DriverKernel | None) -> tuple[list[int], list[int]]:
     unavail: list[int] = []
-    for a, b in vk.unavail:
+    for a, b in combine_unavail(vk.unavail, dk.unavail if dk is not None else ()):
         unavail.extend((a, b))
     veh = [
         vk.depot,

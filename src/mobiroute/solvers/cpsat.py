@@ -192,6 +192,12 @@ def solve_cpsat(problem: DayProblem, time_limit_s: float = 10.0) -> PlanningResu
                     + travel.travel(t.dropoff_zone, v.depot_id)
                     <= d.shift_end
                 ).OnlyEnforceIf(both)
+                for ui, (u0, u1) in enumerate(d.unavailable_intervals):
+                    before = model.NewBoolVar(f"dr_{t.id[:6]}_{d.id[:6]}_{v.id[:6]}_{ui}")
+                    model.Add(drop_arr[(t.id, v.id)] + t.alighting_duration <= u0).OnlyEnforceIf(
+                        [both, before]
+                    )
+                    model.Add(pickup_arr[(t.id, v.id)] >= u1).OnlyEnforceIf([both, before.Not()])
 
     served_vars = []
     for t in trips:

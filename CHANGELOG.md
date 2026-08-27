@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased — 2026-08-27
+
+- Driver ``unavailable_intervals`` use the same occupancy algebra as vehicle
+  shop windows (Python SoA, native payload union, notary ``DRIVER_REST``).
+  Policy data only — not ГОСТ 70314 / 580-FZ certification. Multi-day
+  rostering remains out of scope. LBBD stays a stub.
+
 ## Unreleased — 2026-08-14
 
 - Documented honestly: LBBD/Activated Benders remain **out of scope** (stub);

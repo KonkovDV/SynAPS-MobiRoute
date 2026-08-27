@@ -35,6 +35,7 @@
 | Unmeasured native ×N speedup | FORBIDDEN |
 | Customer validation / production dispatch | FORBIDDEN |
 | Mix with GridPlan, AeroBIM, SynAPS Energy in one Academy application | FORBIDDEN |
+| Certified ГОСТ 70314 / 580-FZ driver hours via `unavailable_intervals` | FORBIDDEN |
 
 ## Evidence ladder (v0.2.1)
 
