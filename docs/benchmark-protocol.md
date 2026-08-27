@@ -13,6 +13,13 @@ SSOT write-up and measured seed-42 table:
 Ops results are `synthetic_benchmark` only. Greedy/FIFO never `OPTIMAL`.
 Never label ops scripts as real Moscow trips.
 
+Open academic DARP: `benchmark/instances/cordeau/a2-16.txt` (Cordeau 2006).
+Literature BKS 294.25 is **not** a MobiRoute measured cost.
+Loader: `mobiroute.adapters.cordeau`. Hash-gate:
+`tests/test_cordeau_a2_16.py`. aicenter/Ridesharing_DARP_instances is not
+vendored in this drop.
+
+
 `stress_200` wall-clock (this machine, seed 42): overnight greedy about 5–6 s;
 full pipeline (day-ahead + batch disruption + traffic + 8 online inserts)
 about 13–15 s. SSOT: [`docs/native-acceleration.md`](native-acceleration.md).
