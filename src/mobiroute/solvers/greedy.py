@@ -1429,7 +1429,7 @@ def _greedy_core(
         mobiroute_version=__version__,
         synaps_commit=SYNAPS_COMMIT,
         data_provenance=problem.data_provenance,
-        claim_level="synthetic_benchmark",
+        claim_level=problem.claim_level,
         event_type="DAY_AHEAD",
     )
     result = finalize_result(problem, result, explanations=explanations)

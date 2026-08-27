@@ -45,6 +45,29 @@ def test_a2_16_literature_bks_is_not_claimed_as_this_kernel() -> None:
     assert problem.travel.travel("depot", "n1") != CORDEAU_A2_16_BKS
 
 
+def test_finalize_keeps_open_data_claim_level() -> None:
+    from mobiroute.domain.requests import PlanningResult
+    from mobiroute.solvers.finalize import finalize_result
+
+    problem = load_cordeau_a2_16(_INSTANCE)
+    result = PlanningResult(
+        status="HEURISTIC_FEASIBLE",
+        solution_type="ADVERSARIAL",
+        verified_feasible=False,
+        served_requests=[],
+        rejected_requests=[],
+        route_plans=[],
+        input_hash="x",
+        config_hash="y",
+        mobiroute_version="0",
+        synaps_commit="0",
+        claim_level="synthetic_benchmark",
+    )
+    out = finalize_result(problem, result)
+    assert out.claim_level == "open_data_benchmark"
+    assert out.status != "OPTIMAL"
+
+
 def test_a2_16_greedy_runs_when_native_present() -> None:
     if not acceleration_status().get("native_available"):
         pytest.skip("mobiroute_native not built")
