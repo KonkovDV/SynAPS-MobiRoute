@@ -86,6 +86,25 @@ jobs:
       - name: Mypy
         run: mypy
 
+  synaps-pin:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: pyproject.toml
+      - name: Install MobiRoute and pinned SynAPS
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -e ".[dev]"
+          python -m pip install "synaps @ git+https://github.com/KonkovDV/SynAPS.git@54ebf9f32bc871cc27283331d7536c1068c7e606"
+      - name: ADR-0004 pin regression
+        run: pytest -q tests/test_synaps_pin_regression.py
+
   native-accelerator:
     runs-on: ubuntu-latest
     steps:
