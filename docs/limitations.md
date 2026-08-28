@@ -23,7 +23,7 @@
   policy occupancy windows, same algebra as vehicle shop-out. Multi-day
   rostering is not modelled.
 
-Kernel note (SynAPS ADR-0005, pin `5168fc7`): `WorkCenter.calendar` is clipped
+Kernel note (SynAPS ADR-0005, pin `54ebf9f`): `WorkCenter.calendar` is clipped
 only on greedy-family kernel configs; CP-SAT/ALNS/LBBD refuse a non-empty
 calendar. The kernel night-window analog covered 0.75–0.88 of ops — that is
 not a MobiRoute DARP KPI. Night/emergency vehicle unavailability in this

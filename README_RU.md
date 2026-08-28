@@ -15,14 +15,13 @@
 | --- | --- |
 | Version | **0.2.1** |
 | Ветка | `main` |
-| SynAPS pin | [`5168fc7`](https://github.com/KonkovDV/SynAPS/commit/5168fc71005653945097e1f07ada1ce9cbc02eec) |
+| SynAPS pin | [`54ebf9f`](https://github.com/KonkovDV/SynAPS/commit/54ebf9f32bc871cc27283331d7536c1068c7e606) |
 | Зрелость | ISO 16290 TRL 4 (синтетическая лаборатория). Не пилот оператора. |
 
 Базовый движок-паттерн: [SynAPS](https://github.com/KonkovDV/SynAPS)
-(commit `5168fc71005653945097e1f07ada1ce9cbc02eec`). Lag относительно HEAD ядра
-допустим **до 2026-09-09**; дальше действует KI-N12 ядра (пин обязан пройти
-fail-closed покрытие, отказ календаря и claims-lint). Бессрочный lag после
-этой даты не допускается.
+(commit `54ebf9f32bc871cc27283331d7536c1068c7e606`). Пин поднят по KI-N12 /
+ADR-0004 (fail-closed покрытие, отказ календаря, claims-lint ядра). Бессрочный
+lag после 2026-09-09 по-прежнему не допускается.
 
 ## Быстрый старт
 

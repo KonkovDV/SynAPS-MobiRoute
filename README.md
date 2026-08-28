@@ -15,7 +15,7 @@ Language: **EN** | [RU](README_RU.md)
 | --- | --- |
 | Version | **0.2.1** |
 | Default branch | `main` |
-| SynAPS pin | [`5168fc7`](https://github.com/KonkovDV/SynAPS/commit/5168fc71005653945097e1f07ada1ce9cbc02eec) (engineering reference / adapter). Lag vs kernel HEAD is allowed **until 2026-09-09**; [KI-N12](https://github.com/KonkovDV/SynAPS/blob/main/KNOWN_ISSUES.md) then requires a pin bump that passes fail-closed coverage, calendar refuse, and claims-lint. Open-ended lag after that date is not allowed. |
+| SynAPS pin | [`54ebf9f`](https://github.com/KonkovDV/SynAPS/commit/54ebf9f32bc871cc27283331d7536c1068c7e606) (engineering reference / adapter). Pin bump [KI-N12](https://github.com/KonkovDV/SynAPS/blob/main/KNOWN_ISSUES.md) / ADR-0004: fail-closed coverage, calendar refuse, kernel claims-lint. |
 | Maturity | ISO 16290 TRL 4 (synthetic lab). Not an operator pilot. |
 | Rust | **Required** for greedy / beam / ALNS / online insertion (`mobiroute_native`). Python SoA is an oracle, not a solver backend. |
 | Status words | `heuristic_feasible` / `verified` / `optimal` only if CP-SAT proved OPTIMAL **and** the independent notary is empty |
@@ -28,7 +28,7 @@ Language: **EN** | [RU](README_RU.md)
 are reused; the DARP domain is new and validated on **synthetic** Moscow-zone
 instances only. No customer operational validation yet.
 
-Pinned SynAPS reference commit: [`5168fc7`](https://github.com/KonkovDV/SynAPS/commit/5168fc71005653945097e1f07ada1ce9cbc02eec)
+Pinned SynAPS reference commit: [`54ebf9f`](https://github.com/KonkovDV/SynAPS/commit/54ebf9f32bc871cc27283331d7536c1068c7e606)
 ([upstream SynAPS](https://github.com/KonkovDV/SynAPS)). Kernel HEAD may be newer;
 this repo does **not** float on the kernel default branch. See `SYNAPS_COMMIT` in `src/mobiroute/__init__.py`.
 
