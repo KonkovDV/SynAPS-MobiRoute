@@ -1,9 +1,9 @@
 # Заявка: SynAPS-MobiRoute
 
 Репозиторий: https://github.com/KonkovDV/SynAPS-MobiRoute
-Версия пакета: **0.2.1**. Ветка: `main`.
-SynAPS pin: [`54ebf9f32bc871cc27283331d7536c1068c7e606`](https://github.com/KonkovDV/SynAPS/commit/54ebf9f32bc871cc27283331d7536c1068c7e606).
-Пин поднят по KI-N12 / ADR-0004 (fail-closed, calendar refuse, claims-lint). Бессрочный lag после 2026-09-09 не допускается.
+Версия пакета: **0.2.2**. Ветка: `main`.
+SynAPS pin: [`6178c93b705ff58be21fa74a98651883a2da1169`](https://github.com/KonkovDV/SynAPS/commit/6178c93b705ff58be21fa74a98651883a2da1169).
+Пин поднят по ADR-0004 (fail-closed, calendar encode, claims-lint). KI-N12 остаётся закрытым. Бессрочный lag после 2026-09-09 не допускается.
 
 Полный текст заявки в Академию инноваторов (поток, сроки, формулировка
 разрешённого claim, TAM/SAM/SOM без выдуманной выручки):
