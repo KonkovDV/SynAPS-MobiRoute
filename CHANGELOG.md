@@ -1,13 +1,16 @@
 # Changelog
 
-## Unreleased — 2026-08-27
+## Unreleased
+
+## 0.2.2 — 2026-08-30
 
 - SynAPS pin bumped to
-  [`54ebf9f`](https://github.com/KonkovDV/SynAPS/commit/54ebf9f32bc871cc27283331d7536c1068c7e606)
-  (KI-N12 / ADR-0004). Regression: fail-closed coverage, calendar refuse,
-  kernel claims-lint. DARP search is still this repo, not kernel COVER.
+  [`6178c93`](https://github.com/KonkovDV/SynAPS/commit/6178c93b705ff58be21fa74a98651883a2da1169)
+  (ADR-0004). Regression: fail-closed coverage, calendar encode, kernel
+  claims-lint. DARP search is still this repo, not kernel COVER. KI-N12
+  stays closed. Not a courtesy float on the kernel default branch.
 - GitHub default branch is ``main`` (CI push/PR triggers). Pin remains a
-  full SHA; this repo does not float on the kernel default branch.
+  full SHA.
 - Driver ``unavailable_intervals`` use the same occupancy algebra as vehicle
   shop windows (Python SoA, native payload union, notary ``DRIVER_REST``).
   Policy data only — not ГОСТ 70314 / 580-FZ certification. Multi-day
