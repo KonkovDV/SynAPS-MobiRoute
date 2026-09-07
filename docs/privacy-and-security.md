@@ -12,13 +12,19 @@
 
 Identity and trip payloads are separate fields (`pseudonymous_passenger_id` vs `trip.id`).
 Coordinates are omitted in open synthetic mode (`redact_problem_for_open`).
+A provenance label is not proof of anonymization; pseudonymous IDs may remain personal data.
 
 ## Rules
 
 - Pseudonymous passenger id ≠ trip id
 - No FIO, phones, diagnoses, card numbers, real addresses in git
-- Coordinates only in protected mode; stripped by `redact_problem_for_open`
-- No PII in logs (`log_safe`)
+- **IMPLEMENTED:** `redact_problem_for_open` / `redact_trip_for_open` accept only synthetic
+  input, rejecting non-synthetic or mixed problem/trip/passenger provenance and restricted
+  passenger privacy classes with `ValueError`. Coordinates are stripped without changing provenance.
+- These helpers prepare synthetic fixtures; they do not anonymize customer or medical data.
+  Callers remain responsible for truthful labels and safe contents, including free-text fields.
+- Do not put PII in logs. `log_safe` masks common email/phone patterns only; it is not a
+  general PII detector. `assert_no_pii_fields` checks nested field names, not their contents.
 - Retention / access audit: operator responsibility for CUSTOMER_PRIVATE and MEDICAL_SENSITIVE
 - Encryption at rest: operator contour, not claimed as a MobiRoute certification
 
