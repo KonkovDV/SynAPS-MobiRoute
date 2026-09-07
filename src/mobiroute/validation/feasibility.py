@@ -185,11 +185,15 @@ def check_route(
             violations.append(f"DRIVER_VEHICLE_TYPE:{route.driver_id}")
 
     for stop in route.ordered_stops:
+        if driver is None and stop.stop_type not in {StopType.DEPOT_START, StopType.DEPOT_END}:
+            violations.append(f"NO_DRIVER:{route.vehicle_id}")
         arr = route.arrival_times.get(stop.id)
         dep = route.departure_times.get(stop.id)
         if arr is None or dep is None:
             violations.append(f"MISSING_TIMES:{stop.id}")
             continue
+        if dep < arr:
+            violations.append(f"DEPARTURE_BEFORE_ARRIVAL:{stop.id}")
         if load == 0 and prev_loc == vehicle.depot_id and stop.stop_type != StopType.DEPOT_START:
             prev_dep = push_past_unavail(prev_dep, merged_unavail)
         try:
@@ -210,6 +214,10 @@ def check_route(
                 violations.append(f"DEPOT_END:{route.vehicle_id}")
             if arr > vehicle.shift_end:
                 violations.append(f"VEHICLE_SHIFT_END:{route.vehicle_id}")
+            if occupancy_overlaps(prev_dep, arr, veh_unavail):
+                violations.append(f"VEHICLE_UNAVAILABLE:{route.vehicle_id}")
+            if occupancy_overlaps(prev_dep, arr, drv_unavail):
+                violations.append(f"DRIVER_REST:{route.driver_id}")
         elif stop.stop_type == StopType.PICKUP and stop.trip_id:
             tid = stop.trip_id
             trip = trips.get(tid)
@@ -218,6 +226,10 @@ def check_route(
                 prev_loc = stop.location
                 prev_dep = dep
                 continue
+            if stop.location != trip.pickup_zone:
+                violations.append(f"PICKUP_LOCATION:{tid}")
+            if arr < trip.earliest_pickup:
+                violations.append(f"EARLY_PICKUP:{tid}")
             if tid in seen_pickup:
                 violations.append(f"DUPLICATE_PICKUP:{tid}")
             seen_pickup.add(tid)
@@ -271,6 +283,8 @@ def check_route(
                 prev_loc = stop.location
                 prev_dep = dep
                 continue
+            if dep - arr < trip.via_service_duration:
+                violations.append(f"VIA_SERVICE:{tid}")
             if tid not in seen_pickup or tid not in onboard:
                 violations.append(f"VIA_BEFORE_PICKUP:{tid}")
             if tid in seen_drop:
@@ -294,6 +308,10 @@ def check_route(
                 prev_loc = stop.location
                 prev_dep = dep
                 continue
+            if stop.location != trip.dropoff_zone:
+                violations.append(f"DROPOFF_LOCATION:{tid}")
+            if dep - arr < trip.alighting_duration:
+                violations.append(f"ALIGHTING_SERVICE:{tid}")
             if tid not in seen_pickup:
                 violations.append(f"DROPOFF_BEFORE_PICKUP:{tid}")
             if tid not in onboard:
@@ -357,6 +375,8 @@ def check_route(
         prev_loc = stop.location
         prev_dep = dep
 
+    if set(route.passenger_assignments) != seen_pickup or seen_pickup != seen_drop:
+        violations.append(f"ASSIGNMENT_STOP_MISMATCH:{route.vehicle_id}")
     for tid in seen_pickup - seen_drop:
         violations.append(f"MISSING_DROPOFF:{tid}")
     if load != 0 or wload != 0:
@@ -364,6 +384,17 @@ def check_route(
     if onboard:
         violations.append(f"ONBOARD_AT_END:{sorted(onboard)}")
     times = list(route.arrival_times.values()) + list(route.departure_times.values())
+    if route.ordered_stops and route.ordered_stops[-1].stop_type != StopType.DEPOT_END:
+        try:
+            returned = prev_dep + problem.travel.travel(prev_loc, vehicle.depot_id)
+        except KeyError:
+            violations.append(f"BLOCKED_LOCATION:{vehicle.depot_id}")
+        else:
+            times.append(returned)
+            if occupancy_overlaps(prev_dep, returned, veh_unavail):
+                violations.append(f"VEHICLE_UNAVAILABLE:{route.vehicle_id}")
+            if occupancy_overlaps(prev_dep, returned, drv_unavail):
+                violations.append(f"DRIVER_REST:{route.driver_id}")
     if times and max(times) > vehicle.shift_end:
         violations.append(f"VEHICLE_SHIFT_END:{route.vehicle_id}")
     if driver is not None and times:
