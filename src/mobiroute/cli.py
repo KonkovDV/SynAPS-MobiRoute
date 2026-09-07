@@ -88,7 +88,8 @@ def main(argv: list[str] | None = None) -> int:
         write_markdown(result, args.out_dir / "result.md")
         write_csv_metrics(result, args.out_dir / "metrics.csv")
         print(log_safe(f"status={result.status} feasible={result.verified_feasible}"))
-        return 0 if result.verified_feasible or result.status != "ERROR" else 2
+        successful = {"OPTIMAL", "FEASIBLE", "HEURISTIC_FEASIBLE", "PARTIAL"}
+        return 0 if result.verified_feasible and result.status in successful else 2
 
     if args.cmd == "demo":
         out = args.out_dir
