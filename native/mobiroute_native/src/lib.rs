@@ -87,8 +87,13 @@ fn trip_at(table: &[i32], detour: &[f64], idx: usize) -> TripView {
 
 #[inline(always)]
 fn detour_limit(direct: i32, ratio: f64) -> i32 {
-    let milli = (ratio * 1000.0).round() as i64;
-    (direct as i64 * milli / 1000) as i32 + 1
+    let milli = (ratio * 1000.0).round_ties_even() as i64;
+    let cap = i128::from(direct) * i128::from(milli) / 1000 + 1;
+    cap.clamp(0, i128::from(i32::MAX)) as i32
+}
+
+fn valid_detour(ratio: f64) -> bool {
+    ratio > 0.0 && ratio.is_finite() && (ratio * 1000.0).is_finite()
 }
 
 fn occupancy_overlaps(start: i32, end: i32, unavail: &[i32]) -> bool {
@@ -1185,6 +1190,9 @@ impl InsertionEngine {
         if trip_table.len() % STRIDE != 0 || detour.len() != trip_table.len() / STRIDE {
             return Err(PyValueError::new_err("trip table/detour mismatch"));
         }
+        if detour.iter().any(|&ratio| !valid_detour(ratio)) {
+            return Err(PyValueError::new_err("invalid detour ratio"));
+        }
         let detour_cap = compute_detour_caps(&travel, n_zones, &trip_table, &detour);
         Ok(Self {
             travel: Arc::new(travel),
@@ -1436,6 +1444,9 @@ impl InsertionEngine {
         if row.len() != STRIDE {
             return Err(PyValueError::new_err("append_trip stride"));
         }
+        if !valid_detour(detour) {
+            return Err(PyValueError::new_err("invalid detour ratio"));
+        }
         let cap = compute_detour_caps(&self.travel, self.n_zones, &row, &[detour])[0];
         Arc::make_mut(&mut self.table).extend_from_slice(&row);
         Arc::make_mut(&mut self.detour).push(detour);
@@ -1525,6 +1536,9 @@ fn best_insert(
     veh: Vec<i32>,
     unavail: Vec<i32>,
 ) -> Option<(i32, i32, i32, i32, i32, i32)> {
+    if detour.iter().any(|&ratio| !valid_detour(ratio)) {
+        return None;
+    }
     py.allow_threads(|| {
         let n_trips = trip_table.len() / STRIDE;
         let detour_cap = compute_detour_caps(&travel, n_zones, &trip_table, &detour);
