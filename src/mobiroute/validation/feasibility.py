@@ -12,6 +12,7 @@ from mobiroute.domain.constraints import (
     pickup_service_minutes,
     push_past_unavail,
 )
+from mobiroute.domain.linked_trips import link_issues
 from mobiroute.domain.models import ReasonCode, StopType, WheelchairType
 from mobiroute.domain.requests import DayProblem, PlanningResult, RoutePlan, TripRequest, Vehicle
 from mobiroute.validation.completeness import incomplete_plan_issues
@@ -411,6 +412,7 @@ def check_plan(
     *,
     only_vehicles: set[str] | None = None,
 ) -> FeasibilityReport:
+    """Verify every route; only_vehicles is retained for call compatibility."""
     trips = {t.id: t for t in problem.requests}
     violations: list[str] = []
     assigned: dict[str, str] = {}
@@ -420,8 +422,7 @@ def check_plan(
         if route.vehicle_id in seen_vehicles:
             violations.append(f"DUPLICATE_VEHICLE_ROUTE:{route.vehicle_id}")
         seen_vehicles.add(route.vehicle_id)
-        if only_vehicles is None or route.vehicle_id in only_vehicles:
-            violations.extend(check_route(problem, route, trips))
+        violations.extend(check_route(problem, route, trips))
         if route.driver_id:
             if (
                 route.driver_id in drivers_used
@@ -453,6 +454,8 @@ def check_plan(
             and t.id not in rejected_ids
         ):
             violations.append(f"FROZEN_UNSERVED:{t.id}")
+    routes = {r.vehicle_id: r.ordered_stops for r in result.route_plans}
+    violations.extend(code for _tid, code in link_issues(trips, routes))
     violations.extend(incomplete_plan_issues(problem, result))
     used_quota = used_quota_minutes(problem, result)
     for pid, cap in quota_caps(problem).items():
