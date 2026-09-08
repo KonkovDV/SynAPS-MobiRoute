@@ -1,4 +1,4 @@
-"""Cordeau a2-16 loader and instance hash-gate."""
+"""Cordeau a2-16 data and correctness gates, not literature-quality certification."""
 
 from __future__ import annotations
 
@@ -9,6 +9,7 @@ import pytest
 
 from mobiroute.adapters.cordeau import CORDEAU_A2_16_BKS, load_cordeau_a2_16, parse_cordeau_darp
 from mobiroute.solvers.native_accel import acceleration_status
+from mobiroute.validation.feasibility import check_plan
 
 _ROOT = Path(__file__).resolve().parents[1]
 _INSTANCE = _ROOT / "benchmark" / "instances" / "cordeau" / "a2-16.txt"
@@ -65,15 +66,29 @@ def test_finalize_keeps_open_data_claim_level() -> None:
     )
     out = finalize_result(problem, result)
     assert out.claim_level == "open_data_benchmark"
-    assert out.status != "OPTIMAL"
+    assert out.status == "NOT_VERIFIED"
+    assert not out.verified_feasible
 
 
-def test_a2_16_greedy_runs_when_native_present() -> None:
+def test_a2_16_greedy_has_verified_nonempty_accounting() -> None:
     if not acceleration_status().get("native_available"):
         pytest.skip("mobiroute_native not built")
     from mobiroute.solvers.greedy import solve_greedy
 
-    result = solve_greedy(load_cordeau_a2_16(_INSTANCE))
-    assert result.status != "OPTIMAL"
+    problem = load_cordeau_a2_16(_INSTANCE)
+    result = solve_greedy(problem)
+    report = check_plan(problem, result)
+    assert report.feasible, report.violations
+    assert result.verified_feasible
+    assert result.status in {"HEURISTIC_FEASIBLE", "PARTIAL"}
     assert result.claim_level == "open_data_benchmark"
-    assert result.verified_feasible in {True, False}
+    served = set(result.served_requests)
+    rejected = {r.trip_id for r in result.rejected_requests}
+    # A nonempty feasible partial plan is not a BKS or full-service quality claim.
+    assert served
+    assert len(served) == len(result.served_requests)
+    assert len(rejected) == len(result.rejected_requests)
+    assert not served & rejected
+    assert served | rejected == {t.id for t in problem.requests}
+    assert all(r.reason_code.strip() for r in result.rejected_requests)
+    assert result.objective_values["served"] == len(served)
