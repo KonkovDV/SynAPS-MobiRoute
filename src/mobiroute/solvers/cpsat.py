@@ -19,7 +19,7 @@ from mobiroute.domain.requests import (
     TripRequest,
 )
 from mobiroute.solvers.finalize import finalize_result
-from mobiroute.solvers.greedy import solve_greedy
+from mobiroute.solvers.greedy import _simulate_route, solve_greedy
 from mobiroute.validation.feasibility import accessibility_compatible, trip_quota_remaining
 from mobiroute.validation.input import validate_problem
 from mobiroute.validation.reasons import diagnose_rejection, non_empty_reason
@@ -316,6 +316,13 @@ def solve_cpsat(problem: DayProblem, time_limit_s: float = 10.0) -> PlanningResu
                 ride_times=ride,
             )
         )
+
+        # The CP objective counts trips, not idle slack in its time variables.
+        canonical = _simulate_route(
+            problem, v, vehicle_driver[v.id], [t for _, t, _ in items]
+        )
+        if canonical is not None:
+            route_plans[-1] = canonical
 
     result = PlanningResult(
         status=SolutionStatus.NOT_VERIFIED.value,
