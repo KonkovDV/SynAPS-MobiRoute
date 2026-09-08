@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
-from pydantic import Field, PrivateAttr
+from collections.abc import Mapping, Sequence
+from typing import Any, Self
+
+from pydantic import ConfigDict, Field, PrivateAttr, StrictInt, model_validator
 
 from mobiroute.domain.models import (
     BookingStatus,
@@ -16,7 +19,7 @@ from mobiroute.domain.models import (
     WheelchairType,
     ZoneId,
 )
-from mobiroute.domain.travel_graph import floyd_warshall, reconstruct_path
+from mobiroute.domain.travel_graph import INF, floyd_warshall, reconstruct_path
 
 
 class AccessibilityRequirements(StrictModel):
@@ -279,11 +282,35 @@ class DispatchScenario(StrictModel):
 
 
 class TravelMatrix(StrictModel):
-    zones: list[ZoneId]
-    # Direct edge minutes[i][j] between zones[i] and zones[j].
-    minutes: list[list[TimeMin]]
+    model_config = ConfigDict(frozen=True)
+
+    zones: Sequence[ZoneId]
+    # Direct edge minutes[i][j] between zones[i] and zones[j]. INF = unreachable.
+    minutes: Sequence[Sequence[StrictInt]]
     _hop: list[list[int]] | None = PrivateAttr(default=None)
     _nxt: list[list[int]] | None = PrivateAttr(default=None)
+
+    @model_validator(mode="after")
+    def _validate_matrix(self) -> Self:
+        object.__setattr__(self, "zones", tuple(self.zones))
+        object.__setattr__(self, "minutes", tuple(tuple(row) for row in self.minutes))
+        n = len(self.zones)
+        if len(set(self.zones)) != n or any(not zone.strip() for zone in self.zones):
+            raise ValueError("MATRIX_ZONES_MUST_BE_UNIQUE_AND_NONEMPTY")
+        if len(self.minutes) != n or any(len(row) != n for row in self.minutes):
+            raise ValueError("MATRIX_DIMENSIONS_MUST_MATCH_ZONES")
+        if any(value < 0 or value > INF for row in self.minutes for value in row):
+            raise ValueError("MATRIX_MINUTES_OUT_OF_RANGE")
+        if any(self.minutes[i][i] != 0 for i in range(n)):
+            raise ValueError("MATRIX_DIAGONAL_MUST_BE_ZERO")
+        return self
+
+    def model_copy(self, *, update: Mapping[str, Any] | None = None, deep: bool = False) -> Self:
+        """Validate a new immutable snapshot; never copy private graph caches."""
+        data = self.model_dump()
+        if update:
+            data.update(update)
+        return type(self).model_validate(data)
 
     def _ensure_graph(self) -> tuple[list[list[int]], list[list[int]]]:
         if self._hop is None or self._nxt is None:
