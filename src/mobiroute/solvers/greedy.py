@@ -27,7 +27,7 @@ from mobiroute.domain.requests import (
     Vehicle,
 )
 from mobiroute.domain.route_graph import service_stops
-from mobiroute.solvers.finalize import finalize_result
+from mobiroute.solvers.finalize import empty_result, finalize_result
 from mobiroute.solvers.insertion_kernel import ProblemKernel, vehicle_payload
 from mobiroute.solvers.native_accel import (
     NativeEval,
@@ -52,6 +52,7 @@ from mobiroute.validation.feasibility import (
     trial_exceeds_quota,
     trial_exceeds_quota_rides,
 )
+from mobiroute.validation.input import validate_problem
 from mobiroute.validation.reasons import diagnose_rejection, non_empty_reason
 
 
@@ -874,6 +875,7 @@ def _needs_accessibility(stops: list[Stop], trips_by_id: dict[str, TripRequest])
 
 
 def solve_fifo(problem: DayProblem) -> PlanningResult:
+    problem = validate_problem(problem)
     active = [t for t in problem.requests if t.booking_status.value not in {"CANCELLED", "NO_SHOW"}]
     active.sort(key=fifo_sort_key)
     return _greedy_core(problem, active, solution_type="FIFO", pooling=False)
@@ -885,6 +887,7 @@ def solve_greedy(
     seed_stops: dict[str, list[Stop]] | None = None,
     seed_drivers: dict[str, str | None] | None = None,
 ) -> PlanningResult:
+    problem = validate_problem(problem)
     active = [t for t in problem.requests if t.booking_status.value not in {"CANCELLED", "NO_SHOW"}]
     active.sort(key=trip_sort_key)
     return _greedy_core(
@@ -906,6 +909,8 @@ def _greedy_core(
     seed_stops: dict[str, list[Stop]] | None = None,
     seed_drivers: dict[str, str | None] | None = None,
 ) -> PlanningResult:
+    if not problem.travel.zones:
+        return empty_result(problem, solution_type, {"name": solution_type, "pooling": pooling})
     trips_by_id = {t.id: t for t in problem.requests}
     kernel = attach_native(ProblemKernel.from_problem(problem))
     vmap = {v.id: v for v in problem.vehicles}
