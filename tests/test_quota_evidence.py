@@ -55,7 +55,8 @@ def quota_case(*, quota=20, via=False, tid="t", offset=0):
         ],
         drivers=[Driver(id=did, depot_id="d", shift_start=0, shift_end=180)],
         travel=TravelMatrix(
-            zones=["d", "q", "v"], minutes=[[0, 20, 8], [20, 0, 12], [8, 12, 0]]
+            zones=["d", "q", "v"],
+            minutes=[[0, 20, 8], [20, 0, 12], [8, 12, 0]],
         ),
     )
     stops = [Stop(id="pu", trip_id=tid, stop_type=StopType.PICKUP, location="d")]
@@ -165,12 +166,20 @@ class QuotaEvidenceTests(unittest.TestCase):
         self.assertEqual(passenger_rides(route, trips), {"p": 20})
         self.assertTrue(
             trial_exceeds_quota(
-                route, trips, quota_cap={"p": 30}, used_now={"p": 25}, previous_on_vehicle={"p": 10}
+                route,
+                trips,
+                quota_cap={"p": 30},
+                used_now={"p": 25},
+                previous_on_vehicle={"p": 10},
             )
         )
         self.assertFalse(
             trial_exceeds_quota(
-                route, trips, quota_cap={"p": 35}, used_now={"p": 25}, previous_on_vehicle={"p": 10}
+                route,
+                trips,
+                quota_cap={"p": 35},
+                used_now={"p": 25},
+                previous_on_vehicle={"p": 10},
             )
         )
 
