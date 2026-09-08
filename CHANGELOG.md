@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- IMPLEMENTED: passenger-day quota evidence is reconstructed from pickup departure
+  and dropoff arrival, including VIA dwell and multiple vehicles. Optional cached
+  ride summaries cannot hide quota use; inconsistent supplied values are diagnosed.
+  This is a verifier hardening change, not production-safety certification.
 - Public fixture export rejects non-synthetic/mixed provenance and restricted profiles;
   nested PII field paths and numeric-email masking covered by regression tests.
   These guards are not customer-data anonymization or certification.
