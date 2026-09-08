@@ -13,4 +13,14 @@
 
 Malformed inputs raise `ValueError`. Well-formed but infeasible requests still need explicit solver rejection reasons.
 
-Entry-point integration and execution regressions are part of the same draft PR. This validation does not establish pilot readiness, legal eligibility or production certification.
+## Execution boundaries
+
+FIFO, greedy, nearest, beam, ALNS, rolling horizon and CP-SAT execute the returned canonical problem. Online insertion validates the problem, the new trip and their combined snapshot before native append, including duplicate request IDs. Disruption recovery normalizes the problem before reading statuses or producing seeds.
+
+Empty graphs with no requests or resources produce empty, independently checked plans; greedy and beam do not fabricate a zone or construct an empty native world.
+
+Regression tests exercise malformed copies, canonical-copy execution and empty problems through all seven solvers, plus online insertion and recovery boundaries. Original arguments remain unchanged.
+
+## Scope
+
+These checks cover planning problem and trip records, not arbitrary raw-native arrays, solver-option contracts or supplied plan/seed integrity. Linked-trip enforcement and cross-solve native-state reuse are separate contracts. Validation does not establish pilot readiness, legal eligibility or production certification.

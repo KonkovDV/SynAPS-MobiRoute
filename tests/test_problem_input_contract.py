@@ -134,3 +134,100 @@ class ProblemInputContractTests(unittest.TestCase):
         p.requests = []
         p.travel = TravelMatrix(zones=[], minutes=[])
         self.assertEqual(validate_problem(p).requests, [])
+
+
+class SolverInputBoundaryTests(unittest.TestCase):
+    @staticmethod
+    def solvers():
+        from mobiroute.solvers.alns import solve_alns
+        from mobiroute.solvers.beam import solve_beam
+        from mobiroute.solvers.cpsat import solve_cpsat
+        from mobiroute.solvers.greedy import solve_fifo, solve_greedy
+        from mobiroute.solvers.nearest import solve_nearest
+        from mobiroute.solvers.rolling_horizon import solve_rolling_horizon
+
+        return (
+            solve_fifo,
+            solve_greedy,
+            solve_nearest,
+            solve_beam,
+            solve_alns,
+            solve_rolling_horizon,
+            solve_cpsat,
+        )
+
+    def test_all_solvers_reject_malformed_copied_records(self):
+        for solve in self.solvers():
+            p = problem().model_copy(update={"requests": [{"id": "broken"}]})
+            with self.subTest(solver=solve.__name__):
+                with self.assertRaisesRegex(ValueError, "INVALID_PROBLEM_SCHEMA"):
+                    solve(p)
+                self.assertIsInstance(p.requests[0], dict)
+
+    def test_all_solvers_execute_the_canonical_snapshot(self):
+        for solve in self.solvers():
+            p = problem().model_copy(
+                update={"travel": {"zones": ["d", "p"], "minutes": [[0, 30], [30, 0]]}}
+            )
+            p.requests[0] = trip().model_copy(update={"booking_status": "CONFIRMED"})
+            with self.subTest(solver=solve.__name__):
+                result = solve(p)
+                self.assertTrue(result.verified_feasible)
+                self.assertEqual(result.served_requests, ["t"])
+                self.assertGreaterEqual(result.route_plans[0].ride_times["t"], 30)
+                self.assertIsInstance(p.travel, dict)
+                self.assertIs(type(p.requests[0].booking_status), str)
+
+    def test_all_solvers_accept_empty_problems(self):
+        p = problem().model_copy(
+            update={
+                "vehicles": [],
+                "drivers": [],
+                "requests": [],
+                "travel": {"zones": [], "minutes": []},
+            }
+        )
+        for solve in self.solvers():
+            with self.subTest(solver=solve.__name__):
+                result = solve(p)
+                self.assertTrue(result.verified_feasible)
+                self.assertEqual(result.served_requests, [])
+                self.assertEqual(result.route_plans, [])
+
+    def test_dispatch_validates_copies_and_duplicate_new_ids(self):
+        from mobiroute.dispatch.online_insertion import online_insert, recover_disruption
+        from mobiroute.solvers.greedy import solve_greedy
+
+        p = problem()
+        baseline = solve_greedy(p)
+        before = baseline.model_dump()
+        broken = p.model_copy(update={"requests": [{"id": "broken"}]})
+        with self.assertRaisesRegex(ValueError, "INVALID_PROBLEM_SCHEMA"):
+            online_insert(broken, baseline, trip())
+        with self.assertRaisesRegex(ValueError, "INVALID_PROBLEM_SCHEMA"):
+            recover_disruption(broken, baseline)
+        with self.assertRaisesRegex(ValueError, "DUPLICATE_TRIP_ID"):
+            online_insert(p, baseline, trip())
+        self.assertEqual(baseline.model_dump(), before)
+
+    def test_online_executes_canonical_new_trip_without_mutating_arguments(self):
+        from mobiroute.dispatch.online_insertion import online_insert
+        from mobiroute.solvers.greedy import solve_greedy
+
+        p = problem()
+        baseline = solve_greedy(p)
+        before = baseline.model_dump()
+        new = trip().model_copy(
+            update={"id": "new", "pseudonymous_passenger_id": "p2", "booking_status": "CONFIRMED"}
+        )
+        updated, result, _diff = online_insert(p, baseline, new)
+        self.assertTrue(result.verified_feasible)
+        self.assertIn("new", result.served_requests)
+        self.assertIs(updated.requests[-1].booking_status, BookingStatus.CONFIRMED)
+        self.assertIs(type(new.booking_status), str)
+        self.assertEqual(len(p.requests), 1)
+        self.assertEqual(baseline.model_dump(), before)
+        malformed = new.model_copy(update={"max_ride_time": True})
+        with self.assertRaisesRegex(ValueError, "INVALID_TRIP_SCHEMA"):
+            online_insert(p, baseline, malformed)
+        self.assertEqual(baseline.model_dump(), before)
