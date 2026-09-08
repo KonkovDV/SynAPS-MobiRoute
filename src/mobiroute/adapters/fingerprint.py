@@ -68,6 +68,7 @@ def fingerprint_problem(problem: Any) -> str:
                     v.lift_available,
                     v.ramp_available,
                     v.vehicle_type,
+                    [kind.value for kind in v.compatible_wheelchair_types],
                     list(v.unavailable_intervals),
                     list(v.service_area),
                 )

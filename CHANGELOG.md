@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- IMPLEMENTED: planning-input fingerprints include vehicle wheelchair-type
+  compatibility. Changing this operative capability can no longer retain the
+  previous fingerprint. Existing fingerprint values intentionally change.
 - IMPLEMENTED: rejection diagnostics distinguish supported resource/quota evidence
   from unresolved search failure; mixed causes and appointment metadata cannot
   fabricate a time-window explanation. Cordeau now requires verified, nonempty,
