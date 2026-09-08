@@ -22,9 +22,7 @@ class MatrixContractTests(unittest.TestCase):
                 self.assertEqual(matrix.travel("A", "B"), 5)
 
     def test_copy_rebuilds_shortest_path(self):
-        matrix = TravelMatrix(
-            zones=["A", "B", "C"], minutes=[[0, 3, 20], [3, 0, 3], [20, 3, 0]]
-        )
+        matrix = TravelMatrix(zones=["A", "B", "C"], minutes=[[0, 3, 20], [3, 0, 3], [20, 3, 0]])
         self.assertEqual(matrix.shortest_path("A", "C"), ["A", "B", "C"])
         copied = matrix.model_copy(update={"minutes": [[0, 30, 10], [30, 0, 30], [10, 30, 0]]})
         self.assertEqual(copied.shortest_path("A", "C"), ["A", "C"])
@@ -63,9 +61,8 @@ class MatrixContractTests(unittest.TestCase):
             (["A", "B"], [[0, INF + 1], [1, 0]]),
         ]
         for zones, minutes in cases:
-            with self.subTest(zones=zones, minutes=minutes):
-                with self.assertRaises(ValidationError):
-                    TravelMatrix(zones=zones, minutes=minutes)
+            with self.subTest(zones=zones, minutes=minutes), self.assertRaises(ValidationError):
+                TravelMatrix(zones=zones, minutes=minutes)
 
     def test_invalid_copy_is_rejected(self):
         matrix = TravelMatrix(zones=["A", "B"], minutes=[[0, 5], [5, 0]])
