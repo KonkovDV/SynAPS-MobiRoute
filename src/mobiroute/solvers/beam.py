@@ -24,7 +24,11 @@ from mobiroute.solvers.greedy import (
 )
 from mobiroute.solvers.insertion_kernel import ProblemKernel
 from mobiroute.solvers.native_accel import acceleration_status, attach_native
-from mobiroute.validation.feasibility import accessibility_compatible
+from mobiroute.validation.feasibility import (
+    accessibility_compatible,
+    onboard_trip_ids,
+    pooling_mix_violation,
+)
 from mobiroute.validation.input import validate_problem
 from mobiroute.validation.reasons import diagnose_rejection, non_empty_reason
 
@@ -109,6 +113,9 @@ def solve_beam(problem: DayProblem, beam_width: int = 3) -> PlanningResult:
             occupied = {d for d in drivers.values() if d}
             for v in problem.vehicles:
                 if accessibility_compatible(v, trip) is not None:
+                    continue
+                onboard = onboard_trip_ids(stops[v.id])
+                if pooling_mix_violation(problem, onboard, trip):
                     continue
                 occ = occupied - ({drivers[v.id]} if drivers[v.id] else set())
                 did = drivers[v.id] or _assign_driver(
@@ -198,7 +205,7 @@ def solve_beam(problem: DayProblem, beam_width: int = 3) -> PlanningResult:
         solver_config={
             "name": "BEAM",
             "beam_width": beam_width,
-            "pooling": True,
+            "pooling": problem.operator_policy.pooling_mode.value != "FORBIDDEN",
             **acceleration_status(),
         },
         mobiroute_version=__version__,

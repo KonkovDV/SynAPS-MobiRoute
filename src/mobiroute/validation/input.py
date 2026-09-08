@@ -81,6 +81,12 @@ def validate_problem(problem: DayProblem) -> DayProblem:
         raise ValueError("INVALID_PROBLEM_SCHEMA") from None
     _require(bool(snapshot.problem_id.strip()), "EMPTY_PROBLEM_ID")
     _require(snapshot.schema_version == "mobiroute.problem.v1", "UNSUPPORTED_PROBLEM_SCHEMA")
+    policy = snapshot.operator_policy
+    _require(bool(policy.policy_id.strip()), "EMPTY_POLICY_ID")
+    _require(bool(policy.policy_version.strip()), "EMPTY_POLICY_VERSION")
+    _require(bool(policy.provenance.strip()), "EMPTY_POLICY_PROVENANCE")
+    if policy.approved_by is not None:
+        _require(bool(policy.approved_by.strip()), "EMPTY_POLICY_APPROVER")
     _unique((t.id for t in snapshot.requests), "TRIP")
     _unique((v.id for v in snapshot.vehicles), "VEHICLE")
     _unique((d.id for d in snapshot.drivers), "DRIVER")
@@ -108,6 +114,8 @@ def validate_problem(problem: DayProblem) -> DayProblem:
         _trip_contract(trip)
         _require(trip.pickup_zone in zones and trip.dropoff_zone in zones, "UNKNOWN_TRIP_ZONE")
         _require(trip.via_zone is None or trip.via_zone in zones, "UNKNOWN_VIA_ZONE")
+        if trip.fulfillment_group_id is not None:
+            _require(bool(trip.fulfillment_group_id.strip()), "EMPTY_FULFILLMENT_GROUP")
         anchors.append(trip.earliest_pickup)
         if trip.appointment_start is not None:
             anchors.append(max(0, trip.appointment_start - EARLY_DROPOFF_SLACK))
