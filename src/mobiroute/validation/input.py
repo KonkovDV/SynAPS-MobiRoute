@@ -10,7 +10,7 @@ from mobiroute.domain.constraints import (
     detour_limit,
     pickup_service_minutes,
 )
-from mobiroute.domain.requests import DayProblem, TripRequest
+from mobiroute.domain.requests import DayProblem, Driver, TripRequest, Vehicle
 
 
 def _require(condition: bool, code: str) -> None:
@@ -87,7 +87,8 @@ def validate_problem(problem: DayProblem) -> DayProblem:
     _unique((p.pseudonymous_id for p in snapshot.passengers), "PASSENGER")
     zones = set(snapshot.travel.zones)
     anchors: list[int] = []
-    for resource in [*snapshot.vehicles, *snapshot.drivers]:
+    resources: list[Vehicle | Driver] = [*snapshot.vehicles, *snapshot.drivers]
+    for resource in resources:
         _require(resource.depot_id in zones, "UNKNOWN_DEPOT_ZONE")
         _native_nonnegative(resource.shift_start, "shift_start")
         _native_nonnegative(resource.shift_end, "shift_end")
@@ -130,8 +131,7 @@ def validate_problem(problem: DayProblem) -> DayProblem:
     _native_nonnegative(horizon + edge + max(services, default=0), "arrival_plus_service")
     _native_nonnegative(sum(1 + t.companion_count for t in snapshot.requests), "total_trip_seats")
     wait_bound = sum(
-        min(t.max_wait_time, max(0, horizon + edge - t.earliest_pickup))
-        for t in snapshot.requests
+        min(t.max_wait_time, max(0, horizon + edge - t.earliest_pickup)) for t in snapshot.requests
     )
     _native_nonnegative(wait_bound, "total_wait_score")
     return snapshot
