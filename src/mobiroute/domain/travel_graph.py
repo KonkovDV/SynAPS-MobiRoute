@@ -6,10 +6,12 @@ Not a live Moscow road network. Edges are the stored minute matrix;
 
 from __future__ import annotations
 
+from collections.abc import Sequence
+
 INF = 10**9
 
 
-def floyd_warshall(minutes: list[list[int]]) -> tuple[list[list[int]], list[list[int]]]:
+def floyd_warshall(minutes: Sequence[Sequence[int]]) -> tuple[list[list[int]], list[list[int]]]:
     n = len(minutes)
     hop = [list(row) for row in minutes]
     nxt = [[(j if hop[i][j] < INF else -1) for j in range(n)] for i in range(n)]
