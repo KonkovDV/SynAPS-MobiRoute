@@ -318,9 +318,7 @@ def solve_cpsat(problem: DayProblem, time_limit_s: float = 10.0) -> PlanningResu
         )
 
         # The CP objective counts trips, not idle slack in its time variables.
-        canonical = _simulate_route(
-            problem, v, vehicle_driver[v.id], [t for _, t, _ in items]
-        )
+        canonical = _simulate_route(problem, v, vehicle_driver[v.id], [t for _, t, _ in items])
         if canonical is not None:
             route_plans[-1] = canonical
 
