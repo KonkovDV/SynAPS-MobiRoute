@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- IMPLEMENTED: every online/recovery outcome is fully reverified with fresh input
+  and execution fingerprints, detached routes and regenerated explanations.
+  Version-2 event/child identities cover full event payloads and route evidence;
+  see `docs/dispatch-lineage-contract.md`. No inherited feasibility certificate.
 - IMPLEMENTED: notary accounting rejects duplicate/unknown IDs, served/rejected
   overlaps, cancelled/no-show service and mismatched inactive rejection reasons.
   Valid partial plans and optional inactive accounting remain supported.
@@ -131,7 +135,6 @@
 - Greedy **pooling insertion** (interleaved pickup/dropoff), not sequential PU–DO only.
 - Online insertion into existing routes; reject if a frozen trip would move.
 - Beam search heuristic; incremental-repair named lane.
-- Driver accessibility training checked in simulation and feasibility.
 - Deeper research cards (CP 2026, IJOC Benders, OR Spectrum 2026, IJCAI 2024).
 - Still synthetic_benchmark only. ALNS/LBBD/RHC remain PLANNED.
 
