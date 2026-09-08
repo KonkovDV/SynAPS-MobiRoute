@@ -21,6 +21,7 @@ from mobiroute.domain.requests import (
 from mobiroute.solvers.finalize import finalize_result
 from mobiroute.solvers.greedy import solve_greedy
 from mobiroute.validation.feasibility import accessibility_compatible, trip_quota_remaining
+from mobiroute.validation.input import validate_problem
 from mobiroute.validation.reasons import diagnose_rejection, non_empty_reason
 
 
@@ -32,6 +33,7 @@ def solve_cpsat(problem: DayProblem, time_limit_s: float = 10.0) -> PlanningResu
     This is **not** an optimum of the pooling DARP. Label OPTIMAL only when
     OR-Tools status is OPTIMAL **and** the independent notary accepts the plan.
     """
+    problem = validate_problem(problem)
     active = [t for t in problem.requests if t.booking_status.value not in {"CANCELLED", "NO_SHOW"}]
     if len(active) > 40 or len(problem.vehicles) > 12:
         res = solve_greedy(problem)
