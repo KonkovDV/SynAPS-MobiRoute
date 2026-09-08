@@ -15,7 +15,7 @@ from mobiroute.domain.requests import (
     TripRequest,
     Vehicle,
 )
-from mobiroute.solvers.finalize import finalize_result
+from mobiroute.solvers.finalize import empty_result, finalize_result
 from mobiroute.solvers.greedy import (
     _assign_driver,
     _needs_accessibility,
@@ -25,6 +25,7 @@ from mobiroute.solvers.greedy import (
 from mobiroute.solvers.insertion_kernel import ProblemKernel
 from mobiroute.solvers.native_accel import acceleration_status, attach_native
 from mobiroute.validation.feasibility import accessibility_compatible
+from mobiroute.validation.input import validate_problem
 from mobiroute.validation.reasons import diagnose_rejection, non_empty_reason
 
 
@@ -71,6 +72,9 @@ def _total_duration(
 
 
 def solve_beam(problem: DayProblem, beam_width: int = 3) -> PlanningResult:
+    problem = validate_problem(problem)
+    if not problem.travel.zones:
+        return empty_result(problem, "BEAM", {"name": "BEAM", "beam_width": beam_width})
     active = [t for t in problem.requests if t.booking_status.value not in {"CANCELLED", "NO_SHOW"}]
     active.sort(key=trip_sort_key)
     trips_by_id = {t.id: t for t in problem.requests}
