@@ -26,8 +26,6 @@ NativeEval = tuple[
     list[tuple[int, int, int, int]],
 ]
 
-_KERNELS: dict[str, ProblemKernel] = {}
-
 NATIVE_REQUIRED = (
     "Greedy, beam, ALNS, and online insertion require mobiroute_native. "
     "Build: python -m maturin develop --release "
@@ -370,13 +368,10 @@ def append_trip(k: ProblemKernel, trip: TripRequest, zmap: dict[str, int]) -> in
 
 
 def stash_kernel(result: PlanningResult, k: ProblemKernel) -> None:
-    key = result.event_id or result.plan_id or result.input_hash
-    if key:
-        _KERNELS[key] = k
+    """Compatibility no-op: native state must not be retained across solves."""
+    return None
 
 
 def kernel_for(result: PlanningResult) -> ProblemKernel | None:
-    key = result.event_id or result.plan_id or result.input_hash
-    if not key:
-        return None
-    return _KERNELS.get(key)
+    """Rebuild from current inputs; IDs cannot authenticate mutable native state."""
+    return None
