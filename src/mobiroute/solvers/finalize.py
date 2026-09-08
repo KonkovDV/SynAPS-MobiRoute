@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import uuid
 
+from mobiroute import SYNAPS_COMMIT, __version__
+from mobiroute.adapters.fingerprint import fingerprint, fingerprint_problem
 from mobiroute.domain.fairness import compute_fairness
 from mobiroute.domain.models import ReasonCode, SolutionStatus
 from mobiroute.domain.requests import DayProblem, PlanningResult, RejectedTrip, TripExplanation
@@ -37,6 +39,30 @@ def _account_inactive(problem: DayProblem, result: PlanningResult) -> PlanningRe
         cleaned.append(r.model_copy(update={"reason_code": code}))
         reasons[r.trip_id] = code
     return result.model_copy(update={"rejected_requests": cleaned, "reason_codes": reasons})
+
+
+def empty_result(
+    problem: DayProblem, solution_type: str, solver_config: dict[str, object]
+) -> PlanningResult:
+    """A zero-work plan needs no native world or fabricated matrix zone."""
+    return finalize_result(
+        problem,
+        PlanningResult(
+            status=SolutionStatus.NOT_VERIFIED.value,
+            solution_type=solution_type,
+            verified_feasible=False,
+            served_requests=[],
+            rejected_requests=[],
+            route_plans=[],
+            input_hash=fingerprint_problem(problem),
+            config_hash=fingerprint(solver_config),
+            solver_config=solver_config,
+            mobiroute_version=__version__,
+            synaps_commit=SYNAPS_COMMIT,
+            data_provenance=problem.data_provenance,
+            claim_level=problem.claim_level,
+        ),
+    )
 
 
 def finalize_result(

@@ -4,11 +4,11 @@ from __future__ import annotations
 
 from enum import StrEnum
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, StrictInt
 
 
 class StrictModel(BaseModel):
-    model_config = ConfigDict(extra="forbid", frozen=False)
+    model_config = ConfigDict(extra="forbid", frozen=False, allow_inf_nan=False)
 
 
 class EligibilityClass(StrEnum):
@@ -115,5 +115,5 @@ class PrivacyClass(StrEnum):
     MEDICAL_SENSITIVE = "MEDICAL_SENSITIVE"
 
 
-TimeMin = int  # minutes from planning day start
+TimeMin = StrictInt  # minutes from planning day start
 ZoneId = str

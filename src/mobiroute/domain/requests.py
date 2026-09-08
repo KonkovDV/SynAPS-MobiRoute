@@ -27,7 +27,7 @@ class AccessibilityRequirements(StrictModel):
     needs_ramp: bool = False
     needs_boarding_assistance: bool = False
     wheelchair_type: WheelchairType = WheelchairType.NONE
-    companion_count: int = Field(default=0, ge=0)
+    companion_count: int = Field(default=0, ge=0, strict=True)
 
 
 class PassengerProfile(StrictModel):
@@ -37,19 +37,19 @@ class PassengerProfile(StrictModel):
         default_factory=AccessibilityRequirements
     )
     wheelchair_type: WheelchairType = WheelchairType.NONE
-    companion_count: int = Field(default=0, ge=0)
+    companion_count: int = Field(default=0, ge=0, strict=True)
     medical_priority: bool = False
     privacy_class: PrivacyClass = PrivacyClass.PUBLIC_SYNTHETIC
     data_provenance: DataProvenance = DataProvenance.SYNTHETIC
     # Remaining entitlement minutes for this planning day. None = unlimited.
-    quota_minutes_remaining: int | None = None
+    quota_minutes_remaining: int | None = Field(default=None, strict=True)
 
 
 class Vehicle(StrictModel):
     id: str
     vehicle_type: str
-    passenger_capacity: int = Field(ge=1)
-    wheelchair_capacity: int = Field(default=0, ge=0)
+    passenger_capacity: int = Field(ge=1, strict=True)
+    wheelchair_capacity: int = Field(default=0, ge=0, strict=True)
     lift_available: bool = False
     ramp_available: bool = False
     accessible_features: list[str] = Field(default_factory=list)
@@ -106,7 +106,7 @@ class TripRequest(StrictModel):
     max_ride_time: TimeMin
     max_wait_time: TimeMin
     wheelchair_requirement: WheelchairType = WheelchairType.NONE
-    companion_count: int = Field(default=0, ge=0)
+    companion_count: int = Field(default=0, ge=0, strict=True)
     service_priority: ServicePriority = ServicePriority.STANDARD
     eligibility_class: EligibilityClass = EligibilityClass.STANDARD
     booking_status: BookingStatus = BookingStatus.REQUESTED
@@ -117,7 +117,7 @@ class TripRequest(StrictModel):
     needs_boarding_assistance: bool = False
     medical_priority: bool = False
     frozen: bool = False
-    max_detour_ratio: float = Field(default=3.0, gt=0)
+    max_detour_ratio: float = Field(default=3.0, gt=0, strict=True)
     data_provenance: DataProvenance = DataProvenance.SYNTHETIC
     # Coordinates only allowed in protected/private mode — omit in open synthetic.
     pickup_coordinates: tuple[float, float] | None = None
@@ -131,7 +131,7 @@ class TripRequest(StrictModel):
     via_zone: ZoneId | None = None
     via_service_duration: TimeMin = 2
     # Remaining entitlement minutes (door-to-door ride). None = unlimited.
-    quota_minutes_remaining: int | None = None
+    quota_minutes_remaining: int | None = Field(default=None, strict=True)
 
 
 class Stop(StrictModel):
@@ -340,7 +340,7 @@ class TravelMatrix(StrictModel):
 class DayProblem(StrictModel):
     problem_id: str
     schema_version: str = "mobiroute.problem.v1"
-    seed: int
+    seed: int = Field(strict=True)
     passengers: list[PassengerProfile]
     vehicles: list[Vehicle]
     drivers: list[Driver]
