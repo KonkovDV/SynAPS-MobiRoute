@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- IMPLEMENTED: rejection diagnostics distinguish supported resource/quota evidence
+  from unresolved search failure; mixed causes and appointment metadata cannot
+  fabricate a time-window explanation. Cordeau now requires verified, nonempty,
+  complete accounting, without claiming literature-BKS or full-service quality.
 - IMPLEMENTED: every online/recovery outcome is fully reverified with fresh input
   and execution fingerprints, detached routes and regenerated explanations.
   Version-2 event/child identities cover full event payloads and route evidence;
