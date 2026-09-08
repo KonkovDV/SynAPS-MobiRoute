@@ -78,9 +78,29 @@ def used_quota_minutes(problem: DayProblem, result: PlanningResult) -> dict[str,
     return used
 
 
+def _route_ride_minutes(plan: RoutePlan) -> dict[str, int]:
+    """Reconstruct usage from service clocks, never from optional summaries."""
+    pickups: dict[str, int] = {}
+    rides: dict[str, int] = {}
+    for stop in plan.ordered_stops:
+        tid = stop.trip_id
+        if tid is None:
+            continue
+        if stop.stop_type == StopType.PICKUP:
+            departed = plan.departure_times.get(stop.id)
+            if departed is not None:
+                pickups[tid] = departed
+        elif stop.stop_type == StopType.DROPOFF and tid in pickups:
+            arrived = plan.arrival_times.get(stop.id)
+            if arrived is not None:
+                # check_route rejects missing/reversed clocks; never grant negative usage.
+                rides[tid] = max(0, arrived - pickups[tid])
+    return rides
+
+
 def passenger_rides(plan: RoutePlan, trips: dict[str, TripRequest]) -> dict[str, int]:
     used: dict[str, int] = {}
-    for tid, ride in plan.ride_times.items():
+    for tid, ride in _route_ride_minutes(plan).items():
         trip = trips.get(tid)
         if trip is None:
             continue
@@ -327,6 +347,9 @@ def check_route(
                     break
             if pickup_dep is not None:
                 ride = arr - pickup_dep
+                recorded_ride = route.ride_times.get(tid)
+                if recorded_ride is not None and recorded_ride != ride:
+                    violations.append(f"RIDE_TIME_MISMATCH:{tid}")
                 if ride > trip.max_ride_time:
                     violations.append(f"MAX_RIDE_TIME:{tid}")
                 try:
