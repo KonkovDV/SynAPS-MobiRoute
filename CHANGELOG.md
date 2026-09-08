@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- IMPLEMENTED: notary accounting rejects duplicate/unknown IDs, served/rejected
+  overlaps, cancelled/no-show service and mismatched inactive rejection reasons.
+  Valid partial plans and optional inactive accounting remain supported.
 - IMPLEMENTED: passenger-day quota evidence is reconstructed from pickup departure
   and dropoff arrival, including VIA dwell and multiple vehicles. Optional cached
   ride summaries cannot hide quota use; inconsistent supplied values are diagnosed.
