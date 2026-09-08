@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+- Public fixture export rejects non-synthetic/mixed provenance and restricted profiles;
+  nested PII field paths and numeric-email masking covered by regression tests.
+  These guards are not customer-data anonymization or certification.
+- CLI `solve` exits nonzero for unverified/error/unknown statuses, retaining diagnostic files.
+- Independent notary rejects phantom service, driverless service, reversed timestamps,
+  wrong pickup/dropoff locations, early pickups and missing alighting/VIA dwell;
+  validates explicit/implicit depot-return occupancy against driver/vehicle unavailability.
+
 ## 0.2.2 — 2026-08-30
 
 - SynAPS pin bumped to
