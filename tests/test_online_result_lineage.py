@@ -88,7 +88,11 @@ class OnlineResultLineageTests(unittest.TestCase):
                 p = problem()
                 baseline = solve_greedy(p)
                 request = trip("new").model_copy(update={"max_ride_time": max_ride})
-                before = (p.model_dump_json(), baseline.model_dump_json(), request.model_dump_json())
+                before = (
+                    p.model_dump_json(),
+                    baseline.model_dump_json(),
+                    request.model_dump_json(),
+                )
                 _, first, _ = online_insert(p, baseline, request, protect_frozen=False)
                 _, second, _ = online_insert(
                     DayProblem.model_validate_json(before[0]),
