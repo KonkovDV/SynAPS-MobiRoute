@@ -1,5 +1,7 @@
 """Constraint catalog — normative list mirrored in docs/mathematical-formulation.md."""
 
+from math import isfinite
+
 HARD_CONSTRAINT_IDS = [
     "PAIRING_SAME_VEHICLE",
     "PICKUP_BEFORE_DROPOFF",
@@ -40,6 +42,8 @@ HARD_CONSTRAINT_IDS = [
 EARLY_DROPOFF_SLACK = 30
 # FTA/DREDF analogue: driver wait at pickup after the window opens.
 CURB_WAIT_MINUTES = 5
+# Native route times and returned caps use signed 32-bit integers.
+MAX_NATIVE_MINUTES = 2**31 - 1
 
 
 def pickup_service_minutes(boarding: int) -> int:
@@ -53,9 +57,18 @@ def earliest_alight_time(appointment_start: int | None) -> int | None:
 
 
 def detour_limit(direct_minutes: int, ratio: float) -> int:
-    """Integer cap shared by Python SoA, Rust, CP-SAT, and the notary."""
-    milli = round(float(ratio) * 1000.0)
-    return (int(direct_minutes) * milli) // 1000 + 1
+    """Ties-to-even milliratio; saturate caps at the native time maximum."""
+    scaled = float(ratio) * 1000.0
+    if not isfinite(scaled) or ratio <= 0:
+        raise ValueError("DETOUR_RATIO_MUST_BE_POSITIVE_AND_FINITE_AFTER_SCALING")
+    if (
+        isinstance(direct_minutes, bool)
+        or not isinstance(direct_minutes, int)
+        or direct_minutes < 0
+    ):
+        raise ValueError("DIRECT_MINUTES_MUST_BE_A_NONNEGATIVE_INTEGER")
+    milli = round(scaled)
+    return min((direct_minutes * milli) // 1000 + 1, MAX_NATIVE_MINUTES)
 
 
 def occupancy_overlaps(
