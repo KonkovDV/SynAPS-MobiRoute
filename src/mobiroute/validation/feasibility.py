@@ -14,7 +14,15 @@ from mobiroute.domain.constraints import (
 )
 from mobiroute.domain.linked_trips import link_issues
 from mobiroute.domain.models import ReasonCode, StopType, WheelchairType
-from mobiroute.domain.requests import DayProblem, PlanningResult, RoutePlan, TripRequest, Vehicle
+from mobiroute.domain.policy import ChainMode, PoolingMode, QuotaDebitBasis
+from mobiroute.domain.requests import (
+    DayProblem,
+    PlanningResult,
+    RoutePlan,
+    Stop,
+    TripRequest,
+    Vehicle,
+)
 from mobiroute.validation.completeness import incomplete_plan_issues
 
 
@@ -69,13 +77,111 @@ def accessibility_compatible(vehicle: Vehicle, trip: TripRequest) -> ReasonCode 
     return None
 
 
+def trip_ride_minutes(plan: RoutePlan, trip_id: str) -> int | None:
+    rides = _route_ride_minutes(plan)
+    return rides.get(trip_id)
+
+
+def billable_service_minutes(trip: TripRequest, ride: int) -> int:
+    return max(0, trip.boarding_duration) + ride + max(0, trip.alighting_duration)
+
+
+def quota_debit_minutes(problem: DayProblem, trip: TripRequest, ride: int) -> int:
+    if problem.operator_policy.quota_debit_basis == QuotaDebitBasis.BILLABLE_SERVICE:
+        return billable_service_minutes(trip, ride)
+    return ride
+
+
 def used_quota_minutes(problem: DayProblem, result: PlanningResult) -> dict[str, int]:
     trips = {t.id: t for t in problem.requests}
     used: dict[str, int] = {}
     for route in result.route_plans:
-        for pid, ride in passenger_rides(route, trips).items():
-            used[pid] = used.get(pid, 0) + ride
+        for tid, ride in _route_ride_minutes(route).items():
+            trip = trips.get(tid)
+            if trip is None:
+                continue
+            pid = trip.pseudonymous_passenger_id
+            used[pid] = used.get(pid, 0) + quota_debit_minutes(problem, trip, ride)
     return used
+
+
+def time_accounting_totals(problem: DayProblem, result: PlanningResult) -> dict[str, float]:
+    trips = {t.id: t for t in problem.requests}
+    ride = quota = billable = 0
+    for route in result.route_plans:
+        for tid, minutes in _route_ride_minutes(route).items():
+            trip = trips.get(tid)
+            if trip is None:
+                continue
+            ride += minutes
+            quota += quota_debit_minutes(problem, trip, minutes)
+            billable += billable_service_minutes(trip, minutes)
+    return {
+        "ride_duration": float(ride),
+        "quota_debit": float(quota),
+        "billable_service": float(billable),
+    }
+
+
+def onboard_trip_ids(stops: list[Stop]) -> set[str]:
+    return {s.trip_id for s in stops if s.trip_id}
+
+
+def pooling_mix_violation(
+    problem: DayProblem,
+    onboard_ids: set[str],
+    new_trip: TripRequest,
+) -> str | None:
+    others = {tid for tid in onboard_ids if tid and tid != new_trip.id}
+    if not others:
+        return None
+    mode = problem.operator_policy.pooling_mode
+    if mode == PoolingMode.FORBIDDEN:
+        return f"POOLING_FORBIDDEN:{new_trip.id}"
+    if mode == PoolingMode.OPT_IN:
+        trips = {t.id: t for t in problem.requests}
+        if not new_trip.pooling_opt_in:
+            return f"POOLING_NOT_OPTED_IN:{new_trip.id}"
+        for oid in others:
+            other = trips.get(oid)
+            if other is None or not other.pooling_opt_in:
+                return f"POOLING_NOT_OPTED_IN:{oid}"
+    return None
+
+
+def pooling_route_violations(problem: DayProblem, result: PlanningResult) -> list[str]:
+    trips = {t.id: t for t in problem.requests}
+    found: list[str] = []
+    for route in result.route_plans:
+        assigned = [tid for tid in route.passenger_assignments if tid in trips]
+        if len(assigned) < 2:
+            continue
+        for tid in assigned:
+            issue = pooling_mix_violation(problem, set(assigned), trips[tid])
+            if issue:
+                found.append(issue)
+                break
+    return found
+
+
+def chain_group_violations(problem: DayProblem, result: PlanningResult) -> list[str]:
+    if problem.operator_policy.chain_mode != ChainMode.MANDATORY:
+        return []
+    served = set(result.served_requests)
+    groups: dict[str, list[str]] = {}
+    for trip in problem.requests:
+        if trip.booking_status.value in {"CANCELLED", "NO_SHOW"}:
+            continue
+        gid = trip.fulfillment_group_id
+        if not gid:
+            continue
+        groups.setdefault(gid, []).append(trip.id)
+    issues: list[str] = []
+    for gid, members in groups.items():
+        present = [tid for tid in members if tid in served]
+        if present and len(present) != len(members):
+            issues.append(f"CHAIN_PARTIAL:{gid}")
+    return issues
 
 
 def _route_ride_minutes(plan: RoutePlan) -> dict[str, int]:
@@ -480,6 +586,8 @@ def check_plan(
     routes = {r.vehicle_id: r.ordered_stops for r in result.route_plans}
     violations.extend(code for _tid, code in link_issues(trips, routes))
     violations.extend(incomplete_plan_issues(problem, result))
+    violations.extend(pooling_route_violations(problem, result))
+    violations.extend(chain_group_violations(problem, result))
     used_quota = used_quota_minutes(problem, result)
     for pid, cap in quota_caps(problem).items():
         if used_quota.get(pid, 0) > cap:

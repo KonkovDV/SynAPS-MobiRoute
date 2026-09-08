@@ -11,6 +11,6 @@ Status: IMPLEMENTED for online insertion and disruption recovery. Synthetic labo
 
 An invalid baseline is not silently repaired or certified. Where a result can be constructed, failed verification yields `NOT_VERIFIED`; malformed inputs may raise instead. No driver command or passenger refusal is authorized by this contract.
 
-This does not establish global DARP optimality, complete mandatory-return chains, legal pooling permission, billing-time semantics or passenger outcomes. Temporal churn is tracked separately in issue #19.
+This does not establish global DARP optimality, complete mandatory-return chains, legal pooling permission, billing-time semantics or passenger outcomes. Temporal churn is defined in `docs/plan-diff-contract.md`.
 
 Regression: `python -m unittest tests.test_online_result_lineage` with the real native extension built. Includes accepted/rejected replay, forged verification, changed travel inputs, detached results, payload collisions and fault-injected frozen rollback.

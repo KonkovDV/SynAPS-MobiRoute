@@ -8,7 +8,7 @@ Both reference fields apply when present; neither takes precedence over the othe
 
 The independent notary checks every route. Its legacy `only_vehicles` argument no longer skips physical checks: a subset cannot establish whole-plan feasibility.
 
-The policy module also supplies dependency ordering, ownership intersection and descendant/pruning helpers for constructive integration. Missing parents and incompatible anchors are not silently ignored; descendant traversal follows both fields without recursion.
+The policy module also supplies dependency ordering, ownership intersection and descendant/pruning helpers for constructive integration. Missing parents and incompatible anchors are not silently ignored; descendant traversal follows both fields without recursion. All-or-none passenger groups are `fulfillment_group_id` under `OperatorPolicy.chain_mode`, not these directional fields.
 
 ## Scope
 
