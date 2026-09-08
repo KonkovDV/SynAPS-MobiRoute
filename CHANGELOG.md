@@ -2,6 +2,17 @@
 
 ## Unreleased
 
+- IMPLEMENTED: `PlanDiff` reports same-vehicle retiming, driver changes and
+  add/remove-only routes. Frozen trips with shifted clocks are no longer
+  classified unchanged. Assignment-churn keys keep their previous meaning;
+  see `docs/plan-diff-contract.md`. Reporting only — not frozen-promise
+  certification.
+- IMPLEMENTED: versioned laboratory `OperatorPolicy` is distinct from solver
+  capability. Pooling permission, mandatory fulfillment groups and quota-debit
+  basis are explicit; ride duration, quota debit and billable service are
+  separate clocks. Dispatch outcomes are never operational authorization.
+  See `docs/operator-policy-contract.md`. Input fingerprints intentionally
+  change.
 - IMPLEMENTED: planning-input fingerprints include vehicle wheelchair-type
   compatibility. Changing this operative capability can no longer retain the
   previous fingerprint. Existing fingerprint values intentionally change.

@@ -48,6 +48,8 @@ def fingerprint_problem(problem: Any) -> str:
                     t.frozen,
                     t.same_vehicle_as,
                     t.insert_immediately_after,
+                    t.pooling_opt_in,
+                    t.fulfillment_group_id,
                     t.quota_minutes_remaining,
                     t.service_priority.value,
                     t.medical_priority,
@@ -88,5 +90,6 @@ def fingerprint_problem(problem: Any) -> str:
                 for d in problem.drivers
             ],
             [(p.pseudonymous_id, p.quota_minutes_remaining) for p in problem.passengers],
+            list(problem.operator_policy.fingerprint_tuple()),
         ]
     )

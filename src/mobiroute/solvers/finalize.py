@@ -11,7 +11,7 @@ from mobiroute.domain.models import ReasonCode, SolutionStatus
 from mobiroute.domain.requests import DayProblem, PlanningResult, RejectedTrip, TripExplanation
 from mobiroute.domain.route_graph import enrich_planning_result
 from mobiroute.reporting.explanations import default_explanations
-from mobiroute.validation.feasibility import check_plan
+from mobiroute.validation.feasibility import check_plan, time_accounting_totals
 from mobiroute.validation.reasons import non_empty_reason
 
 
@@ -88,6 +88,7 @@ def finalize_result(
         "served": float(len(result.served_requests)),
         "rejected": float(len(result.rejected_requests)),
         "violations": float(len(report.violations)),
+        **time_accounting_totals(problem, result),
     }
 
     active_reject = [

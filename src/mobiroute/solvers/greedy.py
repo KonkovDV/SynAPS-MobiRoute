@@ -14,6 +14,7 @@ from mobiroute.domain.constraints import (
 )
 from mobiroute.domain.driver_assignment import select_driver
 from mobiroute.domain.models import ReasonCode, SolutionStatus, StopType, WheelchairType
+from mobiroute.domain.policy import PoolingMode
 from mobiroute.domain.priorities import fifo_sort_key, trip_sort_key
 from mobiroute.domain.requests import (
     DayProblem,
@@ -47,7 +48,9 @@ from mobiroute.solvers.native_accel import (
 from mobiroute.solvers.native_accel import best_insert as kernel_best_insert
 from mobiroute.validation.feasibility import (
     accessibility_compatible,
+    onboard_trip_ids,
     passenger_rides,
+    pooling_mix_violation,
     quota_caps,
     trial_exceeds_quota,
     trial_exceeds_quota_rides,
@@ -377,6 +380,8 @@ def try_insert_trip(
     kernel: ProblemKernel | None = None,
 ) -> tuple[int, int, list[Stop], str] | None:
     """Score pickup/dropoff slots in the SoA kernel; materialize later."""
+    if pooling_mix_violation(problem, onboard_trip_ids(current_stops), trip):
+        return None
     pu, do = _pair_stops(trip)
     via = _via_stop(trip)
     merged = {**trips_by_id, trip.id: trip}
@@ -890,11 +895,12 @@ def solve_greedy(
     problem = validate_problem(problem)
     active = [t for t in problem.requests if t.booking_status.value not in {"CANCELLED", "NO_SHOW"}]
     active.sort(key=trip_sort_key)
+    pooling = problem.operator_policy.pooling_mode != PoolingMode.FORBIDDEN
     return _greedy_core(
         problem,
         active,
         solution_type="GREEDY_INSERTION",
-        pooling=True,
+        pooling=pooling,
         seed_stops=seed_stops,
         seed_drivers=seed_drivers,
     )
@@ -1106,6 +1112,12 @@ def _greedy_core(
                 )
                 continue
         use_pool = pooling and not trip.insert_immediately_after
+        if (
+            use_pool
+            and problem.operator_policy.pooling_mode == PoolingMode.OPT_IN
+            and not trip.pooling_opt_in
+        ):
+            use_pool = False
         if use_pool:
             new_idx = kernel.id_to_idx.get(trip.id)
             if new_idx is None:
@@ -1144,6 +1156,16 @@ def _greedy_core(
             part = score_stored(kernel, new_idx)
             if allowed_vids is not None:
                 part = [row for row in part if fleet_ids[row[0]] in allowed_vids]
+            part = [
+                row
+                for row in part
+                if pooling_mix_violation(
+                    problem,
+                    {s.trip_id for s in route_stops[fleet_ids[row[0]]] if s.trip_id},
+                    trip,
+                )
+                is None
+            ]
             n_feas = len(part)
             picked, quota_blocked, _picked_key = _consider_scored(
                 part,
