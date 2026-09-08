@@ -29,6 +29,7 @@ from mobiroute.validation.feasibility import (
     trip_quota_remaining,
     used_quota_minutes,
 )
+from mobiroute.validation.input import validate_problem, validate_trip
 from mobiroute.validation.reasons import diagnose_rejection, non_empty_reason
 
 
@@ -156,6 +157,7 @@ def dependent_trip_ids(problem: DayProblem, trip_id: str) -> set[str]:
 
 
 def apply_cancellation(problem: DayProblem, trip_id: str) -> DayProblem:
+    problem = validate_problem(problem)
     drop = dependent_trip_ids(problem, trip_id)
     reqs = []
     for t in problem.requests:
@@ -167,6 +169,7 @@ def apply_cancellation(problem: DayProblem, trip_id: str) -> DayProblem:
 
 
 def apply_no_show(problem: DayProblem, trip_id: str) -> DayProblem:
+    problem = validate_problem(problem)
     drop = dependent_trip_ids(problem, trip_id)
     reqs = []
     for t in problem.requests:
@@ -180,6 +183,7 @@ def apply_no_show(problem: DayProblem, trip_id: str) -> DayProblem:
 
 
 def apply_vehicle_unavailable(problem: DayProblem, vehicle_id: str) -> DayProblem:
+    problem = validate_problem(problem)
     vehs = []
     for v in problem.vehicles:
         if v.id == vehicle_id:
@@ -197,6 +201,7 @@ def apply_vehicle_unavailable(problem: DayProblem, vehicle_id: str) -> DayProble
 
 
 def apply_driver_unavailable(problem: DayProblem, driver_id: str) -> DayProblem:
+    problem = validate_problem(problem)
     drivers = []
     for d in problem.drivers:
         if d.id == driver_id:
@@ -209,6 +214,7 @@ def apply_driver_unavailable(problem: DayProblem, driver_id: str) -> DayProblem:
 def apply_traffic_delay(problem: DayProblem, delay_minutes: int) -> DayProblem:
     from mobiroute.adapters.travel_time import TravelTimeService
 
+    problem = validate_problem(problem)
     matrix = TravelTimeService(problem.travel).apply_traffic_delay(delay_minutes)
     return problem.model_copy(update={"travel": matrix})
 
@@ -220,6 +226,7 @@ def apply_appointment_change(
     appointment_start: int | None = None,
     appointment_end: int | None = None,
 ) -> DayProblem:
+    problem = validate_problem(problem)
     reqs = []
     for t in problem.requests:
         if t.id == trip_id:
@@ -283,6 +290,8 @@ def online_insert(
         trial_eval,
     )
 
+    problem = validate_problem(problem)
+    new_trip = validate_trip(new_trip)
     frozen = {t.id for t in problem.requests if t.frozen} | (
         set(baseline.served_requests) if protect_frozen else set()
     )
@@ -292,7 +301,7 @@ def online_insert(
             t.model_copy(update={"frozen": True}) if t.id in frozen and t.id != new_trip.id else t
             for t in reqs
         ]
-    updated = problem.model_copy(update={"requests": reqs})
+    updated = validate_problem(problem.model_copy(update={"requests": reqs}))
     trips_by_id = {t.id: t for t in updated.requests}
     vmap = {v.id: v for v in updated.vehicles}
     occupied = {rp.driver_id for rp in baseline.route_plans if rp.driver_id}
@@ -538,6 +547,7 @@ def recover_disruption(
     appointment_end: int | None = None,
     emergency_trip: TripRequest | None = None,
 ) -> tuple[DayProblem, PlanningResult, PlanDiff]:
+    problem = validate_problem(problem)
     updated = problem
     event_type = "DISRUPTION"
     payload = ""

@@ -10,10 +10,12 @@ from mobiroute.domain.requests import DayProblem, PlanningResult, RejectedTrip, 
 from mobiroute.solvers.finalize import finalize_result
 from mobiroute.solvers.greedy import _assign_driver, _simulate_route
 from mobiroute.validation.feasibility import accessibility_compatible
+from mobiroute.validation.input import validate_problem
 from mobiroute.validation.reasons import diagnose_rejection, non_empty_reason
 
 
 def solve_nearest(problem: DayProblem) -> PlanningResult:
+    problem = validate_problem(problem)
     active = [t for t in problem.requests if t.booking_status.value not in {"CANCELLED", "NO_SHOW"}]
     active.sort(key=trip_sort_key)
     return _nearest_core(problem, active)

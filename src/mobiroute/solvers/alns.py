@@ -17,6 +17,7 @@ from mobiroute.domain.requests import DayProblem, PlanningResult, Stop, TripRequ
 from mobiroute.domain.route_graph import service_stops
 from mobiroute.solvers.greedy import solve_greedy
 from mobiroute.solvers.native_accel import acceleration_status
+from mobiroute.validation.input import validate_problem
 
 DESTROY_OPS = ("random", "shaw", "worst", "route")
 
@@ -194,6 +195,7 @@ def solve_alns(
     sa_cooling: float = 0.92,
 ) -> PlanningResult:
     """Adaptive destroy/repair. Heuristic only — never OPTIMAL."""
+    problem = validate_problem(problem)
     seed = problem.seed if rng_seed is None else rng_seed
     rng = random.Random(seed)
     current = solve_greedy(problem)
