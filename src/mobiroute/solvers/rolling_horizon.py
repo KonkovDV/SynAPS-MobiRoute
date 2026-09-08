@@ -18,6 +18,7 @@ from mobiroute.domain.requests import DayProblem, PlanningResult, Stop
 from mobiroute.domain.route_graph import service_stops
 from mobiroute.solvers.greedy import solve_greedy
 from mobiroute.solvers.native_accel import acceleration_status
+from mobiroute.validation.input import validate_problem
 
 
 def _window_ends(
@@ -46,6 +47,7 @@ def solve_rolling_horizon(
     overlap_minutes: int = 30,
 ) -> PlanningResult:
     """Day-ahead RHC over greedy pooling insertion. Never OPTIMAL."""
+    problem = validate_problem(problem)
     active = [t for t in problem.requests if t.booking_status.value not in {"CANCELLED", "NO_SHOW"}]
     if not active:
         empty = solve_greedy(problem)
