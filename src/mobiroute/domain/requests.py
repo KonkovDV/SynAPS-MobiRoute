@@ -19,6 +19,7 @@ from mobiroute.domain.models import (
     WheelchairType,
     ZoneId,
 )
+from mobiroute.domain.policy import OperatorPolicy
 from mobiroute.domain.travel_graph import INF, floyd_warshall, reconstruct_path
 
 
@@ -127,6 +128,8 @@ class TripRequest(StrictModel):
     channel: str = "STANDARD"
     same_vehicle_as: str | None = None
     insert_immediately_after: str | None = None
+    pooling_opt_in: bool = False
+    fulfillment_group_id: str | None = None
     # Optional third stop (clinic then pharmacy). Passenger stays onboard.
     via_zone: ZoneId | None = None
     via_service_duration: TimeMin = 2
@@ -258,7 +261,13 @@ class PlanDiff(StrictModel):
     added_trips: list[str] = Field(default_factory=list)
     removed_trips: list[str] = Field(default_factory=list)
     moved_trips: list[str] = Field(default_factory=list)
+    retimed_trips: list[str] = Field(default_factory=list)
+    changed_driver_trips: list[str] = Field(default_factory=list)
+    broken_frozen_trips: list[str] = Field(default_factory=list)
     unchanged_frozen_trips: list[str] = Field(default_factory=list)
+    added_routes: list[str] = Field(default_factory=list)
+    removed_routes: list[str] = Field(default_factory=list)
+    retimed_routes: list[str] = Field(default_factory=list)
     changed_routes: list[str] = Field(default_factory=list)
     changed_vehicle_assignments: list[str] = Field(default_factory=list)
     newly_rejected_trips: list[RejectedTrip] = Field(default_factory=list)
@@ -346,5 +355,6 @@ class DayProblem(StrictModel):
     drivers: list[Driver]
     requests: list[TripRequest]
     travel: TravelMatrix
+    operator_policy: OperatorPolicy = Field(default_factory=OperatorPolicy)
     data_provenance: DataProvenance = DataProvenance.SYNTHETIC
     claim_level: str = "synthetic_benchmark"
