@@ -23,6 +23,7 @@ from mobiroute.domain.requests import (
     TripRequest,
     Vehicle,
 )
+from mobiroute.domain.route_graph import service_stops
 from mobiroute.validation.completeness import incomplete_plan_issues
 
 
@@ -149,18 +150,32 @@ def pooling_mix_violation(
     return None
 
 
-def pooling_route_violations(problem: DayProblem, result: PlanningResult) -> list[str]:
+def pooling_stops_violate(problem: DayProblem, stops: list[Stop]) -> str | None:
+    """Simultaneous onboard mix, not 'two trips used this vehicle today'."""
     trips = {t.id: t for t in problem.requests}
+    onboard: set[str] = set()
+    for stop in service_stops(list(stops)):
+        tid = stop.trip_id
+        if tid is None:
+            continue
+        if stop.stop_type == StopType.PICKUP:
+            trip = trips.get(tid)
+            if trip is not None:
+                issue = pooling_mix_violation(problem, onboard, trip)
+                if issue:
+                    return issue
+            onboard.add(tid)
+        elif stop.stop_type == StopType.DROPOFF:
+            onboard.discard(tid)
+    return None
+
+
+def pooling_route_violations(problem: DayProblem, result: PlanningResult) -> list[str]:
     found: list[str] = []
     for route in result.route_plans:
-        assigned = [tid for tid in route.passenger_assignments if tid in trips]
-        if len(assigned) < 2:
-            continue
-        for tid in assigned:
-            issue = pooling_mix_violation(problem, set(assigned), trips[tid])
-            if issue:
-                found.append(issue)
-                break
+        issue = pooling_stops_violate(problem, list(route.ordered_stops))
+        if issue:
+            found.append(issue)
     return found
 
 
@@ -215,6 +230,18 @@ def passenger_rides(plan: RoutePlan, trips: dict[str, TripRequest]) -> dict[str,
     return used
 
 
+def passenger_quota_debits(problem: DayProblem, plan: RoutePlan) -> dict[str, int]:
+    trips = {t.id: t for t in problem.requests}
+    used: dict[str, int] = {}
+    for tid, ride in _route_ride_minutes(plan).items():
+        trip = trips.get(tid)
+        if trip is None:
+            continue
+        pid = trip.pseudonymous_passenger_id
+        used[pid] = used.get(pid, 0) + quota_debit_minutes(problem, trip, ride)
+    return used
+
+
 def quota_caps(problem: DayProblem) -> dict[str, int]:
     by_pid = {p.pseudonymous_id: p.quota_minutes_remaining for p in problem.passengers}
     caps: dict[str, int] = {}
@@ -238,10 +265,12 @@ def trial_exceeds_quota(
     quota_cap: dict[str, int],
     used_now: dict[str, int],
     previous_on_vehicle: dict[str, int],
+    problem: DayProblem,
 ) -> bool:
     """True if accepting this vehicle's trial would exceed any passenger-day cap."""
+    del trips
     return trial_exceeds_quota_rides(
-        passenger_rides(trial, trips),
+        passenger_quota_debits(problem, trial),
         quota_cap=quota_cap,
         used_now=used_now,
         previous_on_vehicle=previous_on_vehicle,

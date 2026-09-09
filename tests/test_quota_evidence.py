@@ -171,6 +171,7 @@ class QuotaEvidenceTests(unittest.TestCase):
                 quota_cap={"p": 30},
                 used_now={"p": 25},
                 previous_on_vehicle={"p": 10},
+                problem=problem,
             )
         )
         self.assertFalse(
@@ -180,6 +181,7 @@ class QuotaEvidenceTests(unittest.TestCase):
                 quota_cap={"p": 35},
                 used_now={"p": 25},
                 previous_on_vehicle={"p": 10},
+                problem=problem,
             )
         )
 

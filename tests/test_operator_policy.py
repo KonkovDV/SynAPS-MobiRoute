@@ -28,6 +28,7 @@ from mobiroute.validation.feasibility import (
     billable_service_minutes,
     check_plan,
     time_accounting_totals,
+    trial_exceeds_quota,
     used_quota_minutes,
 )
 from mobiroute.validation.input import validate_problem
@@ -113,6 +114,21 @@ def pooled_pair():
     return problem, result
 
 
+def sequential_pair():
+    problem, result = pooled_pair()
+    route = result.route_plans[0]
+    route.ordered_stops = [
+        Stop(id="a:PU", trip_id="a", stop_type=StopType.PICKUP, location="d"),
+        Stop(id="a:DO", trip_id="a", stop_type=StopType.DROPOFF, location="q"),
+        Stop(id="b:PU", trip_id="b", stop_type=StopType.PICKUP, location="d"),
+        Stop(id="b:DO", trip_id="b", stop_type=StopType.DROPOFF, location="q"),
+    ]
+    route.arrival_times = {"a:PU": 0, "a:DO": 15, "b:PU": 27, "b:DO": 42}
+    route.departure_times = {"a:PU": 5, "a:DO": 17, "b:PU": 32, "b:DO": 44}
+    route.ride_times = {"a": 10, "b": 10}
+    return problem, result
+
+
 class OperatorPolicyTests(unittest.TestCase):
     def test_laboratory_default_is_explicit_and_unapproved(self):
         problem, _result = quota_case(quota=None)
@@ -146,6 +162,38 @@ class OperatorPolicyTests(unittest.TestCase):
         self.assertFalse(report.feasible)
         self.assertTrue(any(v.startswith("POOLING_FORBIDDEN:") for v in report.violations))
 
+    def test_forbidden_allows_sequential_trips_on_the_same_vehicle(self):
+        problem, result = sequential_pair()
+        problem.operator_policy = OperatorPolicy(pooling_mode=PoolingMode.FORBIDDEN)
+        self.assertTrue(check_plan(problem, result).feasible)
+        overlapping, shared = pooled_pair()
+        overlapping.operator_policy = OperatorPolicy(pooling_mode=PoolingMode.FORBIDDEN)
+        self.assertTrue(
+            any(
+                v.startswith("POOLING_FORBIDDEN:")
+                for v in check_plan(overlapping, shared).violations
+            )
+        )
+
+    def test_cpsat_forbidden_serves_sequential_not_simultaneous_pair(self):
+        from mobiroute.solvers.cpsat import solve_cpsat
+
+        problem, _result = sequential_pair()
+        problem.operator_policy = OperatorPolicy(
+            pooling_mode=PoolingMode.FORBIDDEN,
+            provenance="laboratory:forbidden-sequential",
+        )
+        result = solve_cpsat(problem)
+        self.assertTrue(result.verified_feasible, result.objective_values)
+        self.assertEqual(sorted(result.served_requests), ["a", "b"])
+        loads = [
+            max(rp.passenger_load_after_stop.values())
+            for rp in result.route_plans
+            if rp.passenger_load_after_stop
+        ]
+        self.assertTrue(loads)
+        self.assertLessEqual(max(loads), 1)
+
     def test_opt_in_requires_every_shared_passenger(self):
         problem, result = pooled_pair()
         problem.operator_policy = OperatorPolicy(pooling_mode=PoolingMode.OPT_IN)
@@ -172,6 +220,40 @@ class OperatorPolicyTests(unittest.TestCase):
         problem.operator_policy = OperatorPolicy(quota_debit_basis=QuotaDebitBasis.BILLABLE_SERVICE)
         self.assertEqual(used_quota_minutes(problem, result), {"p": billable})
         self.assertIn("QUOTA:p", check_plan(problem, result).violations)
+
+    def test_search_gates_use_billable_debit_not_ride_only(self):
+        from mobiroute.solvers.cpsat import solve_cpsat
+
+        problem, result = quota_case(quota=24)
+        ride_problem = problem.model_copy(deep=True)
+        problem.operator_policy = OperatorPolicy(
+            quota_debit_basis=QuotaDebitBasis.BILLABLE_SERVICE,
+            provenance="laboratory:billable-debit",
+        )
+        route = result.route_plans[0]
+        trips = {t.id: t for t in problem.requests}
+        self.assertFalse(
+            trial_exceeds_quota(
+                route,
+                trips,
+                quota_cap={"p": 24},
+                used_now={},
+                previous_on_vehicle={},
+                problem=ride_problem,
+            )
+        )
+        self.assertTrue(
+            trial_exceeds_quota(
+                route,
+                trips,
+                quota_cap={"p": 24},
+                used_now={},
+                previous_on_vehicle={},
+                problem=problem,
+            )
+        )
+        served = solve_cpsat(problem)
+        self.assertNotIn("t", served.served_requests)
 
     def test_mandatory_group_is_not_a_directional_link(self):
         from mobiroute.domain.requests import RejectedTrip
@@ -216,13 +298,11 @@ class OperatorPolicyTests(unittest.TestCase):
         from mobiroute.solvers.nearest import solve_nearest
         from mobiroute.solvers.rolling_horizon import solve_rolling_horizon
 
-        p = problem()
+        p = sequential_pair()[0]
         p.operator_policy = OperatorPolicy(
             pooling_mode=PoolingMode.FORBIDDEN,
-            chain_mode=ChainMode.MANDATORY,
             provenance="laboratory:forbidden-pooling-fixture",
         )
-        p.requests[0].fulfillment_group_id = "solo"
         solvers = (
             solve_fifo,
             solve_greedy,
@@ -236,6 +316,7 @@ class OperatorPolicyTests(unittest.TestCase):
             with self.subTest(solver=solve.__name__):
                 result = solve(p)
                 self.assertTrue(result.verified_feasible, result.objective_values)
-                self.assertEqual(result.served_requests, ["base"])
+                self.assertEqual(sorted(result.served_requests), ["a", "b"])
                 for route in result.route_plans:
-                    self.assertLessEqual(len(route.passenger_assignments), 1)
+                    if route.passenger_load_after_stop:
+                        self.assertLessEqual(max(route.passenger_load_after_stop.values()), 1)
