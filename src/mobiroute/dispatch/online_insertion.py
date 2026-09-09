@@ -448,8 +448,23 @@ def online_insert(
     for fi, v in enumerate(updated.vehicles):
         existing = baseline_by_v.get(v.id)
         if existing is not None and existing.driver_id:
-            if accessibility_compatible(v, new_trip) is None:
-                scored_idx.append(fi)
+            if accessibility_compatible(v, new_trip) is not None:
+                alt_no.append(f"{v.id}:NO_COMPATIBLE_VEHICLE")
+                continue
+            # A seated driver is not a licence: re-check the need of the new trip.
+            # A committed route keeps its driver; swapping one is manual review.
+            keep = _assign_driver(
+                updated,
+                v.id,
+                vehicle=v,
+                needs_accessibility=new_trip.needs_boarding_assistance,
+                occupied_driver_ids=occupied - {existing.driver_id},
+                preferred_id=existing.driver_id,
+            )
+            if keep != existing.driver_id:
+                alt_no.append(f"{v.id}:NO_QUALIFIED_DRIVER")
+                continue
+            scored_idx.append(fi)
             continue
         if accessibility_compatible(v, new_trip) is not None:
             alt_no.append(f"{v.id}:NO_COMPATIBLE_VEHICLE")
@@ -515,6 +530,7 @@ def online_insert(
             continue
         ev = trial_eval(kernel, fleet_i, i, mid, j, new_idx)
         if ev is None:
+            alt_no.append(f"{cand_vid}:INSERT_INFEASIBLE")
             continue
         trial_used = _rides_by_pid(ev[2], kernel, trips_for_quota, updated)
         prev = passenger_quota_debits(updated, old_rp) if old_rp is not None else {}
@@ -529,9 +545,11 @@ def online_insert(
         core = service_stops(list(old_rp.ordered_stops)) if old_rp is not None else []
         seq = _materialize_insert(core, pu, via, do, i, mid, j)
         if pooling_stops_violate(updated, seq):
+            alt_no.append(f"{cand_vid}:POOLING_BLOCKED")
             continue
         trial = route_plan_from_eval(vmap[cand_vid], did, seq, kernel, ev)
         if trial is None:
+            alt_no.append(f"{cand_vid}:SIMULATION_FAILED")
             continue
         if protect_frozen and _frozen_times_changed(old_rp, trial, frozen):
             trial = simulate_stop_sequence(
@@ -541,6 +559,7 @@ def online_insert(
                 frozen_blocked = True
                 continue
             if pooling_stops_violate(updated, list(trial.ordered_stops)):
+                alt_no.append(f"{cand_vid}:POOLING_BLOCKED")
                 continue
             if trial_exceeds_quota(
                 trial,
@@ -571,10 +590,12 @@ def online_insert(
             quota_blocked=quota_blocked,
             frozen_blocked=frozen_blocked,
         )
+        # One vehicle can fail at several insertion points; publish it once.
+        evidence = list(dict.fromkeys(alt_no))[:8]
         detail = (
             "insertion would change frozen trips"
             if frozen_blocked and code == ReasonCode.MANUAL_REVIEW_REQUIRED.value
-            else "no feasible insertion into existing routes; " + "; ".join(alt_no[:8])
+            else "; ".join(["no feasible insertion into existing routes", *evidence])
         )
         rejected = [
             *list(baseline.rejected_requests),
