@@ -13,6 +13,7 @@ from mobiroute.domain.constraints import (
     push_past_unavail,
 )
 from mobiroute.domain.driver_assignment import select_driver
+from mobiroute.domain.linked_trips import dependent_ids, linked_parents
 from mobiroute.domain.models import ReasonCode, SolutionStatus, StopType, WheelchairType
 from mobiroute.domain.policy import PoolingMode
 from mobiroute.domain.priorities import fifo_sort_key, trip_sort_key
@@ -48,10 +49,10 @@ from mobiroute.solvers.native_accel import (
 from mobiroute.solvers.native_accel import best_insert as kernel_best_insert
 from mobiroute.validation.feasibility import (
     accessibility_compatible,
-    onboard_trip_ids,
-    passenger_rides,
-    pooling_mix_violation,
+    passenger_quota_debits,
+    pooling_stops_violate,
     quota_caps,
+    quota_debit_minutes,
     trial_exceeds_quota,
     trial_exceeds_quota_rides,
 )
@@ -380,8 +381,6 @@ def try_insert_trip(
     kernel: ProblemKernel | None = None,
 ) -> tuple[int, int, list[Stop], str] | None:
     """Score pickup/dropoff slots in the SoA kernel; materialize later."""
-    if pooling_mix_violation(problem, onboard_trip_ids(current_stops), trip):
-        return None
     pu, do = _pair_stops(trip)
     via = _via_stop(trip)
     merged = {**trips_by_id, trip.id: trip}
@@ -419,7 +418,7 @@ def try_insert_trip(
         block = [pu, via, do] if via is not None else [pu, do]
         seq = [*core[:i], *block, *core[i:]]
         plan = simulate_stop_sequence(problem, vehicle, assigned, seq, merged)
-        if plan is None:
+        if plan is None or pooling_stops_violate(problem, seq):
             return None
         return (plan.route_duration, sum(plan.waiting_times.values()), seq, assigned)
     vk = k.vehicles[vehicle.id]
@@ -432,10 +431,9 @@ def try_insert_trip(
     if found is None:
         return None
     i, mid, j, dur, wait, _mx = found
-    if via is None or mid < 0:
-        seq = [*core[:i], pu, *core[i:j], do, *core[j:]]
-    else:
-        seq = [*core[:i], pu, *core[i:mid], via, *core[mid:j], do, *core[j:]]
+    seq = _materialize_insert(core, pu, via, do, i, mid, j)
+    if pooling_stops_violate(problem, seq):
+        return None
     return (dur, wait, seq, assigned)
 
 
@@ -517,6 +515,9 @@ def _pool_candidates_native(
     for fleet_i, i, mid, j, dur, wait, _mx in scored:
         vid, did, core = metas[fleet_i]
         seq = _materialize_insert(core, pu, via, do, i, mid, j)
+        if pooling_stops_violate(problem, seq):
+            alt_no.append(f"{vid}:POOLING_FORBIDDEN")
+            continue
         candidates.append((dur, wait, vid, seq, did))
     return candidates, alt_ok, alt_no
 
@@ -554,6 +555,7 @@ def _rides_by_pid(
     ride_pairs: list[tuple[int, int]],
     kernel: ProblemKernel,
     trips_by_id: dict[str, TripRequest],
+    problem: DayProblem,
 ) -> dict[str, int]:
     used: dict[str, int] = {}
     ids = kernel.trip_ids
@@ -564,7 +566,7 @@ def _rides_by_pid(
         if trip is None:
             continue
         pid = trip.pseudonymous_passenger_id
-        used[pid] = used.get(pid, 0) + mins
+        used[pid] = used.get(pid, 0) + quota_debit_minutes(problem, trip, mins)
     return used
 
 
@@ -598,18 +600,7 @@ def _direct_ride_minutes(problem: DayProblem, trip: TripRequest) -> int:
 
 
 def _linked_trip_ids(problem: DayProblem, trip_id: str) -> set[str]:
-    found = {trip_id}
-    changed = True
-    while changed:
-        changed = False
-        for t in problem.requests:
-            if t.id in found:
-                continue
-            parent = t.same_vehicle_as or t.insert_immediately_after
-            if parent in found:
-                found.add(t.id)
-                changed = True
-    return found
+    return dependent_ids(problem.requests, {trip_id})
 
 
 def _strip_trip_ids(stops: list[Stop], drop: set[str]) -> list[Stop]:
@@ -639,18 +630,7 @@ def _pickup_order(stops: list[Stop]) -> list[str]:
 
 
 def _child_trip_ids(trips_by_id: dict[str, TripRequest], root: str) -> set[str]:
-    found = {root}
-    changed = True
-    while changed:
-        changed = False
-        for t in trips_by_id.values():
-            if t.id in found:
-                continue
-            parent = t.same_vehicle_as or t.insert_immediately_after
-            if parent in found:
-                found.add(t.id)
-                changed = True
-    return found
+    return dependent_ids(trips_by_id.values(), {root})
 
 
 def _consider_scored(
@@ -667,6 +647,7 @@ def _consider_scored(
     veh_used: dict[str, dict[str, int]],
     alt_no: list[str],
     picked_key: tuple[int, int, int],
+    problem: DayProblem,
 ) -> tuple[
     tuple[int, int, int, int, str, str, dict[str, int], int, int, int] | None,
     bool,
@@ -685,7 +666,7 @@ def _consider_scored(
         ride_pairs = trial_rides(kernel, fleet_i, i, mid, j, new_idx)
         if ride_pairs is None:
             continue
-        trial_used = _rides_by_pid(ride_pairs, kernel, merged)
+        trial_used = _rides_by_pid(ride_pairs, kernel, merged, problem)
         if trial_exceeds_quota_rides(
             trial_used,
             quota_cap=quota_cap,
@@ -733,8 +714,8 @@ def _active_seed_stops(
             trip = trips_by_id.get(tid)
             if trip is None:
                 continue
-            parent = trip.same_vehicle_as or trip.insert_immediately_after
-            if parent and parent not in seeded:
+            parent_ids = linked_parents(trip)
+            if parent_ids and any(p not in seeded for p in parent_ids):
                 seeded.discard(tid)
                 changed = True
     for vid, stops in route_stops.items():
@@ -806,7 +787,7 @@ def _peel_final_quota(
             for tid, mins in rp.ride_times.items():
                 owners[tid] = rp.vehicle_id
                 ride_of[tid] = mins
-            for pid, mins in passenger_rides(rp, trips_by_id).items():
+            for pid, mins in passenger_quota_debits(problem, rp).items():
                 used[pid] = used.get(pid, 0) + mins
         over = [pid for pid, mins in used.items() if pid in quota_cap and mins > quota_cap[pid]]
         if not over:
@@ -971,7 +952,7 @@ def _greedy_core(
                 set_route(kernel, fi, st, sk)
                 row = eval_route(kernel, fi)
                 continue
-            trial_used = _rides_by_pid(row[2], kernel, trips_by_id)
+            trial_used = _rides_by_pid(row[2], kernel, trips_by_id, problem)
             over = {
                 pid
                 for pid, mins in trial_used.items()
@@ -1002,7 +983,7 @@ def _greedy_core(
             if tid not in served:
                 served.append(tid)
                 reasons[tid] = ReasonCode.ACCEPTED.value
-        rides = passenger_rides(seed_plan, trips_by_id)
+        rides = passenger_quota_debits(problem, seed_plan)
         veh_used[v.id] = rides
         for pid, mins in rides.items():
             used_now[pid] = used_now.get(pid, 0) + mins
@@ -1025,14 +1006,17 @@ def _greedy_core(
             trip = trips_by_id.get(tid)
             if trip is None:
                 continue
-            parent = trip.same_vehicle_as or trip.insert_immediately_after
-            if parent and parent not in onboard:
+            parents = linked_parents(trip)
+            if parents and any(p not in onboard for p in parents):
                 continue
             new_idx = kernel.id_to_idx.get(tid)
             if new_idx is None:
                 continue
             qleft = quota_left.get(trip.pseudonymous_passenger_id)
-            if qleft is not None and _direct_ride_minutes(problem, trip) > qleft:
+            if (
+                qleft is not None
+                and quota_debit_minutes(problem, trip, _direct_ride_minutes(problem, trip)) > qleft
+            ):
                 continue
             merged = {**trips_by_id, trip.id: trip}
             cand, _, _ = _consider_scored(
@@ -1048,6 +1032,7 @@ def _greedy_core(
                 veh_used=veh_used,
                 alt_no=[],
                 picked_key=(10**9, 10**9, 10**9),
+                problem=problem,
             )
             if cand is None:
                 continue
@@ -1159,10 +1144,17 @@ def _greedy_core(
             part = [
                 row
                 for row in part
-                if pooling_mix_violation(
+                if pooling_stops_violate(
                     problem,
-                    {s.trip_id for s in route_stops[fleet_ids[row[0]]] if s.trip_id},
-                    trip,
+                    _materialize_insert(
+                        service_stops(route_stops[fleet_ids[row[0]]]),
+                        pu,
+                        via,
+                        do,
+                        row[1],
+                        row[2],
+                        row[3],
+                    ),
                 )
                 is None
             ]
@@ -1180,6 +1172,7 @@ def _greedy_core(
                 veh_used=veh_used,
                 alt_no=alt_no,
                 picked_key=(10**9, 10**9, 10**9),
+                problem=problem,
             )
             if picked is None:
                 code = (
@@ -1323,6 +1316,7 @@ def _greedy_core(
                 quota_cap=quota_cap,
                 used_now=used_now,
                 previous_on_vehicle=veh_used.get(vid, {}),
+                problem=problem,
             ):
                 quota_blocked = True
                 continue
@@ -1359,7 +1353,7 @@ def _greedy_core(
         reasons[trip.id] = ReasonCode.ACCEPTED.value
         for pid, mins in veh_used.get(best_vid, {}).items():
             used_now[pid] = used_now.get(pid, 0) - mins
-        veh_used[best_vid] = passenger_rides(plan, merged)
+        veh_used[best_vid] = passenger_quota_debits(problem, plan)
         for pid, mins in veh_used[best_vid].items():
             used_now[pid] = used_now.get(pid, 0) + mins
             if pid in quota_cap:
