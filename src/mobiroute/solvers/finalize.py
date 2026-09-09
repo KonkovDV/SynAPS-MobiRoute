@@ -15,7 +15,8 @@ from mobiroute.validation.feasibility import check_plan, time_accounting_totals
 from mobiroute.validation.reasons import non_empty_reason
 
 
-def _plan_id(result: PlanningResult) -> str:
+def plan_identity(result: PlanningResult) -> str:
+    """A plan id fingerprints the plan that is published, not the pass before it."""
     key = f"mobiroute:plan:{result.input_hash}:{result.config_hash}:{result.solution_type}"
     return str(uuid.uuid5(uuid.NAMESPACE_URL, key))
 
@@ -115,7 +116,7 @@ def finalize_result(
     result.claim_level = problem.claim_level
     result.data_provenance = problem.data_provenance
     if not result.plan_id:
-        result.plan_id = _plan_id(result)
+        result.plan_id = plan_identity(result)
     result.fairness_metrics = compute_fairness(problem, result)
     result.solver_config = {
         **result.solver_config,

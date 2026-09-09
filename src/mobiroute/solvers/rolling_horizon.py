@@ -16,6 +16,7 @@ from mobiroute.adapters.fingerprint import fingerprint
 from mobiroute.domain.models import SolutionStatus
 from mobiroute.domain.requests import DayProblem, PlanningResult, Stop
 from mobiroute.domain.route_graph import service_stops
+from mobiroute.solvers.finalize import plan_identity
 from mobiroute.solvers.greedy import solve_greedy
 from mobiroute.solvers.native_accel import acceleration_status
 from mobiroute.validation.input import validate_problem
@@ -119,7 +120,7 @@ def _stamp_rhc(
             if result.rejected_requests
             else SolutionStatus.HEURISTIC_FEASIBLE.value
         )
-    return result.model_copy(
+    stamped = result.model_copy(
         update={
             "status": status,
             "solution_type": "RHC",
@@ -135,3 +136,6 @@ def _stamp_rhc(
             ),
         }
     )
+    # The greedy pass inside the last window published its own identity. What
+    # leaves this function is an RHC plan, so the id must fingerprint RHC.
+    return stamped.model_copy(update={"plan_id": plan_identity(stamped)})
