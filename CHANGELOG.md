@@ -2,18 +2,11 @@
 
 ## Unreleased
 
-## 0.2.3 — 2026-09-09
-
-- Package identity matches `main`: `__version__` / `pyproject.toml` / READMEs /
-  `APPLICATION.md` / `CITATION.cff` are **0.2.3**. Tagged 0.2.2 remains the
-  2026-08-30 pin `6178c93`; this drop records the later contract stack and
-  kernel pin on the package version that reviewers actually read.
-- SynAPS pin bumped to
-  [`07f11ebb`](https://github.com/KonkovDV/SynAPS/commit/07f11ebb31357ff65c8c078f94207c965a255cc1)
-  to close the 2026-09-09 lag (two kernel commits: domain-pin record, then
-  industrial seed42 RHC precedence). ADR-0004 regressions stay: fail-closed
-  coverage, calendar encode, claims-lint. DARP search is still this repo.
-  KI-N12 stays closed. Not a courtesy float on future kernel HEAD.
+- IMPLEMENTED: `BILLABLE_SERVICE` quota debit charges the dwell the plan actually
+  holds (`max(boarding_duration, 5)` + ride + alighting) in the notary, the
+  insertion gates, CP-SAT and the `diagnose_rejection` quota lower bound. A
+  declared boarding below the enforced curb wait can no longer understate a
+  passenger-day entitlement. Not an operator tariff, billing or legal claim.
 - IMPLEMENTED: pooling `FORBIDDEN` / `OPT_IN` is simultaneous onboard occupancy.
   Sequential PU→DO pairs on one vehicle are not pooling. Search and notary use
   the same walk.
@@ -25,6 +18,12 @@
   after finalize. Beam / nearest / CP-SAT no longer stamp a full JSON dump.
 - IMPLEMENTED: `PlanDiff` and online freeze protection treat pickup/dropoff
   departure shifts (dwell-only) as retiming / broken frozen, not unchanged.
+- SynAPS pin bumped to
+  [`07f11ebb`](https://github.com/KonkovDV/SynAPS/commit/07f11ebb31357ff65c8c078f94207c965a255cc1)
+  to close the 2026-09-09 lag (two kernel commits: domain-pin record, then
+  industrial seed42 RHC precedence). ADR-0004 regressions stay: fail-closed
+  coverage, calendar encode, claims-lint. DARP search is still this repo.
+  KI-N12 stays closed. Not a courtesy float on future kernel HEAD.
 - IMPLEMENTED: `PlanDiff` reports same-vehicle retiming, driver changes and
   add/remove-only routes. Frozen trips with shifted clocks are no longer
   classified unchanged. Assignment-churn keys keep their previous meaning;
@@ -61,10 +60,6 @@
 - Independent notary rejects phantom service, driverless service, reversed timestamps,
   wrong pickup/dropoff locations, early pickups and missing alighting/VIA dwell;
   validates explicit/implicit depot-return occupancy against driver/vehicle unavailability.
-- Honesty: freeze-protection and ops recovery tests assert `broken_frozen` /
-  removed-or-moved trips, not key presence in `plan_churn`. Dated 2026-08-12
-  implementation audit keeps the snapshot and records a 2026-09-09 erratum:
-  greedy pooling load ≥ 2 is covered by `tests/test_pooling.py`.
 
 ## 0.2.2 — 2026-08-30
 
