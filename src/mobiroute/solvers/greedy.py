@@ -38,7 +38,6 @@ from mobiroute.solvers.native_accel import (
     commit_insert,
     eval_fleet,
     eval_route,
-    score_fleet,
     score_stored,
     set_fleet,
     set_route,
@@ -460,78 +459,6 @@ def _materialize_insert(
     return [*core[:i], pu, *core[i:mid], via, *core[mid:j], do, *core[j:]]
 
 
-def _pool_candidates_native(
-    problem: DayProblem,
-    trip: TripRequest,
-    kernel: ProblemKernel,
-    route_stops: dict[str, list[Stop]],
-    vehicle_driver: dict[str, str | None],
-    occupied: set[str],
-    allowed_vids: set[str] | None,
-    trips_by_id: dict[str, TripRequest],
-) -> tuple[list[tuple[int, int, str, list[Stop], str]], list[str], list[str]]:
-    """One Rust score_fleet call; Python keeps driver/access filters and materialization."""
-    pu, do = _pair_stops(trip)
-    via = _via_stop(trip)
-    stop_trips: list[list[int]] = []
-    stop_kinds: list[list[int]] = []
-    vehs: list[list[int]] = []
-    unavails: list[list[int]] = []
-    metas: list[tuple[str, str, list[Stop]]] = []
-    alt_no: list[str] = []
-    new_idx = kernel.id_to_idx.get(trip.id)
-    if new_idx is None:
-        return [], [], [f"{trip.id}:UNKNOWN_TRIP"]
-    for v in problem.vehicles:
-        if allowed_vids is not None and v.id not in allowed_vids:
-            alt_no.append(f"{v.id}:NOT_PAIRED_VEHICLE")
-            continue
-        acc = accessibility_compatible(v, trip)
-        if acc is not None:
-            alt_no.append(f"{v.id}:{acc.value}")
-            continue
-        occ = occupied - ({vehicle_driver[v.id]} if vehicle_driver[v.id] else set())
-        driver_id = vehicle_driver[v.id] or _assign_driver(
-            problem,
-            v.id,
-            needs_accessibility=trip.needs_boarding_assistance
-            or _needs_accessibility(route_stops[v.id], trips_by_id),
-            occupied_driver_ids=occ,
-            preferred_id=vehicle_driver[v.id],
-        )
-        if driver_id is None:
-            alt_no.append(f"{v.id}:NO_DRIVER")
-            continue
-        core = service_stops(route_stops[v.id])
-        st, sk = kernel.stops_to_arrays(core)
-        vk = kernel.vehicles[v.id]
-        dk = kernel.drivers.get(driver_id)
-        veh, una = vehicle_payload(vk, dk)
-        stop_trips.append(st)
-        stop_kinds.append(sk)
-        vehs.append(veh)
-        unavails.append(una)
-        metas.append((v.id, driver_id, core))
-    if not metas:
-        return [], [], alt_no
-    scored = score_fleet(kernel, stop_trips, stop_kinds, vehs, unavails, new_idx)
-    feasible = {row[0] for row in scored}
-    for idx, (vid, _did, _core) in enumerate(metas):
-        if idx not in feasible:
-            alt_no.append(f"{vid}:INSERT_INFEASIBLE")
-    alt_ok = [metas[row[0]][0] for row in scored]
-    candidates: list[tuple[int, int, str, list[Stop], str]] = []
-    for fleet_i, i, mid, j, dur, wait, _mx in scored:
-        vid, did, core = metas[fleet_i]
-        seq = _materialize_insert(core, pu, via, do, i, mid, j)
-        issue = pooling_stops_violate(problem, seq)
-        if issue:
-            alt_no.append(f"{vid}:{issue.split(':', 1)[0]}")
-            continue
-        candidates.append((dur, wait, vid, seq, did))
-    return candidates, alt_ok, alt_no
-
-
 def _sync_native_fleet(
     kernel: ProblemKernel,
     problem: DayProblem,
@@ -708,6 +635,39 @@ def _unserve_trips(
         reasons[tid] = code
 
 
+def _unresolved_insert_code(
+    problem: DayProblem,
+    trip: TripRequest,
+    *,
+    quota_blocked: bool = False,
+) -> str:
+    """Quota and wait-return keep their codes; unresolved search is diagnosed."""
+    if quota_blocked:
+        return ReasonCode.QUOTA_EXCEEDED.value
+    if trip.insert_immediately_after:
+        return ReasonCode.WAIT_RETURN_INFEASIBLE.value
+    return non_empty_reason(diagnose_rejection(problem, trip))
+
+
+def _unserve_leftover(
+    problem: DayProblem,
+    trips_by_id: dict[str, TripRequest],
+    served: list[str],
+    rejected: list[RejectedTrip],
+    reasons: dict[str, str],
+    tids: set[str],
+) -> None:
+    """Rebuild/peel leftovers are diagnosed per trip, not one shared time-window stamp."""
+    for tid in sorted(tids):
+        trip = trips_by_id.get(tid)
+        code = (
+            non_empty_reason(diagnose_rejection(problem, trip))
+            if trip is not None
+            else ReasonCode.MANUAL_REVIEW_REQUIRED.value
+        )
+        _unserve_trips(served, rejected, reasons, {tid}, code)
+
+
 def _active_seed_stops(
     route_stops: dict[str, list[Stop]],
     active_ids: set[str],
@@ -845,13 +805,7 @@ def _peel_final_quota(
             leftover = {
                 s.trip_id for s in route_stops[vid] if s.trip_id and s.stop_type == StopType.PICKUP
             }
-            _unserve_trips(
-                served,
-                rejected,
-                reasons,
-                leftover,
-                ReasonCode.TIME_WINDOW_CONFLICT.value,
-            )
+            _unserve_leftover(problem, trips_by_id, served, rejected, reasons, leftover)
             route_stops[vid] = []
             vehicle_driver[vid] = None
             fi = vid_index.get(vid)
@@ -1185,11 +1139,7 @@ def _greedy_core(
                 problem=problem,
             )
             if picked is None:
-                code = (
-                    ReasonCode.QUOTA_EXCEEDED.value
-                    if quota_blocked
-                    else non_empty_reason(diagnose_rejection(problem, trip))
-                )
+                code = _unresolved_insert_code(problem, trip, quota_blocked=quota_blocked)
                 rejected.append(RejectedTrip(trip_id=trip.id, reason_code=code))
                 reasons[trip.id] = code
                 explanations.append(
@@ -1296,7 +1246,7 @@ def _greedy_core(
                 else:
                     alt_no.append(f"{v.id}:SEQUENTIAL_INFEASIBLE")
         if not candidates:
-            code = non_empty_reason(diagnose_rejection(problem, trip))
+            code = _unresolved_insert_code(problem, trip)
             rejected.append(RejectedTrip(trip_id=trip.id, reason_code=code))
             reasons[trip.id] = code
             explanations.append(
@@ -1334,15 +1284,7 @@ def _greedy_core(
             chosen_seq = cand_seq
             break
         if plan is None:
-            code = (
-                ReasonCode.QUOTA_EXCEEDED.value
-                if quota_blocked
-                else (
-                    ReasonCode.WAIT_RETURN_INFEASIBLE.value
-                    if trip.insert_immediately_after
-                    else ReasonCode.TIME_WINDOW_CONFLICT.value
-                )
-            )
+            code = _unresolved_insert_code(problem, trip, quota_blocked=quota_blocked)
             rejected.append(RejectedTrip(trip_id=trip.id, reason_code=code))
             reasons[trip.id] = code
             explanations.append(
@@ -1407,13 +1349,7 @@ def _greedy_core(
             leftover = {
                 s.trip_id for s in route_stops[v.id] if s.trip_id and s.stop_type == StopType.PICKUP
             }
-            _unserve_trips(
-                served,
-                rejected,
-                reasons,
-                leftover,
-                ReasonCode.TIME_WINDOW_CONFLICT.value,
-            )
+            _unserve_leftover(problem, trips_by_id, served, rejected, reasons, leftover)
             route_stops[v.id] = []
             vehicle_driver[v.id] = None
             _clear_native_slot(kernel, fi, v.id)

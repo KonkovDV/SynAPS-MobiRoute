@@ -1,8 +1,10 @@
 """Search failure is not a proof of time-window or appointment infeasibility."""
 
 import unittest
+from pathlib import Path
 
 from mobiroute.domain.models import ReasonCode, WheelchairType
+from mobiroute.solvers.greedy import _unresolved_insert_code, _unserve_leftover
 from mobiroute.validation.feasibility import check_plan
 from mobiroute.validation.reasons import diagnose_rejection
 
@@ -100,3 +102,55 @@ class RejectionEvidenceTests(unittest.TestCase):
                 )
                 self.assertEqual(diagnose_rejection(problem, problem.requests[0]), expected)
                 self.assertEqual(problem.model_dump_json(), before)
+
+    def test_diagnose_never_returns_time_window_conflict(self):
+        problem, _ = quota_case(quota=None)
+        self.assertNotEqual(
+            diagnose_rejection(problem, problem.requests[0]),
+            ReasonCode.TIME_WINDOW_CONFLICT,
+        )
+        problem.requests[0].max_ride_time = 1
+        problem.requests[0].appointment_end = 100
+        self.assertNotEqual(
+            diagnose_rejection(problem, problem.requests[0]),
+            ReasonCode.TIME_WINDOW_CONFLICT,
+        )
+
+    def test_unresolved_insert_keeps_quota_and_wait_return(self):
+        problem, _ = quota_case(quota=None)
+        trip = problem.requests[0]
+        self.assertEqual(
+            _unresolved_insert_code(problem, trip, quota_blocked=True),
+            ReasonCode.QUOTA_EXCEEDED.value,
+        )
+        wait = trip.model_copy(update={"insert_immediately_after": "outbound"})
+        self.assertEqual(
+            _unresolved_insert_code(problem, wait),
+            ReasonCode.WAIT_RETURN_INFEASIBLE.value,
+        )
+        self.assertEqual(
+            _unresolved_insert_code(problem, trip),
+            ReasonCode.MANUAL_REVIEW_REQUIRED.value,
+        )
+
+    def test_leftover_unserve_diagnoses_each_trip(self):
+        problem, _ = quota_case(quota=1, via=True)
+        extra, _ = quota_case(quota=None, tid="u")
+        problem.requests.append(extra.requests[0])
+        served = ["t", "u"]
+        rejected: list = []
+        reasons = {"t": ReasonCode.ACCEPTED.value, "u": ReasonCode.ACCEPTED.value}
+        trips_by_id = {t.id: t for t in problem.requests}
+        _unserve_leftover(problem, trips_by_id, served, rejected, reasons, {"t", "u"})
+        by_id = {r.trip_id: r.reason_code for r in rejected}
+        self.assertEqual(by_id["t"], ReasonCode.QUOTA_EXCEEDED.value)
+        self.assertEqual(by_id["u"], ReasonCode.MANUAL_REVIEW_REQUIRED.value)
+        self.assertEqual(served, [])
+        self.assertNotIn(ReasonCode.TIME_WINDOW_CONFLICT.value, by_id.values())
+
+    def test_search_producers_do_not_hardcode_time_window_conflict(self):
+        root = Path(__file__).resolve().parents[1] / "src" / "mobiroute"
+        greedy = (root / "solvers" / "greedy.py").read_text(encoding="utf-8")
+        online = (root / "dispatch" / "online_insertion.py").read_text(encoding="utf-8")
+        self.assertNotIn("TIME_WINDOW_CONFLICT", greedy)
+        self.assertNotIn("TIME_WINDOW_CONFLICT", online)
