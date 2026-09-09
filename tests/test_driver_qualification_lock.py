@@ -35,15 +35,13 @@ def mixed_assistance_case() -> DayProblem:
 
 
 class DriverQualificationLockTest(unittest.TestCase):
-    def _assert_trained_driver_holds_it(
-        self, day: DayProblem, result: PlanningResult
-    ) -> None:
-        self.assertIn("b2", result.served_requests)
-        for plan in result.route_plans:
+    def _assert_trained_driver_holds_it(self, day: DayProblem, res: PlanningResult) -> None:
+        self.assertIn("b2", res.served_requests)
+        for plan in res.route_plans:
             onboard = {s.trip_id for s in plan.ordered_stops if s.trip_id}
             if "b2" in onboard:
                 self.assertEqual(plan.driver_id, TRAINED)
-        report = check_plan(day, result)
+        report = check_plan(day, res)
         self.assertEqual(
             [v for v in report.violations if "DRIVER" in v or "ASSIST" in v],
             [],
