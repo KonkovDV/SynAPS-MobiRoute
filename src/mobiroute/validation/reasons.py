@@ -5,7 +5,11 @@ from __future__ import annotations
 from mobiroute.domain.driver_assignment import select_driver
 from mobiroute.domain.models import ReasonCode
 from mobiroute.domain.requests import DayProblem, TripRequest
-from mobiroute.validation.feasibility import accessibility_compatible, trip_quota_remaining
+from mobiroute.validation.feasibility import (
+    accessibility_compatible,
+    quota_debit_minutes,
+    trip_quota_remaining,
+)
 
 
 def diagnose_rejection(problem: DayProblem, trip: TripRequest) -> ReasonCode:
@@ -26,7 +30,8 @@ def diagnose_rejection(problem: DayProblem, trip: TripRequest) -> ReasonCode:
                 direct = problem.travel.travel(trip.pickup_zone, trip.dropoff_zone)
         except KeyError:
             return ReasonCode.MANUAL_REVIEW_REQUIRED
-        if direct > quota:
+        # Lower bound on the debit, in the same basis the notary charges.
+        if quota_debit_minutes(problem, trip, direct) > quota:
             return ReasonCode.QUOTA_EXCEEDED
     if all(v.shift_end <= v.shift_start for v in vehicles):
         return ReasonCode.VEHICLE_UNAVAILABLE

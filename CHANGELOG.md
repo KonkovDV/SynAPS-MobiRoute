@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- IMPLEMENTED: `BILLABLE_SERVICE` quota debit charges the dwell the plan actually
+  holds (`max(boarding_duration, 5)` + ride + alighting) in the notary, the
+  insertion gates, CP-SAT and the `diagnose_rejection` quota lower bound. A
+  declared boarding below the enforced curb wait can no longer understate a
+  passenger-day entitlement. Not an operator tariff, billing or legal claim.
+
 ## 0.2.3 — 2026-09-09
 
 - Package identity matches `main`: `__version__` / `pyproject.toml` / READMEs /
