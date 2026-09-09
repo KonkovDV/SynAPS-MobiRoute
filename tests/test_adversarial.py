@@ -245,9 +245,23 @@ def test_frozen_trip_preference_on_insert():
         wheelchair_requirement=WheelchairType.NONE,
         medical_priority=True,
     )
-    _, _res, diff = online_insert(problem, baseline, medical)
-    # frozen preference marked; churn measured
-    assert "changed_trips" in diff.plan_churn
+    before = {tid: rp.vehicle_id for rp in baseline.route_plans for tid in rp.passenger_assignments}
+    _, res, diff = online_insert(problem, baseline, medical)
+    after = {tid: rp.vehicle_id for rp in res.route_plans for tid in rp.passenger_assignments}
+    for tid, vid in before.items():
+        assert after.get(tid) == vid
+        assert tid in res.served_requests
+        assert tid not in diff.broken_frozen_trips
+        assert tid in diff.unchanged_frozen_trips
+    assert diff.plan_churn["broken_frozen"] == 0.0
+    assert res.solver_config.get("protect_frozen") is True
+    if "med-adv-1" in res.served_requests:
+        assert "med-adv-1" in diff.added_trips
+        assert diff.plan_churn["changed_trips"] == 1.0
+    else:
+        assert "med-adv-1" not in diff.added_trips
+        assert any(r.trip_id == "med-adv-1" for r in res.rejected_requests)
+        assert diff.plan_churn["changed_trips"] == 0.0
 
 
 def test_traffic_and_driver_disruption():
