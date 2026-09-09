@@ -47,7 +47,8 @@ v0 implements the **deterministic** core (stochastic travel as future extension)
 22. Optional VIA between pickup and dropoff; passenger stays onboard.
     Detour cap uses door-to-door itinerary minutes including VIA service,
     not geographic hops alone (pharmacy dwell is not a detour).
-23. Remaining hour quota (door-to-door ride minutes) if set; else unlimited
+23. Remaining hour quota if set, using `quota_debit_basis` (`RIDE_DURATION` or
+    `BILLABLE_SERVICE` = \(\max(\mathrm{board}, 5)\) + ride + alight); else unlimited
 24. Cancelled requests excluded
 25. Urgent insert only if feasible
 26. Frozen trips immutable without override
@@ -66,7 +67,7 @@ before pickup of trip *j* on the same vehicle). It is not the pooling DARP.
 `OPTIMAL` requires OR-Tools OPTIMAL and an independent notary. Greedy insertion
 is the pooling heuristic (PARTIAL). ALNS is adaptive LNS (random / Shaw / worst /
 route destroy, greedy repair, SA on duration at equal served; never `OPTIMAL`).
-LBBD / rolling horizon remain PLANNED.
+RHC is windowed greedy composition (heuristic, never `OPTIMAL`). LBBD remains PLANNED.
 
 Weighted sum / ε-constraint / Pareto slices are **report-only** modes;
 never hide poor metrics behind one scalar.

@@ -6,7 +6,8 @@ Both reference fields apply when present; neither takes precedence over the othe
 - `insert_immediately_after`: the referenced trip must be served on the same vehicle, and its dropoff must be followed by the child's pickup as the next service stop. An intervening VIA also breaks this adjacency.
 - A served child with a missing or unserved parent is not verified. A rejected child does not force its parent to be rejected.
 
-The independent notary checks every route. Its legacy `only_vehicles` argument no longer skips physical checks: a subset cannot establish whole-plan feasibility.
+The independent notary checks every route. `check_plan` has no vehicle-subset
+argument: a partial set cannot establish whole-plan feasibility.
 
 The policy module also supplies dependency ordering, ownership intersection and descendant/pruning helpers for constructive integration. Missing parents and incompatible anchors are not silently ignored; descendant traversal follows both fields without recursion. Dispatch cancel/no-show cascade uses the same `dependent_ids` closure. All-or-none passenger groups are `fulfillment_group_id` under `OperatorPolicy.chain_mode`, not these directional fields.
 

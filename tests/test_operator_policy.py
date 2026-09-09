@@ -207,6 +207,46 @@ class OperatorPolicyTests(unittest.TestCase):
         problem.requests[1].pooling_opt_in = True
         self.assertTrue(check_plan(problem, result).feasible)
 
+    def test_pooling_suffix_is_not_a_clean_mix_check(self):
+        from mobiroute.validation.feasibility import pooling_stops_violate
+
+        problem, result = pooled_pair()
+        problem.operator_policy = OperatorPolicy(pooling_mode=PoolingMode.FORBIDDEN)
+        full = list(result.route_plans[0].ordered_stops)
+        self.assertIsNotNone(pooling_stops_violate(problem, full))
+        suffix = [s for s in full if s.stop_type == StopType.DROPOFF]
+        issue = pooling_stops_violate(problem, suffix)
+        self.assertIsNotNone(issue)
+        self.assertTrue(str(issue).startswith("POOLING_INCOMPLETE_SEQUENCE:"))
+
+    def test_opt_in_search_names_the_notary_code(self):
+        if not acceleration_status().get("native_available"):
+            self.skipTest("mobiroute_native not built")
+        from tests.factories import driver, trip, vehicle
+        from tests.factories import problem as day
+
+        p = day(
+            [vehicle(capacity=3, wheelchairs=0, types=[])],
+            [driver()],
+            [
+                trip("a", "Z_NORTH", "Z_SOUTH", earliest=60, latest=200),
+                trip("b", "Z_NORTH", "Z_SOUTH", earliest=70, latest=210),
+            ],
+        )
+        p.operator_policy = OperatorPolicy(
+            pooling_mode=PoolingMode.OPT_IN,
+            provenance="laboratory:opt-in-search-label",
+        )
+        result = solve_greedy(p)
+        labels = [item for exp in result.explanations for item in exp.alternatives_rejected]
+        self.assertFalse(any("POOLING_FORBIDDEN" in item for item in labels))
+        pooling_labels = [item for item in labels if "POOLING_" in item]
+        self.assertTrue(
+            pooling_labels,
+            "overlapping OPT_IN search must record a pooling alternative",
+        )
+        self.assertTrue(any("POOLING_NOT_OPTED_IN" in item for item in pooling_labels))
+
     def test_ride_quota_and_billable_are_distinct(self):
         problem, result = quota_case()
         ride = 20
@@ -231,11 +271,9 @@ class OperatorPolicyTests(unittest.TestCase):
             provenance="laboratory:billable-debit",
         )
         route = result.route_plans[0]
-        trips = {t.id: t for t in problem.requests}
         self.assertFalse(
             trial_exceeds_quota(
                 route,
-                trips,
                 quota_cap={"p": 24},
                 used_now={},
                 previous_on_vehicle={},
@@ -245,7 +283,6 @@ class OperatorPolicyTests(unittest.TestCase):
         self.assertTrue(
             trial_exceeds_quota(
                 route,
-                trips,
                 quota_cap={"p": 24},
                 used_now={},
                 previous_on_vehicle={},

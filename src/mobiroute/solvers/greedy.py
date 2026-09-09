@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from mobiroute import SYNAPS_COMMIT, __version__
-from mobiroute.adapters.fingerprint import fingerprint, fingerprint_problem
+from mobiroute.adapters.fingerprint import fingerprint
 from mobiroute.domain.constraints import (
     combine_unavail,
     detour_limit,
@@ -524,8 +524,9 @@ def _pool_candidates_native(
     for fleet_i, i, mid, j, dur, wait, _mx in scored:
         vid, did, core = metas[fleet_i]
         seq = _materialize_insert(core, pu, via, do, i, mid, j)
-        if pooling_stops_violate(problem, seq):
-            alt_no.append(f"{vid}:POOLING_FORBIDDEN")
+        issue = pooling_stops_violate(problem, seq)
+        if issue:
+            alt_no.append(f"{vid}:{issue.split(':', 1)[0]}")
             continue
         candidates.append((dur, wait, vid, seq, did))
     return candidates, alt_ok, alt_no
@@ -1321,7 +1322,6 @@ def _greedy_core(
                 continue
             if trial_exceeds_quota(
                 trial,
-                merged,
                 quota_cap=quota_cap,
                 used_now=used_now,
                 previous_on_vehicle=veh_used.get(vid, {}),
@@ -1437,7 +1437,6 @@ def _greedy_core(
         vid_index=vid_index,
     )
 
-    inp = fingerprint_problem(problem)
     cfg = fingerprint({"solver": solution_type, "version": __version__})
     result = PlanningResult(
         status=SolutionStatus.HEURISTIC_FEASIBLE.value,
@@ -1452,7 +1451,7 @@ def _greedy_core(
         },
         reason_codes=reasons,
         explanations=explanations,
-        input_hash=inp,
+        input_hash="",
         config_hash=cfg,
         solver_config={
             "name": solution_type,
