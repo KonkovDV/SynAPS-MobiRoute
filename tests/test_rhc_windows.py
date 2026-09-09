@@ -1,6 +1,7 @@
 """Rolling-horizon window edges: a pickup on a window end is not lost."""
 
 import unittest
+from itertools import pairwise
 
 from mobiroute.solvers.rolling_horizon import _window_ends, solve_rolling_horizon
 
@@ -20,7 +21,7 @@ class WindowEndsTest(unittest.TestCase):
     def test_overlap_at_or_above_the_window_still_advances(self) -> None:
         ends = _window_ends(0, 300, 60, 90)
         self.assertGreater(ends[-1], 300)
-        steps = {b - a for a, b in zip(ends, ends[1:], strict=False)}
+        steps = {b - a for a, b in pairwise(ends)}
         self.assertTrue(steps)
         self.assertGreaterEqual(min(steps), 1)
 
