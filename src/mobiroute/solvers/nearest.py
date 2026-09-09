@@ -47,7 +47,9 @@ def _nearest_core(problem: DayProblem, ordered: list[TripRequest]) -> PlanningRe
             )
             if driver_id is None:
                 continue
-            dist = problem.travel.travel(v.depot_id, trip.pickup_zone)
+            # "Nearest" is the deadhead from where the vehicle already stands.
+            anchor = routes[v.id][-1].dropoff_zone if routes[v.id] else v.depot_id
+            dist = problem.travel.travel(anchor, trip.pickup_zone)
             trial = routes[v.id] + [trip]
             plan = _simulate_route(problem, v, driver_id, trial)
             if plan is not None:

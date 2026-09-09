@@ -12,6 +12,10 @@
   boarding assistance; a rebuild failure now reports diagnosed evidence instead
   of a fabricated time-window conflict. Accessibility-training data is policy
   input, not a certification claim.
+- IMPLEMENTED: `NEAREST_FEASIBLE` ranks candidate vehicles by the deadhead from
+  the last accepted dropoff and falls back to the depot only for an empty route.
+  The depot-anchored score preferred a vehicle that had already driven away.
+  Ranking only — feasibility, quota and notary checks are unchanged.
 
 ## 0.2.3 — 2026-09-09
 
