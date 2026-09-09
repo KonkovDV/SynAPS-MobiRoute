@@ -7,6 +7,26 @@
   insertion gates, CP-SAT and the `diagnose_rejection` quota lower bound. A
   declared boarding below the enforced curb wait can no longer understate a
   passenger-day entitlement. Not an operator tariff, billing or legal claim.
+- IMPLEMENTED: nearest and beam re-check driver qualification for every trip, so
+  an already seated untrained driver can no longer keep a trip that needs
+  boarding assistance; a rebuild failure now reports diagnosed evidence instead
+  of a fabricated time-window conflict. Accessibility-training data is policy
+  input, not a certification claim.
+- IMPLEMENTED: `NEAREST_FEASIBLE` ranks candidate vehicles by the deadhead from
+  the last accepted dropoff and falls back to the depot only for an empty route.
+  The depot-anchored score preferred a vehicle that had already driven away.
+  Ranking only — feasibility, quota and notary checks are unchanged.
+- IMPLEMENTED: `finalize_result` verifies the whole plan. The notary call no
+  longer forwards `changed_vehicle_ids`, which the checker ignores today and
+  which would silently certify unread routes if it were ever honoured;
+  enrichment keeps the incremental scope. Verification breadth only — no new
+  feasibility guarantee.
+- IMPLEMENTED: RHC republishes `plan_id` after re-stamping, so the identity
+  fingerprints the RHC configuration that is actually published instead of the
+  greedy pass that built the routes. Two window settings can no longer share one
+  plan identity. Existing RHC plan ids intentionally change; `plan_identity` is
+  now the shared helper in `solvers/finalize.py`. Identity only — no new
+  feasibility or optimality claim.
 
 ## 0.2.3 — 2026-09-09
 
