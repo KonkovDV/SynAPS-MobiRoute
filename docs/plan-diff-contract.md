@@ -13,6 +13,7 @@ Status: IMPLEMENTED for `compute_diff`. Synthetic laboratory reporting, not froz
 - `changed_routes` includes add-only, remove-only, composition-changed, retimed and driver-changed vehicles. `added_routes` / `removed_routes` / `retimed_routes` name those subsets.
 - `plan_churn` keeps the previous assignment keys and adds `retimed_trips`, `changed_drivers`, `broken_frozen`, `temporal_churn` and `changed_routes`.
 - Lists are sorted. JSON round-trip of a `PlanDiff` is deterministic on the same implementation.
+- Regression asserts numeric churn (`changed_trips == 0` vs `>= 1`), not key presence.
 
 This is a reporting contract. It does not prove that online insertion preserved passenger promises, and it does not authorize driver commands.
 

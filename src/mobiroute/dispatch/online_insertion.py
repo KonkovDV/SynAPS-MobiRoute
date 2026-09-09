@@ -342,7 +342,7 @@ def _stamp_version(
     new.base_plan_id = _base_plan_id(baseline)
     new.event_id = event_id
     new.event_type = event_type
-    new.input_hash = fingerprint_problem(problem)
+    new.input_hash = ""
     new.config_hash = fingerprint(config)
     new.solver_config = config
     new.mobiroute_version = __version__
@@ -541,7 +541,6 @@ def online_insert(
                 continue
             if trial_exceeds_quota(
                 trial,
-                trips_for_quota,
                 quota_cap=quota_cap,
                 used_now=used_q,
                 previous_on_vehicle=prev,

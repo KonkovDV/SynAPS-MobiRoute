@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from mobiroute import SYNAPS_COMMIT, __version__
-from mobiroute.adapters.fingerprint import fingerprint, fingerprint_problem
+from mobiroute.adapters.fingerprint import fingerprint
 from mobiroute.domain.models import ReasonCode, SolutionStatus
 from mobiroute.domain.priorities import trip_sort_key
 from mobiroute.domain.requests import DayProblem, PlanningResult, RejectedTrip, TripRequest
@@ -104,7 +104,7 @@ def _nearest_core(problem: DayProblem, ordered: list[TripRequest]) -> PlanningRe
         route_plans=route_plans,
         objective_values={"served": float(len(served)), "rejected": float(len(rejected))},
         reason_codes=reasons,
-        input_hash=fingerprint_problem(problem),
+        input_hash="",
         config_hash=fingerprint({"solver": "NEAREST_FEASIBLE", "version": __version__}),
         solver_config={"name": "NEAREST_FEASIBLE", "pooling": False},
         mobiroute_version=__version__,

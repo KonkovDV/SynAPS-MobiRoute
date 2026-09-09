@@ -207,6 +207,29 @@ class OperatorPolicyTests(unittest.TestCase):
         problem.requests[1].pooling_opt_in = True
         self.assertTrue(check_plan(problem, result).feasible)
 
+    def test_pooling_suffix_is_not_a_clean_mix_check(self):
+        from mobiroute.validation.feasibility import pooling_stops_violate
+
+        problem, result = pooled_pair()
+        problem.operator_policy = OperatorPolicy(pooling_mode=PoolingMode.FORBIDDEN)
+        full = list(result.route_plans[0].ordered_stops)
+        self.assertIsNotNone(pooling_stops_violate(problem, full))
+        suffix = [s for s in full if s.stop_type == StopType.DROPOFF]
+        issue = pooling_stops_violate(problem, suffix)
+        self.assertIsNotNone(issue)
+        self.assertTrue(str(issue).startswith("POOLING_INCOMPLETE_SEQUENCE:"))
+
+    def test_opt_in_search_tag_uses_the_notary_code(self):
+        from mobiroute.validation.feasibility import pooling_stops_violate
+
+        problem, result = pooled_pair()
+        problem.operator_policy = OperatorPolicy(pooling_mode=PoolingMode.OPT_IN)
+        issue = pooling_stops_violate(problem, list(result.route_plans[0].ordered_stops))
+        self.assertIsNotNone(issue)
+        self.assertTrue(str(issue).startswith("POOLING_NOT_OPTED_IN:"))
+        self.assertEqual(f"v:{str(issue).split(':', 1)[0]}", "v:POOLING_NOT_OPTED_IN")
+        self.assertNotEqual(f"v:{str(issue).split(':', 1)[0]}", "v:POOLING_FORBIDDEN")
+
     def test_ride_quota_and_billable_are_distinct(self):
         problem, result = quota_case()
         ride = 20
@@ -231,11 +254,9 @@ class OperatorPolicyTests(unittest.TestCase):
             provenance="laboratory:billable-debit",
         )
         route = result.route_plans[0]
-        trips = {t.id: t for t in problem.requests}
         self.assertFalse(
             trial_exceeds_quota(
                 route,
-                trips,
                 quota_cap={"p": 24},
                 used_now={},
                 previous_on_vehicle={},
@@ -245,7 +266,6 @@ class OperatorPolicyTests(unittest.TestCase):
         self.assertTrue(
             trial_exceeds_quota(
                 route,
-                trips,
                 quota_cap={"p": 24},
                 used_now={},
                 previous_on_vehicle={},
