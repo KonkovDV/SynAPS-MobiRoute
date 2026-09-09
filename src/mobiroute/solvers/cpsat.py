@@ -9,6 +9,7 @@ from mobiroute.adapters.fingerprint import fingerprint, fingerprint_problem
 from mobiroute.domain.constraints import detour_limit, earliest_alight_time, pickup_service_minutes
 from mobiroute.domain.driver_assignment import driver_compatible
 from mobiroute.domain.models import ReasonCode, SolutionStatus, StopType
+from mobiroute.domain.policy import QuotaDebitBasis
 from mobiroute.domain.requests import (
     DayProblem,
     PlanningResult,
@@ -124,7 +125,16 @@ def solve_cpsat(problem: DayProblem, time_limit_s: float = 10.0) -> PlanningResu
                 if qleft <= 0:
                     model.Add(a == 0)
                 else:
-                    model.Add(do - (pu + board_eff) <= qleft).OnlyEnforceIf(a)
+                    ride_len = do - (pu + board_eff)
+                    if (
+                        problem.operator_policy.quota_debit_basis
+                        == QuotaDebitBasis.BILLABLE_SERVICE
+                    ):
+                        model.Add(
+                            ride_len + t.boarding_duration + t.alighting_duration <= qleft
+                        ).OnlyEnforceIf(a)
+                    else:
+                        model.Add(ride_len <= qleft).OnlyEnforceIf(a)
             tt0 = travel.travel(v.depot_id, t.pickup_zone)
             model.Add(pu >= v.shift_start + tt0).OnlyEnforceIf(a)
             model.Add(

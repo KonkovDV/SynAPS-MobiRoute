@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- IMPLEMENTED: pooling `FORBIDDEN` / `OPT_IN` is simultaneous onboard occupancy.
+  Sequential PU→DO pairs on one vehicle are not pooling. Search and notary use
+  the same walk.
+- IMPLEMENTED: insertion and CP-SAT quota gates use `quota_debit_basis`
+  (`BILLABLE_SERVICE` includes boarding and alighting), matching the notary.
+- IMPLEMENTED: cancel/no-show cascade follows both `same_vehicle_as` and
+  `insert_immediately_after`.
 - IMPLEMENTED: day-ahead and dispatch `input_hash` is always `fingerprint_problem`
   after finalize. Beam / nearest / CP-SAT no longer stamp a full JSON dump.
 - IMPLEMENTED: `PlanDiff` and online freeze protection treat pickup/dropoff
