@@ -7,6 +7,15 @@
   and a trip claimed on both sides keeps the rejection while accounting reports
   the clash. Explanation hygiene only — served/rejected sets, the notary verdict
   and status are unchanged.
+- IMPLEMENTED: online insertion re-checks the seated driver against the new
+  request. A committed route whose driver is not accessibility-trained is now
+  refused for a boarding-assistance trip instead of being scored, and the driver
+  of a committed route is never silently swapped (that is manual review). The
+  rejection detail lists per-vehicle evidence (`NO_COMPATIBLE_VEHICLE`,
+  `NO_QUALIFIED_DRIVER`, `NO_DRIVER`, `INSERT_INFEASIBLE`, `POOLING_BLOCKED`,
+  `SIMULATION_FAILED`), deduplicated, and no longer ends in a dangling
+  separator when there is no evidence. Search-side refusal only — no new
+  feasibility claim and no driver-certification claim.
 
 ## 0.2.5 — 2026-09-09
 
