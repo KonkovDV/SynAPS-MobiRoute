@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- SynAPS pin bumped to
+  [`07f11ebb`](https://github.com/KonkovDV/SynAPS/commit/07f11ebb31357ff65c8c078f94207c965a255cc1)
+  to close the 2026-09-09 lag (two kernel commits: domain-pin record, then
+  industrial seed42 RHC precedence). ADR-0004 regressions stay: fail-closed
+  coverage, calendar encode, claims-lint. DARP search is still this repo.
+  KI-N12 stays closed. Not a courtesy float on future kernel HEAD.
 - IMPLEMENTED: `PlanDiff` reports same-vehicle retiming, driver changes and
   add/remove-only routes. Frozen trips with shifted clocks are no longer
   classified unchanged. Assignment-churn keys keep their previous meaning;

@@ -55,7 +55,7 @@ def _one_op_problem(*, calendar: list[ShiftInterval]) -> ScheduleProblem:
 
 
 def test_pin_is_residuals_kernel_sha() -> None:
-    assert SYNAPS_COMMIT == "6178c93b705ff58be21fa74a98651883a2da1169"
+    assert SYNAPS_COMMIT == "07f11ebb31357ff65c8c078f94207c965a255cc1"
 
 
 def test_empty_feasible_stamps_error_and_exit_3() -> None:
