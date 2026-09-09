@@ -15,7 +15,7 @@ Language: **EN** | [RU](README_RU.md)
 | --- | --- |
 | Version | **0.2.2** |
 | Default branch | `main` |
-| SynAPS pin | [`6178c93`](https://github.com/KonkovDV/SynAPS/commit/6178c93b705ff58be21fa74a98651883a2da1169) (engineering reference / adapter). Pin bump ADR-0004: fail-closed coverage, calendar encode, kernel claims-lint. KI-N12 stays closed. |
+| SynAPS pin | [`07f11ebb`](https://github.com/KonkovDV/SynAPS/commit/07f11ebb31357ff65c8c078f94207c965a255cc1) (engineering reference / adapter; SynAPS `main` as of 2026-09-09). ADR-0004 regressions: fail-closed coverage, calendar encode, kernel claims-lint. KI-N12 stays closed. |
 | Maturity | ISO 16290 TRL 4 (synthetic lab). Not an operator pilot. |
 | Rust | **Required** for greedy / beam / ALNS / online insertion (`mobiroute_native`). Python SoA is an oracle, not a solver backend. |
 | Status words | `heuristic_feasible` / `verified` / `optimal` only if CP-SAT proved OPTIMAL **and** the independent notary is empty |
@@ -28,9 +28,10 @@ Language: **EN** | [RU](README_RU.md)
 are reused; the DARP domain is new and validated on **synthetic** Moscow-zone
 instances only. No customer operational validation yet.
 
-Pinned SynAPS reference commit: [`6178c93`](https://github.com/KonkovDV/SynAPS/commit/6178c93b705ff58be21fa74a98651883a2da1169)
-([upstream SynAPS](https://github.com/KonkovDV/SynAPS)). Kernel HEAD may be newer;
-this repo does **not** float on the kernel default branch. See `SYNAPS_COMMIT` in `src/mobiroute/__init__.py`.
+Pinned SynAPS reference commit: [`07f11ebb`](https://github.com/KonkovDV/SynAPS/commit/07f11ebb31357ff65c8c078f94207c965a255cc1)
+([upstream SynAPS](https://github.com/KonkovDV/SynAPS)). This matches kernel `main`
+as of 2026-09-09; further kernel commits still require an explicit bump with
+regressions. See `SYNAPS_COMMIT` in `src/mobiroute/__init__.py`.
 
 ## Allowed claim
 

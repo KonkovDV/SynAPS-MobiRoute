@@ -100,7 +100,7 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           python -m pip install -e ".[dev]"
-          python -m pip install "synaps @ git+https://github.com/KonkovDV/SynAPS.git@6178c93b705ff58be21fa74a98651883a2da1169"
+          python -m pip install "synaps @ git+https://github.com/KonkovDV/SynAPS.git@07f11ebb31357ff65c8c078f94207c965a255cc1"
       - name: ADR-0004 pin regression
         run: pytest -q tests/test_synaps_pin_regression.py
 
