@@ -76,6 +76,7 @@ def finalize_result(
 ) -> PlanningResult:
     result = enrich_planning_result(problem, result, only_vehicles=changed_vehicle_ids)
     result = _account_inactive(problem, result)
+    result.input_hash = fingerprint_problem(problem)
     if explanations:
         result = result.model_copy(update={"explanations": explanations})
     elif not result.explanations:

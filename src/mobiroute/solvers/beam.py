@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from mobiroute import SYNAPS_COMMIT, __version__
-from mobiroute.adapters.fingerprint import fingerprint
+from mobiroute.adapters.fingerprint import fingerprint, fingerprint_problem
 from mobiroute.domain.models import ReasonCode, SolutionStatus, StopType
 from mobiroute.domain.priorities import trip_sort_key
 from mobiroute.domain.requests import (
@@ -200,7 +200,7 @@ def solve_beam(problem: DayProblem, beam_width: int = 3) -> PlanningResult:
         route_plans=route_plans,
         objective_values={"served": float(len(served)), "rejected": float(len(rejected))},
         reason_codes=reasons,
-        input_hash=fingerprint(problem.model_dump(mode="json")),
+        input_hash=fingerprint_problem(problem),
         config_hash=fingerprint({"solver": "BEAM", "width": beam_width, "version": __version__}),
         solver_config={
             "name": "BEAM",
