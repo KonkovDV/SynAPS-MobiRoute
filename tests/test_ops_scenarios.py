@@ -112,10 +112,13 @@ def test_subscription_frozen_then_cancel_recovery() -> None:
     assert res.status != "OPTIMAL"
     if not res.served_requests:
         return
-    _u, rec, diff = recover_disruption(p, res, cancel_trip_id=res.served_requests[0])
+    tid = res.served_requests[0]
+    _u, rec, diff = recover_disruption(p, res, cancel_trip_id=tid)
     assert rec.event_type == "CANCELLATION"
     assert rec.claim_level == "synthetic_benchmark"
-    assert "changed_trips" in diff.plan_churn
+    assert tid not in rec.served_requests
+    assert tid in diff.removed_trips
+    assert diff.plan_churn["changed_trips"] >= 1.0
 
 
 def test_ops_suite_greedy_never_optimal() -> None:
@@ -179,8 +182,15 @@ def test_agency_missed_is_not_passenger_no_show() -> None:
     res = solve_greedy(p)
     if not res.served_requests:
         return
-    vid = p.vehicles[0].id
+    busy = next(rp for rp in res.route_plans if rp.passenger_assignments)
+    vid = busy.vehicle_id
+    on_vid = list(busy.passenger_assignments)
     _u, rec, diff = recover_disruption(p, res, vehicle_unavailable_id=vid)
     assert rec.event_type == "VEHICLE_BREAKDOWN"
     assert rec.claim_level == "synthetic_benchmark"
-    assert "changed_trips" in diff.plan_churn
+    still_on = [
+        tid for rp in rec.route_plans if rp.vehicle_id == vid for tid in rp.passenger_assignments
+    ]
+    assert still_on == []
+    for tid in on_vid:
+        assert tid in diff.removed_trips or tid in diff.moved_trips
