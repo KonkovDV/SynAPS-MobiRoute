@@ -1,11 +1,12 @@
 """NEAREST_FEASIBLE must rank deadhead from the route tail, not from the depot."""
 
+from __future__ import annotations
+
 import unittest
 
-from mobiroute.domain.requests import TravelMatrix
+from mobiroute.domain.requests import DayProblem, PlanningResult, TravelMatrix
 from mobiroute.solvers.nearest import solve_nearest
-
-from .factories import driver, problem, trip, vehicle
+from tests.factories import driver, problem, trip, vehicle
 
 # NORTH: first pickup, SOUTH: first dropoff (far), EAST: second pickup, WEST: second dropoff.
 ZONES = ("Z_DEPOT_1", "Z_DEPOT_2", "Z_NORTH", "Z_SOUTH", "Z_EAST", "Z_WEST")
@@ -19,7 +20,7 @@ MINUTES = (
 )
 
 
-def tail_case(*, second_trip: bool = True) -> object:
+def tail_case(*, second_trip: bool = True) -> DayProblem:
     vehicles = [vehicle("v-near", depot="Z_DEPOT_1"), vehicle("v-far", depot="Z_DEPOT_2")]
     drivers = [driver("d-near", depot="Z_DEPOT_1"), driver("d-far", depot="Z_DEPOT_2")]
     trips = [trip("a1", "Z_NORTH", "Z_SOUTH", earliest=60, latest=300, max_wait=120)]
@@ -29,7 +30,7 @@ def tail_case(*, second_trip: bool = True) -> object:
     return day.model_copy(update={"travel": TravelMatrix(zones=ZONES, minutes=MINUTES)})
 
 
-def vehicle_of(result: object, trip_id: str) -> str | None:
+def vehicle_of(result: PlanningResult, trip_id: str) -> str | None:
     for plan in result.route_plans:
         if any(stop.trip_id == trip_id for stop in plan.ordered_stops):
             return plan.vehicle_id
@@ -37,20 +38,23 @@ def vehicle_of(result: object, trip_id: str) -> str | None:
 
 
 class NearestTailAnchorTests(unittest.TestCase):
-    def test_the_fixture_separates_the_depot_from_the_tail(self):
-        travel = tail_case().travel
+    def test_the_fixture_separates_the_depot_from_the_tail(self) -> None:
+        matrix = tail_case().travel
+        from_depot = matrix.travel("Z_DEPOT_1", "Z_EAST")
+        from_tail = matrix.travel("Z_SOUTH", "Z_EAST")
+        rival_depot = matrix.travel("Z_DEPOT_2", "Z_EAST")
         # The depot of v-near looks closest to the second pickup...
-        self.assertLess(travel("Z_DEPOT_1", "Z_EAST"), travel("Z_DEPOT_2", "Z_EAST"))
+        self.assertLess(from_depot, rival_depot)
         # ...but after the first trip v-near actually stands far away.
-        self.assertGreater(travel("Z_SOUTH", "Z_EAST"), travel("Z_DEPOT_2", "Z_EAST"))
+        self.assertGreater(from_tail, rival_depot)
 
-    def test_second_trip_goes_to_the_vehicle_that_is_really_closer(self):
+    def test_second_trip_goes_to_the_vehicle_that_is_really_closer(self) -> None:
         result = solve_nearest(tail_case())
         self.assertEqual(sorted(result.served_requests), ["a1", "b2"])
         self.assertEqual(vehicle_of(result, "a1"), "v-near")
         self.assertEqual(vehicle_of(result, "b2"), "v-far")
 
-    def test_an_empty_vehicle_still_ranks_from_its_depot(self):
+    def test_an_empty_vehicle_still_ranks_from_its_depot(self) -> None:
         result = solve_nearest(tail_case(second_trip=False))
         self.assertEqual(result.served_requests, ["a1"])
         self.assertEqual(vehicle_of(result, "a1"), "v-near")
