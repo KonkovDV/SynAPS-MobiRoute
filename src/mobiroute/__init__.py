@@ -3,5 +3,5 @@
 __version__ = "0.2.2"
 
 # Audited SynAPS commit used as engineering reference / optional adapter pin.
-SYNAPS_COMMIT = "6178c93b705ff58be21fa74a98651883a2da1169"
+SYNAPS_COMMIT = "07f11ebb31357ff65c8c078f94207c965a255cc1"
 SCHEMA_VERSION = "mobiroute.v1"
