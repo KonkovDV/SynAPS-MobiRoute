@@ -21,7 +21,11 @@ from mobiroute.domain.requests import (
 )
 from mobiroute.solvers.finalize import finalize_result
 from mobiroute.solvers.greedy import _simulate_route, solve_greedy
-from mobiroute.validation.feasibility import accessibility_compatible, trip_quota_remaining
+from mobiroute.validation.feasibility import (
+    accessibility_compatible,
+    billable_service_minutes,
+    trip_quota_remaining,
+)
 from mobiroute.validation.input import validate_problem
 from mobiroute.validation.reasons import diagnose_rejection, non_empty_reason
 
@@ -130,8 +134,9 @@ def solve_cpsat(problem: DayProblem, time_limit_s: float = 10.0) -> PlanningResu
                         problem.operator_policy.quota_debit_basis
                         == QuotaDebitBasis.BILLABLE_SERVICE
                     ):
+                        # Same dwell the plan publishes: max(boarding, 5) + ride + alighting.
                         model.Add(
-                            ride_len + t.boarding_duration + t.alighting_duration <= qleft
+                            ride_len + billable_service_minutes(t, 0) <= qleft
                         ).OnlyEnforceIf(a)
                     else:
                         model.Add(ride_len <= qleft).OnlyEnforceIf(a)
