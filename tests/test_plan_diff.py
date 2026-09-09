@@ -29,6 +29,17 @@ class PlanDiffContractTests(unittest.TestCase):
         self.assertEqual(diff.plan_churn["temporal_churn"], 1.0)
         self.assertGreater(diff.plan_churn["changed_routes"], 0.0)
 
+    def test_pickup_departure_only_shift_is_retimed_and_breaks_frozen(self):
+        _problem, baseline = quota_case()
+        new = replay(baseline)
+        new.route_plans[0].departure_times["pu"] += 3
+        diff = compute_diff(baseline, new, frozen_ids={"t"})
+        self.assertEqual(diff.moved_trips, [])
+        self.assertEqual(diff.retimed_trips, ["t"])
+        self.assertEqual(diff.unchanged_frozen_trips, [])
+        self.assertEqual(diff.broken_frozen_trips, ["t"])
+        self.assertEqual(diff.plan_churn["temporal_churn"], 1.0)
+
     def test_frozen_clock_shift_is_broken_not_unchanged(self):
         _problem, baseline = quota_case()
         new = replay(baseline)

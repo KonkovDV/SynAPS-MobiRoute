@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- IMPLEMENTED: day-ahead and dispatch `input_hash` is always `fingerprint_problem`
+  after finalize. Beam / nearest / CP-SAT no longer stamp a full JSON dump.
+- IMPLEMENTED: `PlanDiff` and online freeze protection treat pickup/dropoff
+  departure shifts (dwell-only) as retiming / broken frozen, not unchanged.
 - SynAPS pin bumped to
   [`07f11ebb`](https://github.com/KonkovDV/SynAPS/commit/07f11ebb31357ff65c8c078f94207c965a255cc1)
   to close the 2026-09-09 lag (two kernel commits: domain-pin record, then

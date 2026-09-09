@@ -34,28 +34,39 @@ from mobiroute.validation.feasibility import (
 from mobiroute.validation.input import validate_problem, validate_trip
 from mobiroute.validation.reasons import diagnose_rejection, non_empty_reason
 
+TripClocks = tuple[int | None, int | None, int | None, int | None]
 
-def _trip_arrivals(route: RoutePlan) -> dict[str, tuple[int, int]]:
-    pu: dict[str, int] = {}
-    do: dict[str, int] = {}
+
+def _trip_clocks(route: RoutePlan) -> dict[str, TripClocks]:
+    """Pickup/dropoff arrival and departure. Dwell-only shifts are still retiming."""
+    pu_arr: dict[str, int] = {}
+    pu_dep: dict[str, int] = {}
+    do_arr: dict[str, int] = {}
+    do_dep: dict[str, int] = {}
     for s in service_stops(list(route.ordered_stops)):
         if s.trip_id is None:
             continue
-        t = route.arrival_times.get(s.id)
-        if t is None:
-            continue
         if s.stop_type == StopType.PICKUP:
-            pu[s.trip_id] = t
+            if s.id in route.arrival_times:
+                pu_arr[s.trip_id] = route.arrival_times[s.id]
+            if s.id in route.departure_times:
+                pu_dep[s.trip_id] = route.departure_times[s.id]
         elif s.stop_type == StopType.DROPOFF:
-            do[s.trip_id] = t
-    return {tid: (pu[tid], do[tid]) for tid in pu if tid in do}
+            if s.id in route.arrival_times:
+                do_arr[s.trip_id] = route.arrival_times[s.id]
+            if s.id in route.departure_times:
+                do_dep[s.trip_id] = route.departure_times[s.id]
+    ids = set(pu_arr) | set(pu_dep) | set(do_arr) | set(do_dep)
+    return {
+        tid: (pu_arr.get(tid), pu_dep.get(tid), do_arr.get(tid), do_dep.get(tid)) for tid in ids
+    }
 
 
 def _frozen_times_changed(old: RoutePlan | None, new: RoutePlan, frozen: set[str]) -> bool:
     if old is None:
         return False
-    old_t = _trip_arrivals(old)
-    new_t = _trip_arrivals(new)
+    old_t = _trip_clocks(old)
+    new_t = _trip_clocks(new)
     for tid in frozen:
         if tid not in old_t:
             continue
@@ -85,10 +96,10 @@ def _trip_driver(result: PlanningResult) -> dict[str, str]:
     return out
 
 
-def _result_clocks(result: PlanningResult) -> dict[str, tuple[int, int]]:
-    clocks: dict[str, tuple[int, int]] = {}
+def _result_clocks(result: PlanningResult) -> dict[str, TripClocks]:
+    clocks: dict[str, TripClocks] = {}
     for rp in result.route_plans:
-        clocks.update(_trip_arrivals(rp))
+        clocks.update(_trip_clocks(rp))
     return clocks
 
 
