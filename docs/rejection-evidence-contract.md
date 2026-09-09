@@ -43,10 +43,14 @@ Those labels record where this search refused, on this fleet, against this
 baseline. They are not a certificate that the trip is infeasible for every
 fleet, schedule or plan, and they do not authorize a passenger refusal.
 
+Day-ahead greedy (pooling and sequential/FIFO) also re-checks the seated driver
+for every trip. Unlike online, an unfinished day-ahead route may swap to a
+trained driver; a committed online route may not.
+
 Regression: `python -m unittest tests.test_rejection_evidence
-tests.test_online_driver_qualification` with the native extension built. The
-online quota refusals are asserted through `online_insert`; the contract is not
-evidenced by reading solver source text.
+tests.test_online_driver_qualification tests.test_driver_qualification_lock`
+with the native extension built. The online quota refusals are asserted through
+`online_insert`; the contract is not evidenced by reading solver source text.
 
 ## Cordeau a2-16
 

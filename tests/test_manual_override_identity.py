@@ -64,10 +64,19 @@ class ManualOverrideIdentityTest(unittest.TestCase):
             journal.apply_reject(self.base, "t1", _entry("t2"))
         self.assertEqual(journal.entries, [])
 
-    def test_an_empty_reason_is_still_refused(self):
-        blank = _entry().model_copy(update={"free_text_reason": "   "})
+    def test_the_override_drops_leftover_summaries(self):
+        tid, out = self._reject_first_served()
+        for rp in out.route_plans:
+            self.assertNotIn(tid, rp.ride_times)
+            self.assertNotIn(tid, rp.waiting_times)
+            self.assertFalse([it for it in rp.passenger_itineraries if it.trip_id == tid])
+        self.assertFalse(out.fairness_metrics.service_coverage)
+        self.assertEqual(out.objective_values.get("served"), float(len(out.served_requests)))
+
+    def test_apply_reject_refuses_a_non_reject_action(self):
+        accept = _entry().model_copy(update={"action": "ACCEPT"})
         with self.assertRaises(ValueError):
-            OverrideJournal().record(blank)
+            OverrideJournal().apply_reject(self.base, "t1", accept)
 
 
 class ManualOverrideClockOwnerTest(unittest.TestCase):
