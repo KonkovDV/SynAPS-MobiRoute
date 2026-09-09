@@ -536,6 +536,13 @@ def _direct_ride_minutes(problem: DayProblem, trip: TripRequest) -> int:
     return problem.travel.travel(trip.pickup_zone, trip.dropoff_zone)
 
 
+def _quota_lower_bound_exceeds(problem: DayProblem, trip: TripRequest, qleft: int | None) -> bool:
+    """Direct debit in the active basis vs remaining entitlement, not ride minutes alone."""
+    if qleft is None:
+        return False
+    return quota_debit_minutes(problem, trip, _direct_ride_minutes(problem, trip)) > qleft
+
+
 def _linked_trip_ids(problem: DayProblem, trip_id: str) -> set[str]:
     return dependent_ids(problem.requests, {trip_id})
 
@@ -618,12 +625,36 @@ def _consider_scored(
     return None, quota_blocked, picked_key
 
 
+def _mark_unserved_explanation(
+    explanations: list[TripExplanation] | None,
+    tid: str,
+    code: str,
+    why: str,
+) -> None:
+    if explanations is None:
+        return
+    replacement = TripExplanation(
+        trip_id=tid,
+        accepted=False,
+        why_this_route=why,
+        reason_code=code,
+    )
+    for i, ex in enumerate(explanations):
+        if ex.trip_id == tid:
+            explanations[i] = replacement
+            return
+    explanations.append(replacement)
+
+
 def _unserve_trips(
     served: list[str],
     rejected: list[RejectedTrip],
     reasons: dict[str, str],
     tids: set[str],
     code: str,
+    *,
+    explanations: list[TripExplanation] | None = None,
+    why: str = "Unserved after search; see reason_code.",
 ) -> None:
     already = {r.trip_id for r in rejected}
     for tid in tids:
@@ -633,6 +664,7 @@ def _unserve_trips(
             rejected.append(RejectedTrip(trip_id=tid, reason_code=code))
             already.add(tid)
         reasons[tid] = code
+        _mark_unserved_explanation(explanations, tid, code, why)
 
 
 def _unresolved_insert_code(
@@ -640,13 +672,19 @@ def _unresolved_insert_code(
     trip: TripRequest,
     *,
     quota_blocked: bool = False,
+    frozen_blocked: bool = False,
 ) -> str:
-    """Quota and wait-return keep their codes; unresolved search is diagnosed."""
+    """Necessary-condition diagnose beats wait-return; frozen clocks are review."""
     if quota_blocked:
         return ReasonCode.QUOTA_EXCEEDED.value
+    diagnosed = diagnose_rejection(problem, trip)
+    if diagnosed != ReasonCode.MANUAL_REVIEW_REQUIRED:
+        return non_empty_reason(diagnosed)
+    if frozen_blocked:
+        return ReasonCode.MANUAL_REVIEW_REQUIRED.value
     if trip.insert_immediately_after:
         return ReasonCode.WAIT_RETURN_INFEASIBLE.value
-    return non_empty_reason(diagnose_rejection(problem, trip))
+    return ReasonCode.MANUAL_REVIEW_REQUIRED.value
 
 
 def _unserve_leftover(
@@ -656,6 +694,8 @@ def _unserve_leftover(
     rejected: list[RejectedTrip],
     reasons: dict[str, str],
     tids: set[str],
+    *,
+    explanations: list[TripExplanation] | None = None,
 ) -> None:
     """Rebuild/peel leftovers are diagnosed per trip, not one shared time-window stamp."""
     for tid in sorted(tids):
@@ -665,7 +705,15 @@ def _unserve_leftover(
             if trip is not None
             else ReasonCode.MANUAL_REVIEW_REQUIRED.value
         )
-        _unserve_trips(served, rejected, reasons, {tid}, code)
+        _unserve_trips(
+            served,
+            rejected,
+            reasons,
+            {tid},
+            code,
+            explanations=explanations,
+            why="Unserved after route rebuild; see reason_code.",
+        )
 
 
 def _active_seed_stops(
@@ -742,6 +790,7 @@ def _peel_final_quota(
     served: list[str],
     rejected: list[RejectedTrip],
     reasons: dict[str, str],
+    explanations: list[TripExplanation],
     quota_cap: dict[str, int],
     vmap: dict[str, Vehicle],
     kernel: ProblemKernel,
@@ -782,7 +831,15 @@ def _peel_final_quota(
                 if trips_by_id[tid].pseudonymous_passenger_id == primary_pid
                 else ReasonCode.SAME_VEHICLE_UNAVAILABLE.value
             )
-            _unserve_trips(served, rejected, reasons, {tid}, code)
+            _unserve_trips(
+                served,
+                rejected,
+                reasons,
+                {tid},
+                code,
+                explanations=explanations,
+                why="Removed after quota peel; see reason_code.",
+            )
         route_stops[vid] = _strip_trip_ids(route_stops[vid], drop)
         plans = [rp for rp in plans if rp.vehicle_id != vid]
         if not service_stops(route_stops[vid]):
@@ -805,7 +862,15 @@ def _peel_final_quota(
             leftover = {
                 s.trip_id for s in route_stops[vid] if s.trip_id and s.stop_type == StopType.PICKUP
             }
-            _unserve_leftover(problem, trips_by_id, served, rejected, reasons, leftover)
+            _unserve_leftover(
+                problem,
+                trips_by_id,
+                served,
+                rejected,
+                reasons,
+                leftover,
+                explanations=explanations,
+            )
             route_stops[vid] = []
             vehicle_driver[vid] = None
             fi = vid_index.get(vid)
@@ -977,10 +1042,7 @@ def _greedy_core(
             if new_idx is None:
                 continue
             qleft = quota_left.get(trip.pseudonymous_passenger_id)
-            if (
-                qleft is not None
-                and quota_debit_minutes(problem, trip, _direct_ride_minutes(problem, trip)) > qleft
-            ):
+            if _quota_lower_bound_exceeds(problem, trip, qleft):
                 continue
             merged = {**trips_by_id, trip.id: trip}
             cand, _, _ = _consider_scored(
@@ -1023,7 +1085,7 @@ def _greedy_core(
         if trip.id in served:
             continue
         qleft = quota_left.get(trip.pseudonymous_passenger_id)
-        if qleft is not None and _direct_ride_minutes(problem, trip) > qleft:
+        if _quota_lower_bound_exceeds(problem, trip, qleft):
             code = ReasonCode.QUOTA_EXCEEDED.value
             rejected.append(RejectedTrip(trip_id=trip.id, reason_code=code))
             reasons[trip.id] = code
@@ -1349,7 +1411,15 @@ def _greedy_core(
             leftover = {
                 s.trip_id for s in route_stops[v.id] if s.trip_id and s.stop_type == StopType.PICKUP
             }
-            _unserve_leftover(problem, trips_by_id, served, rejected, reasons, leftover)
+            _unserve_leftover(
+                problem,
+                trips_by_id,
+                served,
+                rejected,
+                reasons,
+                leftover,
+                explanations=explanations,
+            )
             route_stops[v.id] = []
             vehicle_driver[v.id] = None
             _clear_native_slot(kernel, fi, v.id)
@@ -1367,6 +1437,7 @@ def _greedy_core(
         served=served,
         rejected=rejected,
         reasons=reasons,
+        explanations=explanations,
         quota_cap=quota_cap,
         vmap=vmap,
         kernel=kernel,

@@ -3,6 +3,12 @@
 **Claim level:** `synthetic_benchmark` + code inspection of MobiRoute and pinned SynAPS `5168fc7`.  
 **Not** real MAST GPS. **Not** Moscow KPI. **Not** “SynAPS already solves social taxi”.
 
+**Errata (2026-09-09).** Snapshot not rewritten. The `ops_stretcher` measured label
+`TIME_WINDOW_CONFLICT` on the ambulatory trip is the 2026-08-12 seed-42 string.
+Current greedy leftover/unresolved insert does not stamp that code; unresolved
+search is `MANUAL_REVIEW_REQUIRED` (or a proven resource/quota code). Live
+SynAPS pin is `07f11ebb`, not the audit pin `5168fc7`.
+
 Companion write-up of operator rules: [`ops-cases-and-benchmark-2026-08-12.md`](ops-cases-and-benchmark-2026-08-12.md).
 
 ## Real cases (what actually breaks a social-taxi day)
