@@ -1,6 +1,6 @@
 # Limitations and forbidden claims
 
-## Not proven / PARTIAL in v0.2.4
+## Not proven / PARTIAL in v0.2.5
 
 - Improvement of Moscow social taxi KPIs
 - Compatibility with Мосавтосантранс production APIs
@@ -31,7 +31,7 @@ product is the domain's own tables, not a kernel shift calendar.
 
 ## Forbidden statements
 
-Pooling in v0.2.4 is **classic pickup/dropoff insertion** with dynamic load, independently
+Pooling in v0.2.5 is **classic pickup/dropoff insertion** with dynamic load, independently
 feasibility-checked. It is not a proven optimal shareability network.
 
 Insertion scoring for greedy / beam / ALNS / RHC / online is Rust `mobiroute_native`.

@@ -381,6 +381,7 @@ def online_insert(
         _assign_driver,
         _materialize_insert,
         _pair_stops,
+        _quota_lower_bound_exceeds,
         _rides_by_pid,
         _sync_native_fleet,
         _trip_stops,
@@ -498,7 +499,7 @@ def online_insert(
     cap = trip_quota_remaining(updated, new_trip)
     used_q = used_quota_minutes(problem, baseline)
     qleft = None if cap is None else cap - used_q.get(new_trip.pseudonymous_passenger_id, 0)
-    if qleft is not None and qleft <= 0:
+    if (qleft is not None and qleft <= 0) or _quota_lower_bound_exceeds(updated, new_trip, qleft):
         quota_blocked = True
         scored = []
     quota_cap = quota_caps(updated)
