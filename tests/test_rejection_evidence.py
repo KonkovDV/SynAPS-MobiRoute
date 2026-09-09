@@ -245,6 +245,14 @@ class RejectionEvidenceTests(unittest.TestCase):
             provenance="laboratory:presearch-ride",
         )
         self.assertFalse(_quota_lower_bound_exceeds(ride_only, ride_only.requests[0], RIDE))
+        online = (
+            Path(__file__).resolve().parents[1]
+            / "src"
+            / "mobiroute"
+            / "dispatch"
+            / "online_insertion.py"
+        ).read_text(encoding="utf-8")
+        self.assertIn("_quota_lower_bound_exceeds", online)
 
     def test_search_producers_do_not_hardcode_time_window_conflict(self):
         root = Path(__file__).resolve().parents[1] / "src" / "mobiroute"

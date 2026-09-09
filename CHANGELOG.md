@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+## 0.2.5 — 2026-09-09
+
+- Package identity matches `main`: `__version__` / `pyproject.toml` / READMEs /
+  `APPLICATION.md` / `CITATION.cff` are **0.2.5**. Dated 0.2.2 / 0.2.3 / 0.2.4
+  changelog pins are not rewritten. Native crate stays **0.2.0** (ABI unchanged).
 - IMPLEMENTED: unresolved insert diagnoses necessary conditions (quota, fleet,
   driver) before `WAIT_RETURN_INFEASIBLE`. A wait-return that cannot be placed
   no longer hides a proven resource or entitlement failure. Frozen clock blocks
@@ -10,9 +15,10 @@
 - IMPLEMENTED: leftover rebuild/peel rewrites explanations; finalize drops
   `accepted=True` records for unserved trips. The published explanation cannot
   contradict the served/rejected sets.
-- IMPLEMENTED: greedy pre-search quota gate uses `quota_debit_minutes` (BILLABLE
-  curb wait + alighting), matching the seed-reinsert gate and the notary lower
-  bound. Ride minutes alone cannot understate the debit.
+- IMPLEMENTED: greedy and online pre-search quota gates use `quota_debit_minutes`
+  (BILLABLE curb wait + alighting), matching seed-reinsert and the notary lower
+  bound. Ride minutes alone cannot understate the debit. A remaining entitlement
+  of zero still refuses before search, as before.
 
 ## 0.2.4 — 2026-09-09
 
