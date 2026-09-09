@@ -5,7 +5,8 @@ Status: IMPLEMENTED as a laboratory profile on `DayProblem`. Not operator approv
 - Policy identity (`policy_id`, `policy_version`, `provenance`, `approved_by`) is versioned separately from solver capability. The laboratory default provenance is `laboratory:implicit_default` with `approved_by is None`.
 - Blank provenance/ids are rejected. Fingerprints include the policy, `pooling_opt_in` and `fulfillment_group_id`; existing input hashes intentionally change.
 - `pooling_mode`: `FORBIDDEN` forbids simultaneous onboard sharing (the notary
-  walks pickup/dropoff occupancy, not "two trips used the van today"); `OPT_IN`
+  walks pickup/dropoff occupancy on a complete itinerary, not a route suffix
+  and not "two trips used the van today"); `OPT_IN`
   requires every simultaneously shared passenger to opt in; `ALLOWED` is the
   explicit laboratory evaluation default. Collective transport does not invent
   another jurisdiction's mixing rule.

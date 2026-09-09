@@ -55,7 +55,7 @@ def empty_result(
             served_requests=[],
             rejected_requests=[],
             route_plans=[],
-            input_hash=fingerprint_problem(problem),
+            input_hash="",
             config_hash=fingerprint(solver_config),
             solver_config=solver_config,
             mobiroute_version=__version__,
@@ -73,9 +73,8 @@ def finalize_result(
     proven_optimal: bool = False,
     exact: bool = False,
     explanations: list[TripExplanation] | None = None,
-    changed_vehicle_ids: set[str] | None = None,
 ) -> PlanningResult:
-    result = enrich_planning_result(problem, result, only_vehicles=changed_vehicle_ids)
+    result = enrich_planning_result(problem, result)
     result = _account_inactive(problem, result)
     result.input_hash = fingerprint_problem(problem)
     if explanations:
@@ -83,8 +82,7 @@ def finalize_result(
     elif not result.explanations:
         result = result.model_copy(update={"explanations": default_explanations(problem, result)})
 
-    # The notary reads the whole plan. `changed_vehicle_ids` scopes enrichment
-    # only: a partial re-check would certify routes it never looked at.
+    # The notary reads the whole plan. Partial vehicle sets cannot certify.
     report = check_plan(problem, result)
     result.verified_feasible = report.feasible
     result.objective_values = {

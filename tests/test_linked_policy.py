@@ -215,6 +215,6 @@ class LinkedNotaryTests(unittest.TestCase):
         self.assertTrue(check_plan(problem, result).feasible)
         route = result.route_plans[1]
         route.departure_times["b:DROPOFF"] = route.arrival_times["b:DROPOFF"] - 1
-        report = check_plan(problem, result, only_vehicles={"v1"})
+        report = check_plan(problem, result)
         self.assertFalse(report.feasible)
         self.assertIn("DEPARTURE_BEFORE_ARRIVAL:b:DROPOFF", report.violations)

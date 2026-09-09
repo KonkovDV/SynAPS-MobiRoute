@@ -24,8 +24,6 @@ class FinalizeFullVerificationTest(unittest.TestCase):
         day = one_route_day()
         baseline = solve_nearest(day)
         self.assertEqual(len(baseline.route_plans), 1)
-        untouched = baseline.route_plans[0].vehicle_id
-        elsewhere = {"v2" if untouched == "v1" else "v1"}
         broken = baseline.model_copy(
             update={
                 "route_plans": [
@@ -34,9 +32,10 @@ class FinalizeFullVerificationTest(unittest.TestCase):
                 ],
             }
         )
-        # The online caller reports that only the other vehicle changed.
-        clean = finalize_result(day, baseline.model_copy(), changed_vehicle_ids=elsewhere)
-        checked = finalize_result(day, broken, changed_vehicle_ids=elsewhere)
+        # The online caller reports that only the other vehicle changed; finalize
+        # still notaries the planted driverless route.
+        clean = finalize_result(day, baseline.model_copy())
+        checked = finalize_result(day, broken)
         self.assertFalse(checked.verified_feasible, checked.objective_values)
         self.assertEqual(checked.status, SolutionStatus.NOT_VERIFIED.value)
         self.assertGreater(

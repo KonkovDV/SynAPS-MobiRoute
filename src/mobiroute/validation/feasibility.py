@@ -153,10 +153,16 @@ def pooling_mix_violation(
 
 
 def pooling_stops_violate(problem: DayProblem, stops: list[Stop]) -> str | None:
-    """Simultaneous onboard mix, not 'two trips used this vehicle today'."""
+    """Simultaneous onboard mix on a complete itinerary, not a route suffix."""
     trips = {t.id: t for t in problem.requests}
+    service = service_stops(list(stops))
+    picked = {s.trip_id for s in service if s.stop_type == StopType.PICKUP and s.trip_id}
+    dropped = {s.trip_id for s in service if s.stop_type == StopType.DROPOFF and s.trip_id}
+    if picked != dropped:
+        missing = sorted(tid for tid in picked.symmetric_difference(dropped) if tid is not None)
+        return f"POOLING_INCOMPLETE_SEQUENCE:{missing[0]}"
     onboard: set[str] = set()
-    for stop in service_stops(list(stops)):
+    for stop in service:
         tid = stop.trip_id
         if tid is None:
             continue
@@ -262,7 +268,6 @@ def quota_caps(problem: DayProblem) -> dict[str, int]:
 
 def trial_exceeds_quota(
     trial: RoutePlan,
-    trips: dict[str, TripRequest],
     *,
     quota_cap: dict[str, int],
     used_now: dict[str, int],
@@ -270,7 +275,6 @@ def trial_exceeds_quota(
     problem: DayProblem,
 ) -> bool:
     """True if accepting this vehicle's trial would exceed any passenger-day cap."""
-    del trips
     return trial_exceeds_quota_rides(
         passenger_quota_debits(problem, trial),
         quota_cap=quota_cap,
@@ -569,10 +573,8 @@ def check_route(
 def check_plan(
     problem: DayProblem,
     result: PlanningResult,
-    *,
-    only_vehicles: set[str] | None = None,
 ) -> FeasibilityReport:
-    """Verify every route; only_vehicles is retained for call compatibility."""
+    """Verify every route. There is no partial-vehicle notary."""
     trips = {t.id: t for t in problem.requests}
     violations: list[str] = []
     assigned: dict[str, str] = {}

@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+- IMPLEMENTED: `check_plan` no longer accepts `only_vehicles`. Finalize enriches
+  every route. A subset cannot look like a notary. Search pooling labels use the
+  notary code (`POOLING_NOT_OPTED_IN` under `OPT_IN`, not a hard-coded
+  `FORBIDDEN`). A pickup/dropoff suffix is `POOLING_INCOMPLETE_SEQUENCE`, not a
+  clean mix. `trial_exceeds_quota` no longer takes an ignored `trips` map.
+  Solvers leave `input_hash` unsigned; only `finalize_result` publishes
+  `fingerprint_problem`. RHC does not re-run greedy after the open last window.
+  Docs (plan-diff, limitations, formulation, benchmark-protocol, problem-input,
+  linked-trip) match that code. Verifier hygiene — not a new optimality claim.
+
 - IMPLEMENTED: `BILLABLE_SERVICE` quota debit charges the dwell the plan actually
   holds (`max(boarding_duration, 5)` + ride + alighting) in the notary, the
   insertion gates, CP-SAT and the `diagnose_rejection` quota lower bound. A
@@ -16,11 +26,9 @@
   the last accepted dropoff and falls back to the depot only for an empty route.
   The depot-anchored score preferred a vehicle that had already driven away.
   Ranking only — feasibility, quota and notary checks are unchanged.
-- IMPLEMENTED: `finalize_result` verifies the whole plan. The notary call no
-  longer forwards `changed_vehicle_ids`, which the checker ignores today and
-  which would silently certify unread routes if it were ever honoured;
-  enrichment keeps the incremental scope. Verification breadth only — no new
-  feasibility guarantee.
+- IMPLEMENTED: `finalize_result` verifies the whole plan and enriches every
+  route. There is no `changed_vehicle_ids` / `only_vehicles` notary mode.
+  Verification breadth only — no new feasibility guarantee.
 - IMPLEMENTED: RHC republishes `plan_id` after re-stamping, so the identity
   fingerprints the RHC configuration that is actually published instead of the
   greedy pass that built the routes. Two window settings can no longer share one

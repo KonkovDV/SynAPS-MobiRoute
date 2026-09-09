@@ -86,10 +86,8 @@ def solve_rolling_horizon(
             seed_drivers[rp.vehicle_id] = rp.driver_id
 
     assert result is not None
-    # Final pass already used the open last window on the full visible set.
-    # Re-finalize against the original problem so cancelled/unseen ids account.
-    if len(result.served_requests) + len(result.rejected_requests) < len(problem.requests):
-        result = solve_greedy(problem, seed_stops=seed_stops, seed_drivers=seed_drivers)
+    # Last window is open: every active request is already visible. A second
+    # greedy pass would publish a different composition under the same RHC stamp.
     return _stamp_rhc(result, window_minutes, overlap_minutes, windows=len(ends))
 
 
