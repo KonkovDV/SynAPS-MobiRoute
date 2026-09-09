@@ -5,8 +5,10 @@
 - IMPLEMENTED: finalize reconciles the served side too. A trip in
   `served_requests` can no longer publish an `accepted=False` rejection record,
   and a trip claimed on both sides keeps the rejection while accounting reports
-  the clash. Explanation hygiene only — served/rejected sets, the notary verdict
-  and status are unchanged.
+  the clash. One trip also publishes one explanation: a duplicate record for the
+  same trip id collapses to the last decision instead of shipping two
+  contradicting rows. Explanation hygiene only — served/rejected sets, the
+  notary verdict and status are unchanged.
 - IMPLEMENTED: online insertion re-checks the seated driver against the new
   request. A committed route whose driver is not accessibility-trained is now
   refused for a boarding-assistance trip instead of being scored, and the driver
