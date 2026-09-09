@@ -16,6 +16,11 @@
   the last accepted dropoff and falls back to the depot only for an empty route.
   The depot-anchored score preferred a vehicle that had already driven away.
   Ranking only — feasibility, quota and notary checks are unchanged.
+- IMPLEMENTED: `finalize_result` verifies the whole plan. The notary call no
+  longer forwards `changed_vehicle_ids`, which the checker ignores today and
+  which would silently certify unread routes if it were ever honoured;
+  enrichment keeps the incremental scope. Verification breadth only — no new
+  feasibility guarantee.
 
 ## 0.2.3 — 2026-09-09
 

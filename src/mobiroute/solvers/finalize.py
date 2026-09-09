@@ -82,7 +82,9 @@ def finalize_result(
     elif not result.explanations:
         result = result.model_copy(update={"explanations": default_explanations(problem, result)})
 
-    report = check_plan(problem, result, only_vehicles=changed_vehicle_ids)
+    # The notary reads the whole plan. `changed_vehicle_ids` scopes enrichment
+    # only: a partial re-check would certify routes it never looked at.
+    report = check_plan(problem, result)
     result.verified_feasible = report.feasible
     result.objective_values = {
         **result.objective_values,
