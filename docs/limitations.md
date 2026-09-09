@@ -22,6 +22,18 @@
 - Driver rest as labour-law certificate (ГОСТ 70314 / 580-ФЗ). The field is
   policy occupancy windows, same algebra as vehicle shop-out. Multi-day
   rostering is not modelled.
+- Rolling-horizon composition as global re-optimization. Windows are solved in
+  order with the previous routes seeded; an earlier window is never re-opened
+  after a later window commits, and the last window stays open. `window_minutes`
+  and `overlap_minutes` change which requests a window can see, not only the
+  runtime.
+- `plan_id` as a feasibility certificate. It fingerprints the planning input and
+  the published configuration of the lane that signs it (greedy / beam / CP-SAT /
+  CP-SAT fallback / RHC / ALNS / incremental repair / online / manual override)
+  — nothing more.
+- A manual override as authorization. The journal is an audit record;
+  `apply_reject` publishes an unverified plan (`verified_feasible=False`) under a
+  new plan identity, and it has to be re-verified before anyone acts on it.
 
 Kernel note (SynAPS ADR-0005, pin `07f11ebb`): `WorkCenter.calendar` is encoded
 by CP-SAT/ALNS/LBBD (occupancy in one shift) and clipped on greedy-family
@@ -39,6 +51,11 @@ Python SoA is an oracle for lockstep tests, not a solver backend, and not a
 license to claim OPTIMAL or an unmeasured ×N speedup. Generator `medium` is
 60 vehicles / 1000 requests. The `stress_200` ~8.1 s full pipeline (day-ahead
 plus disruptions and 8 inserts) is a sample on one machine, not a SLA.
+
+Per-vehicle refusal evidence (`NO_COMPATIBLE_VEHICLE`, `NO_QUALIFIED_DRIVER`,
+`NO_DRIVER`, `INSERT_INFEASIBLE`, `POOLING_BLOCKED`, `SIMULATION_FAILED`) is
+search-side, deduplicated and truncated to eight vehicles. It records why the
+search refused this request, not that the request is infeasible.
 
 See `docs/claims-review-2026-08-12.md`.
 Never mix MobiRoute with GridPlan / AeroBIM / SynAPS Energy in one Academy application.

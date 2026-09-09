@@ -66,16 +66,27 @@ def empty_result(
     )
 
 
-def _reconcile_explanations(result: PlanningResult) -> list[TripExplanation]:
-    """Published explanations cannot claim a trip was served after it was unserved."""
-    served = set(result.served_requests)
+def reconcile_explanations(result: PlanningResult) -> list[TripExplanation]:
+    """Published explanations cannot contradict the served and rejected sets."""
     rejected = {r.trip_id: non_empty_reason(r.reason_code) for r in result.rejected_requests}
+    # A trip claimed on both sides stays a rejection here; accounting reports the clash.
+    served = set(result.served_requests) - set(rejected)
     out: list[TripExplanation] = []
     seen: set[str] = set()
     for ex in result.explanations:
         seen.add(ex.trip_id)
         if ex.trip_id in served:
-            out.append(ex)
+            if ex.accepted:
+                out.append(ex)
+            else:
+                out.append(
+                    TripExplanation(
+                        trip_id=ex.trip_id,
+                        accepted=True,
+                        why_this_route="Served in the published plan; see the route.",
+                        reason_code=ReasonCode.ACCEPTED.value,
+                    )
+                )
             continue
         code = rejected.get(ex.trip_id, non_empty_reason(ex.reason_code))
         if ex.accepted:
@@ -101,7 +112,15 @@ def _reconcile_explanations(result: PlanningResult) -> list[TripExplanation]:
                     reason_code=code,
                 )
             )
-    return out
+    # One trip, one published explanation. A second record for the same trip can
+    # only contradict the first; the last decision wins, in first-seen order.
+    unique: dict[str, TripExplanation] = {}
+    for ex in out:
+        unique[ex.trip_id] = ex
+    return list(unique.values())
+
+
+_reconcile_explanations = reconcile_explanations
 
 
 def finalize_result(
@@ -119,7 +138,7 @@ def finalize_result(
         result = result.model_copy(update={"explanations": explanations})
     elif not result.explanations:
         result = result.model_copy(update={"explanations": default_explanations(problem, result)})
-    result = result.model_copy(update={"explanations": _reconcile_explanations(result)})
+    result = result.model_copy(update={"explanations": reconcile_explanations(result)})
 
     # The notary reads the whole plan. Partial vehicle sets cannot certify.
     report = check_plan(problem, result)

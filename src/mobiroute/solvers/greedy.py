@@ -603,7 +603,7 @@ def _consider_scored(
         if (dur, wait_s, fleet_i) >= picked_key:
             break
         vid = fleet_ids[fleet_i]
-        did = vehicle_driver[vid] or tentative.get(vid)
+        did = tentative.get(vid) or vehicle_driver[vid]
         if not did:
             alt_no.append(f"{vid}:NO_DRIVER")
             continue
@@ -1137,23 +1137,31 @@ def _greedy_core(
                 reasons[trip.id] = code
                 continue
             tentative: dict[str, str] = {}
+            scored_idx: list[int] = []
             for fi, v in enumerate(problem.vehicles):
-                if vehicle_driver[v.id]:
-                    continue
                 if allowed_vids is not None and v.id not in allowed_vids:
                     continue
+                occ = occupied - ({vehicle_driver[v.id]} if vehicle_driver[v.id] else set())
+                # A seated driver is not a licence: re-check this trip's need.
+                # Day-ahead may swap the driver of an unfinished route; online cannot.
                 did0 = _assign_driver(
                     problem,
                     v.id,
                     vehicle=v,
                     needs_accessibility=trip.needs_boarding_assistance
                     or _needs_accessibility(route_stops[v.id], trips_by_id),
-                    occupied_driver_ids=occupied,
+                    occupied_driver_ids=occ,
+                    preferred_id=vehicle_driver[v.id],
                 )
                 if did0 is None:
-                    alt_no.append(f"{v.id}:NO_DRIVER")
+                    alt_no.append(
+                        f"{v.id}:NO_QUALIFIED_DRIVER"
+                        if vehicle_driver[v.id]
+                        else f"{v.id}:NO_DRIVER"
+                    )
                     continue
                 tentative[v.id] = did0
+                scored_idx.append(fi)
                 if native_driver.get(fi) == did0:
                     continue
                 vk = kernel.vehicles[v.id]
@@ -1162,7 +1170,7 @@ def _greedy_core(
                 set_vehicle(kernel, fi, veh, una)
                 native_driver[fi] = did0
             merged = {**trips_by_id, trip.id: trip}
-            part = score_stored(kernel, new_idx)
+            part = score_stored(kernel, new_idx, scored_idx) if scored_idx else []
             if allowed_vids is not None:
                 part = [row for row in part if fleet_ids[row[0]] in allowed_vids]
             scored_ok: list[tuple[int, int, int, int, int, int, int]] = []
@@ -1257,7 +1265,7 @@ def _greedy_core(
                 alt_no.append(f"{v.id}:{acc.value}")
                 continue
             occ = occupied - ({vehicle_driver[v.id]} if vehicle_driver[v.id] else set())
-            driver_id = vehicle_driver[v.id] or _assign_driver(
+            driver_id = _assign_driver(
                 problem,
                 v.id,
                 vehicle=v,
@@ -1267,7 +1275,9 @@ def _greedy_core(
                 preferred_id=vehicle_driver[v.id],
             )
             if driver_id is None:
-                alt_no.append(f"{v.id}:NO_DRIVER")
+                alt_no.append(
+                    f"{v.id}:NO_QUALIFIED_DRIVER" if vehicle_driver[v.id] else f"{v.id}:NO_DRIVER"
+                )
                 continue
             use_insert = bool(trip.insert_immediately_after) or bool(trip.same_vehicle_as)
             if use_insert:

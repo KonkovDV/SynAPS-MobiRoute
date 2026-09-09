@@ -19,11 +19,43 @@ from mobiroute.domain.requests import (
     TimeWindow,
     TripRequest,
 )
-from mobiroute.solvers.finalize import finalize_result
+from mobiroute.solvers.finalize import finalize_result, plan_identity
 from mobiroute.solvers.greedy import _simulate_route, solve_greedy
 from mobiroute.validation.feasibility import accessibility_compatible, trip_quota_remaining
 from mobiroute.validation.input import validate_problem
 from mobiroute.validation.reasons import diagnose_rejection, non_empty_reason
+
+
+def _stamp_cpsat_fallback(
+    res: PlanningResult,
+    *,
+    status: str,
+    reason: str,
+    extra: dict[str, object] | None = None,
+) -> PlanningResult:
+    """A fallback is not the greedy seed. Identity must fingerprint this lane."""
+    stamped = res.model_copy(
+        update={
+            "solution_type": "CPSAT_FALLBACK_GREEDY",
+            "status": status,
+            "solver_config": {
+                **res.solver_config,
+                "name": "CPSAT_FALLBACK_GREEDY",
+                "reason": reason,
+                "proven_optimal": False,
+                **(extra or {}),
+            },
+            "config_hash": fingerprint(
+                {
+                    "solver": "CPSAT_FALLBACK_GREEDY",
+                    "reason": reason,
+                    "version": __version__,
+                    "synaps": SYNAPS_COMMIT,
+                }
+            ),
+        }
+    )
+    return stamped.model_copy(update={"plan_id": plan_identity(stamped)})
 
 
 def solve_cpsat(problem: DayProblem, time_limit_s: float = 10.0) -> PlanningResult:
@@ -41,28 +73,21 @@ def solve_cpsat(problem: DayProblem, time_limit_s: float = 10.0) -> PlanningResu
         status = res.status
         if status in {SolutionStatus.OPTIMAL.value, SolutionStatus.FEASIBLE.value}:
             status = SolutionStatus.HEURISTIC_FEASIBLE.value
-        return res.model_copy(
-            update={
-                "solution_type": "CPSAT_FALLBACK_GREEDY",
-                "status": status,
-                "solver_config": {
-                    **res.solver_config,
-                    "name": "CPSAT_FALLBACK_GREEDY",
-                    "reason": "instance_too_large_for_tiny_cpsat",
-                    "proven_optimal": False,
-                },
-            }
+        return _stamp_cpsat_fallback(
+            res,
+            status=status,
+            reason="instance_too_large_for_tiny_cpsat",
         )
 
     try:
         from ortools.sat.python import cp_model
     except ImportError:
         res = solve_greedy(problem)
-        return res.model_copy(
-            update={
-                "status": SolutionStatus.ERROR.value,
-                "solver_config": {**res.solver_config, "error": "ortools_missing"},
-            }
+        return _stamp_cpsat_fallback(
+            res,
+            status=SolutionStatus.ERROR.value,
+            reason="ortools_missing",
+            extra={"error": "ortools_missing"},
         )
 
     model = cp_model.CpModel()
