@@ -30,6 +30,14 @@
   and ALNS above). The new hash chains the recovery hash, so provenance is kept.
   Existing incremental-repair plan ids intentionally change. Identity only — no
   new feasibility, recovery or optimality claim.
+- IMPLEMENTED: a manual override republishes what it changed. Rejecting a served
+  trip through the operator journal now rewrites that trip's explanation (it
+  could still claim service), re-fingerprints `config_hash` over the override
+  and republishes `plan_id`, so an overridden plan is no longer published under
+  the identity of the plan the operator overrode. The journal entry must name
+  the trip being overridden, and an empty reason code is normalised instead of
+  published. Audit and identity hygiene — a manual override is still not an
+  operational authorization claim.
 
 ## 0.2.5 — 2026-09-09
 

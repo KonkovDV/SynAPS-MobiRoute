@@ -4,8 +4,12 @@ from __future__ import annotations
 
 from pydantic import Field
 
+from mobiroute import SYNAPS_COMMIT, __version__
+from mobiroute.adapters.fingerprint import fingerprint
 from mobiroute.domain.models import ReasonCode, StrictModel
-from mobiroute.domain.requests import PlanningResult
+from mobiroute.domain.requests import PlanningResult, RejectedTrip
+from mobiroute.solvers.finalize import _reconcile_explanations, plan_identity
+from mobiroute.validation.reasons import non_empty_reason
 
 
 class ManualOverride(StrictModel):
@@ -29,18 +33,19 @@ class OverrideJournal(StrictModel):
     def apply_reject(
         self, result: PlanningResult, trip_id: str, entry: ManualOverride
     ) -> PlanningResult:
+        # The entry is the audit record of this override. It cannot name a
+        # different trip than the one that leaves the published plan.
+        if entry.trip_id != trip_id:
+            raise ValueError("Manual override entry does not match the overridden trip")
         self.record(entry)
+        code = non_empty_reason(entry.reason_code)
         served = [t for t in result.served_requests if t != trip_id]
-        from mobiroute.domain.requests import RejectedTrip
-
         rejected = [
             *list(result.rejected_requests),
-            RejectedTrip(
-                trip_id=trip_id, reason_code=entry.reason_code, detail=entry.free_text_reason
-            ),
+            RejectedTrip(trip_id=trip_id, reason_code=code, detail=entry.free_text_reason),
         ]
         reasons = dict(result.reason_codes)
-        reasons[trip_id] = entry.reason_code
+        reasons[trip_id] = code
         plans = []
         for rp in result.route_plans:
             if trip_id not in rp.passenger_assignments:
@@ -70,4 +75,23 @@ class OverrideJournal(StrictModel):
                 "verified_feasible": False,
             }
         )
-        return out
+        # An override changes what is published. The explanation of the removed
+        # trip cannot keep claiming service, and the identity cannot keep
+        # fingerprinting the plan the operator overrode.
+        payload: dict[str, object] = {
+            "solver": "MANUAL_OVERRIDE",
+            "base": result.config_hash,
+            "action": entry.action,
+            "trip": trip_id,
+            "reason": code,
+            "operator": entry.operator_id,
+            "version": __version__,
+            "synaps": SYNAPS_COMMIT,
+        }
+        stamped = out.model_copy(
+            update={
+                "explanations": _reconcile_explanations(out),
+                "config_hash": fingerprint(payload),
+            }
+        )
+        return stamped.model_copy(update={"plan_id": plan_identity(stamped)})
