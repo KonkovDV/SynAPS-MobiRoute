@@ -2,8 +2,11 @@
 
 from __future__ import annotations
 
+from mobiroute import SYNAPS_COMMIT, __version__
+from mobiroute.adapters.fingerprint import fingerprint
 from mobiroute.dispatch.online_insertion import recover_disruption
 from mobiroute.domain.requests import DayProblem, PlanDiff, PlanningResult
+from mobiroute.solvers.finalize import plan_identity
 
 
 def solve_incremental_repair(
@@ -26,10 +29,20 @@ def solve_incremental_repair(
         driver_unavailable_id=driver_unavailable_id,
         traffic_delay_minutes=traffic_delay_minutes,
     )
-    result = result.model_copy(
+    stamped = result.model_copy(
         update={
             "solution_type": "INCREMENTAL_REPAIR",
             "solver_config": {**result.solver_config, "name": "INCREMENTAL_REPAIR"},
+            "config_hash": fingerprint(
+                {
+                    "solver": "INCREMENTAL_REPAIR",
+                    "recovery": result.config_hash,
+                    "version": __version__,
+                    "synaps": SYNAPS_COMMIT,
+                }
+            ),
         }
     )
-    return updated, result, diff
+    # The recovery lane published its own identity. What leaves this function is
+    # an incremental-repair plan, so the id must fingerprint this lane.
+    return updated, stamped.model_copy(update={"plan_id": plan_identity(stamped)}), diff
