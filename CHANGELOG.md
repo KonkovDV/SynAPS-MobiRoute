@@ -21,6 +21,12 @@
   which would silently certify unread routes if it were ever honoured;
   enrichment keeps the incremental scope. Verification breadth only — no new
   feasibility guarantee.
+- IMPLEMENTED: RHC republishes `plan_id` after re-stamping, so the identity
+  fingerprints the RHC configuration that is actually published instead of the
+  greedy pass that built the routes. Two window settings can no longer share one
+  plan identity. Existing RHC plan ids intentionally change; `plan_identity` is
+  now the shared helper in `solvers/finalize.py`. Identity only — no new
+  feasibility or optimality claim.
 
 ## 0.2.3 — 2026-09-09
 
