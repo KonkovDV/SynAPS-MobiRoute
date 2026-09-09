@@ -15,6 +15,7 @@ from mobiroute.adapters.fingerprint import fingerprint
 from mobiroute.domain.models import SolutionStatus
 from mobiroute.domain.requests import DayProblem, PlanningResult, Stop, TripRequest
 from mobiroute.domain.route_graph import service_stops
+from mobiroute.solvers.finalize import plan_identity
 from mobiroute.solvers.greedy import solve_greedy
 from mobiroute.solvers.native_accel import acceleration_status
 from mobiroute.validation.input import validate_problem
@@ -265,7 +266,7 @@ def solve_alns(
     status = best.status
     if status in {SolutionStatus.OPTIMAL.value, SolutionStatus.FEASIBLE.value}:
         status = SolutionStatus.HEURISTIC_FEASIBLE.value
-    return best.model_copy(
+    published = best.model_copy(
         update={
             "solution_type": "ALNS",
             "status": status,
@@ -284,3 +285,6 @@ def solve_alns(
             "solver_config": cfg,
         }
     )
+    # Identity fingerprints the published configuration. The inherited plan_id
+    # belonged to the greedy seed pass, not to this ALNS answer.
+    return published.model_copy(update={"plan_id": plan_identity(published)})
