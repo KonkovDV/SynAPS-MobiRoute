@@ -3,6 +3,7 @@
 import unittest
 from pathlib import Path
 
+from mobiroute.dispatch.online_insertion import online_insert
 from mobiroute.domain.models import ReasonCode, WheelchairType
 from mobiroute.domain.policy import OperatorPolicy, QuotaDebitBasis
 from mobiroute.domain.requests import RejectedTrip, TripExplanation
@@ -245,14 +246,48 @@ class RejectionEvidenceTests(unittest.TestCase):
             provenance="laboratory:presearch-ride",
         )
         self.assertFalse(_quota_lower_bound_exceeds(ride_only, ride_only.requests[0], RIDE))
-        online = (
-            Path(__file__).resolve().parents[1]
-            / "src"
-            / "mobiroute"
-            / "dispatch"
-            / "online_insertion.py"
-        ).read_text(encoding="utf-8")
-        self.assertIn("_quota_lower_bound_exceeds", online)
+
+    def test_online_exhausted_entitlement_is_refused_as_quota(self):
+        # The baseline already spent the whole cap on the same passenger.
+        problem, base = quota_case(quota=RIDE)
+        again = problem.requests[0].model_copy(update={"id": "t2"})
+        _updated, out, _diff = online_insert(problem, base, again)
+        codes = {r.trip_id: r.reason_code for r in out.rejected_requests}
+        self.assertEqual(codes.get("t2"), ReasonCode.QUOTA_EXCEEDED.value)
+        self.assertNotIn("t2", out.served_requests)
+        self.assertTrue(out.verified_feasible)
+
+    def test_online_quota_gate_uses_the_debit_not_ride_alone(self):
+        # Remaining entitlement is positive for the ride alone, short for the
+        # billable dwell the plan would actually hold.
+        problem, base = quota_case(quota=SERVICE - 1)
+        newcomer = problem.requests[0].model_copy(
+            update={"id": "t2", "boarding_duration": 1, "alighting_duration": ALIGHT}
+        )
+        unserved = base.model_copy(
+            update={
+                "served_requests": [],
+                "rejected_requests": [
+                    RejectedTrip(trip_id="t", reason_code=ReasonCode.MANUAL_REVIEW_REQUIRED.value)
+                ],
+                "reason_codes": {"t": ReasonCode.MANUAL_REVIEW_REQUIRED.value},
+                "route_plans": [],
+            }
+        )
+        problem.operator_policy = OperatorPolicy(
+            quota_debit_basis=QuotaDebitBasis.BILLABLE_SERVICE,
+            provenance="laboratory:online-debit",
+        )
+        _u, billable, _d = online_insert(problem, unserved, newcomer)
+        billable_codes = {r.trip_id: r.reason_code for r in billable.rejected_requests}
+        self.assertEqual(billable_codes.get("t2"), ReasonCode.QUOTA_EXCEEDED.value)
+        problem.operator_policy = OperatorPolicy(
+            quota_debit_basis=QuotaDebitBasis.RIDE_DURATION,
+            provenance="laboratory:online-ride",
+        )
+        _u2, ride_basis, _d2 = online_insert(problem, unserved, newcomer)
+        ride_codes = {r.trip_id: r.reason_code for r in ride_basis.rejected_requests}
+        self.assertNotEqual(ride_codes.get("t2"), ReasonCode.QUOTA_EXCEEDED.value)
 
     def test_search_producers_do_not_hardcode_time_window_conflict(self):
         root = Path(__file__).resolve().parents[1] / "src" / "mobiroute"

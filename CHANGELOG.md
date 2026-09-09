@@ -2,6 +2,60 @@
 
 ## Unreleased
 
+- IMPLEMENTED: finalize reconciles the served side too. A trip in
+  `served_requests` can no longer publish an `accepted=False` rejection record,
+  and a trip claimed on both sides keeps the rejection while accounting reports
+  the clash. One trip also publishes one explanation: a duplicate record for the
+  same trip id collapses to the last decision instead of shipping two
+  contradicting rows. Explanation hygiene only — served/rejected sets, the
+  notary verdict and status are unchanged.
+- IMPLEMENTED: online insertion re-checks the seated driver against the new
+  request. A committed route whose driver is not accessibility-trained is now
+  refused for a boarding-assistance trip instead of being scored, and the driver
+  of a committed route is never silently swapped (that is manual review). The
+  rejection detail lists per-vehicle evidence (`NO_COMPATIBLE_VEHICLE`,
+  `NO_QUALIFIED_DRIVER`, `NO_DRIVER`, `INSERT_INFEASIBLE`, `POOLING_BLOCKED`,
+  `SIMULATION_FAILED`), deduplicated, and no longer ends in a dangling
+  separator when there is no evidence. Search-side refusal only — no new
+  feasibility claim and no driver-certification claim.
+- IMPLEMENTED: ALNS republishes `plan_id` after re-stamping its own
+  `solution_type`, `status` and `config_hash`. The identity now fingerprints the
+  published ALNS answer instead of the greedy seed pass that built the routes
+  (same defect class as RHC in 0.2.4), so two destroy/iteration settings can no
+  longer share one plan identity. Existing ALNS plan ids intentionally change.
+  Identity only — no new feasibility or optimality claim.
+- IMPLEMENTED: the incremental-repair lane publishes its own `config_hash` and
+  `plan_id`. Re-labelling the recovery answer as `INCREMENTAL_REPAIR` left the
+  identity and the execution hash fingerprinting the recovery lane, so a repair
+  plan and the recovery plan it was built from could share one identity while
+  publishing different `solver_config` values (same defect class as RHC in 0.2.4
+  and ALNS above). The new hash chains the recovery hash, so provenance is kept.
+  Existing incremental-repair plan ids intentionally change. Identity only — no
+  new feasibility, recovery or optimality claim.
+- IMPLEMENTED: a manual override republishes what it changed. Rejecting a served
+  trip through the operator journal now rewrites that trip's explanation (it
+  could still claim service), re-fingerprints `config_hash` over the override
+  and republishes `plan_id`, so an overridden plan is no longer published under
+  the identity of the plan the operator overrode. The journal entry must name
+  the trip being overridden, `apply_reject` only records `REJECT`, and an empty
+  reason code is normalised instead of published. Stop clocks and load maps are
+  removed by trip ownership (`t1:PU`), so overriding `t1` no longer strips the
+  clocks of `t10`. Ride/wait summaries, itineraries and inherited fairness are
+  dropped with the trip so a leftover metric cannot still describe service.
+  Audit and identity hygiene — a manual override is still not an operational
+  authorization claim.
+- IMPLEMENTED: greedy (pooling and sequential/FIFO) re-checks the seated driver
+  against every new trip. An untrained driver already on the van is no longer
+  kept for a boarding-assistance insert; day-ahead may swap to a trained driver
+  on that unfinished route. Online still refuses a committed untrained driver
+  (manual review). Search-side qualification only — no driver-certification
+  claim.
+- IMPLEMENTED: CP-SAT fallback republishes `config_hash` and `plan_id` after
+  re-labelling the greedy answer as `CPSAT_FALLBACK_GREEDY` (too-large instance
+  or missing OR-Tools). The fallback can no longer share the greedy seed's
+  identity. Existing fallback plan ids intentionally change. Identity only —
+  the fallback remains a heuristic and never `OPTIMAL`.
+
 ## 0.2.5 — 2026-09-09
 
 - Package identity matches `main`: `__version__` / `pyproject.toml` / READMEs /
