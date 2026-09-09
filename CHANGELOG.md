@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- IMPLEMENTED: finalize reconciles the served side too. A trip in
+  `served_requests` can no longer publish an `accepted=False` rejection record,
+  and a trip claimed on both sides keeps the rejection while accounting reports
+  the clash. Explanation hygiene only — served/rejected sets, the notary verdict
+  and status are unchanged.
+
 ## 0.2.5 — 2026-09-09
 
 - Package identity matches `main`: `__version__` / `pyproject.toml` / READMEs /
@@ -234,7 +240,7 @@
 - Adaptive ALNS: Shaw / worst / route / random destroy, roulette weights, SA
   (never fewer served; never `OPTIMAL`). Pattern from SynAPS ALNS + Ropke/Pisinger,
   DARP operators from Hu et al. Omega 2026 (feasibility-test ALNS) — not FJSP.
-- Pickup curb wait \(\max(board,5)\) and appointment earliest alight \(start-30\)
+- Pickup curb wait \\(\\max(board,5)\\) and appointment earliest alight \\(start-30\\)
   (DREDF/FTA analogues, not Moscow law). Early-alight wait is forbidden if another
   passenger is still onboard. Itinerary `travel_path` is the zone shortest path,
   including VIA.
