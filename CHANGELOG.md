@@ -22,6 +22,14 @@
   (same defect class as RHC in 0.2.4), so two destroy/iteration settings can no
   longer share one plan identity. Existing ALNS plan ids intentionally change.
   Identity only — no new feasibility or optimality claim.
+- IMPLEMENTED: the incremental-repair lane publishes its own `config_hash` and
+  `plan_id`. Re-labelling the recovery answer as `INCREMENTAL_REPAIR` left the
+  identity and the execution hash fingerprinting the recovery lane, so a repair
+  plan and the recovery plan it was built from could share one identity while
+  publishing different `solver_config` values (same defect class as RHC in 0.2.4
+  and ALNS above). The new hash chains the recovery hash, so provenance is kept.
+  Existing incremental-repair plan ids intentionally change. Identity only — no
+  new feasibility, recovery or optimality claim.
 
 ## 0.2.5 — 2026-09-09
 
