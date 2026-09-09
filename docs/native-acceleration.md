@@ -14,6 +14,10 @@ remain non-optimal.
 | Claimed ×N wall-clock speedup | FORBIDDEN without a measured artifact in `benchmark/results/` |
 | OPTIMAL from greedy / native scoring | FORBIDDEN |
 
+**Errata (2026-09-09).** Live greedy/online scoring uses stored-fleet
+`score_stored`. `score_fleet` remains the batch ABI and the insertion-kernel
+oracle. Greedy no longer keeps a dead `_pool_candidates_native` wrapper.
+
 Generator `medium` is **60 vehicles / 1000 requests**, not 60 trips.
 
 ## Build

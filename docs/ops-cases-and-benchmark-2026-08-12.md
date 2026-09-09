@@ -4,6 +4,11 @@
 **Claim level:** `synthetic_benchmark`  
 **Not** real Мосавтосантранс (MAST) trips, GPS, or Moscow KPI improvement.
 
+**Errata (2026-09-09).** The Measured suite below is the committed seed-42
+snapshot. It is not remeasured. Greedy leftover rebuild and unresolved insert no
+longer stamp `TIME_WINDOW_CONFLICT`; those rows stay historical labels. Do not
+read them as the current reason-code contract.
+
 This document is the SSOT for (1) operator-shaped rules retrieved 2026-08-12, (2) how real call-centre cases map onto a DARP kernel, (3) world paratransit practice used as **analogues only**, (4) Academy of Innovators 10th-cohort requirements, and (5) measured numbers from `mobiroute ops-benchmark --seed 42`.
 
 Run:

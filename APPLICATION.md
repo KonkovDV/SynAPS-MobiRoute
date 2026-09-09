@@ -1,7 +1,7 @@
 # Заявка: SynAPS-MobiRoute
 
 Репозиторий: https://github.com/KonkovDV/SynAPS-MobiRoute
-Версия пакета: **0.2.3**. Ветка: `main`.
+Версия пакета: **0.2.4**. Ветка: `main`.
 SynAPS pin: [`07f11ebb31357ff65c8c078f94207c965a255cc1`](https://github.com/KonkovDV/SynAPS/commit/07f11ebb31357ff65c8c078f94207c965a255cc1)
 (SynAPS `main` на 2026-09-09). Регрессии ADR-0004 сохранены (fail-closed, calendar encode, claims-lint). KI-N12 остаётся закрытым. Дальнейший lag только с явным bump и регрессиями.
 

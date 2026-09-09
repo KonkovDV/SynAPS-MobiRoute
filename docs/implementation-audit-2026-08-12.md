@@ -11,10 +11,17 @@ This is **not** a production dispatch product, passenger app, CRM, CAD/AVL, bill
 
 Claim vocabulary used below: `IMPLEMENTED` | `PARTIAL` | `EXPERIMENTAL` | `PLANNED` | `MISSING` | `NOT_VERIFIED`.
 
-**Errata (2026-09-09).** The 2026-08-12 snapshot below is not rewritten. One stale
-row in §10: «Greedy is pooling insertion / not proven by a load≥2 test».
-`tests/test_pooling.py::test_two_standard_passengers_can_share` requires greedy
-max passenger load ≥ 2 and FIFO ≤ 1. That is a load test, not a flag check.
+**Errata (2026-09-09).** The 2026-08-12 snapshot below is not rewritten.
+- §10 «Greedy is pooling insertion / not proven by a load≥2 test» is stale.
+  `tests/test_pooling.py::test_two_standard_passengers_can_share` requires greedy
+  max passenger load ≥ 2 and FIFO ≤ 1. That is a load test, not a flag check.
+- §5 listed ALNS/RHC as PLANNED (`NotImplementedError`) at 0.1.1. On current
+  `main` they are heuristics (`solvers/alns.py`, `solvers/rolling_horizon.py`);
+  LBBD remains `NotImplementedError` in `solvers/benders.py`.
+- §3 pin `5168fc7` is the audit pin; the live pin is `07f11ebb`.
+- Defect 11 (unassigned CP-SAT always `TIME_WINDOW_CONFLICT`) is closed on
+  current `main` (`diagnose_rejection`). Greedy leftover/unresolved insert no
+  longer stamp that code either.
 
 ---
 

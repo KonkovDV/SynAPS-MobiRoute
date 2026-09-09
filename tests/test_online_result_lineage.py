@@ -5,6 +5,7 @@ from unittest.mock import patch
 
 from mobiroute.adapters.fingerprint import fingerprint, fingerprint_problem
 from mobiroute.dispatch.online_insertion import online_insert, recover_disruption
+from mobiroute.domain.models import ReasonCode
 from mobiroute.domain.requests import DayProblem, PlanningResult, TravelMatrix
 from mobiroute.solvers.greedy import solve_greedy
 from mobiroute.validation.feasibility import check_plan
@@ -131,7 +132,10 @@ class OnlineResultLineageTests(unittest.TestCase):
         maps = [{"base": "v"}, {"base": "other", "new": "v"}, {"base": "v"}, {"base": "v"}]
         with patch("mobiroute.dispatch.online_insertion._trip_vehicle", side_effect=maps):
             updated, result, diff = online_insert(p, baseline, trip("new"))
-        self.assertTrue(any("frozen" in r.detail for r in result.rejected_requests))
+        hit = [r for r in result.rejected_requests if "frozen" in r.detail]
+        self.assertTrue(hit)
+        self.assertEqual(hit[0].reason_code, ReasonCode.MANUAL_REVIEW_REQUIRED.value)
+        self.assertNotEqual(hit[0].reason_code, ReasonCode.TIME_WINDOW_CONFLICT.value)
         self.assert_version(updated, baseline, result, diff)
 
     def test_appointment_payload_and_compound_disruptions_are_distinct(self):

@@ -2,6 +2,17 @@
 
 **Claim level:** `synthetic_benchmark`. Not MAST GPS. Not a Moscow KPI. Greedy never `OPTIMAL`.
 
+**Errata (2026-09-09).** Snapshot not rewritten.
+- RT-13 «empty insert works → `TIME_WINDOW_CONFLICT`» is stale:
+  `diagnose_rejection` returns `MANUAL_REVIEW_REQUIRED` for unresolved search.
+  Greedy leftover rebuild/peel and unresolved insert use that diagnostic, not a
+  fabricated time-window code. Frozen-protect rollback uses
+  `MANUAL_REVIEW_REQUIRED` and keeps the frozen-trip detail.
+- Residual «LBBD / RHC still `NotImplementedError`» is stale for RHC (windowed
+  greedy heuristic). LBBD remains a stub.
+- Seed-42 ops rows that list `TIME_WINDOW_CONFLICT` are the 2026-08-12 measured
+  labels, not current greedy publish codes.
+
 Method: independent notary vs every solver path, then adversarial combinations a dispatcher would not enumerate (sort-order starvation, empty-vehicle idle, stretcher cabin, vehicle overtime with a longer driver shift, frozen explained-reject, disruption churn).
 
 Pytest after the residual close: see `tests/test_residuals.py`, `tests/test_alns.py`,
