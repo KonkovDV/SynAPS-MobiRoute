@@ -37,7 +37,8 @@ def _nearest_core(problem: DayProblem, ordered: list[TripRequest]) -> PlanningRe
             if accessibility_compatible(v, trip) is not None:
                 continue
             occ = occupied - ({vehicle_driver[v.id]} if vehicle_driver[v.id] else set())
-            driver_id = vehicle_driver[v.id] or _assign_driver(
+            # A seated driver is not a licence: re-check the need of every trip.
+            driver_id = _assign_driver(
                 problem,
                 v.id,
                 needs_accessibility=trip.needs_boarding_assistance,
@@ -46,7 +47,9 @@ def _nearest_core(problem: DayProblem, ordered: list[TripRequest]) -> PlanningRe
             )
             if driver_id is None:
                 continue
-            dist = problem.travel.travel(v.depot_id, trip.pickup_zone)
+            # "Nearest" is the deadhead from where the vehicle already stands.
+            anchor = routes[v.id][-1].dropoff_zone if routes[v.id] else v.depot_id
+            dist = problem.travel.travel(anchor, trip.pickup_zone)
             trial = routes[v.id] + [trip]
             plan = _simulate_route(problem, v, driver_id, trial)
             if plan is not None:
@@ -68,12 +71,14 @@ def _nearest_core(problem: DayProblem, ordered: list[TripRequest]) -> PlanningRe
         if not routes[v.id]:
             continue
         occ = {d for vid, d in vehicle_driver.items() if d and vid != v.id}
+        need = any(t.needs_boarding_assistance for t in routes[v.id])
         plan = _simulate_route(
             problem,
             v,
             _assign_driver(
                 problem,
                 v.id,
+                needs_accessibility=need,
                 occupied_driver_ids=occ,
                 preferred_id=vehicle_driver[v.id],
             ),
@@ -86,10 +91,9 @@ def _nearest_core(problem: DayProblem, ordered: list[TripRequest]) -> PlanningRe
                 tid = trip_obj.id
                 if tid in served:
                     served.remove(tid)
-                rejected.append(
-                    RejectedTrip(trip_id=tid, reason_code=ReasonCode.TIME_WINDOW_CONFLICT.value)
-                )
-                reasons[tid] = ReasonCode.TIME_WINDOW_CONFLICT.value
+                code = non_empty_reason(diagnose_rejection(problem, trip_obj))
+                rejected.append(RejectedTrip(trip_id=tid, reason_code=code))
+                reasons[tid] = code
 
     result = PlanningResult(
         status=SolutionStatus.HEURISTIC_FEASIBLE.value,
