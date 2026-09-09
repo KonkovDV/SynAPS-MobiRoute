@@ -66,7 +66,7 @@ def empty_result(
     )
 
 
-def _reconcile_explanations(result: PlanningResult) -> list[TripExplanation]:
+def reconcile_explanations(result: PlanningResult) -> list[TripExplanation]:
     """Published explanations cannot contradict the served and rejected sets."""
     rejected = {r.trip_id: non_empty_reason(r.reason_code) for r in result.rejected_requests}
     # A trip claimed on both sides stays a rejection here; accounting reports the clash.
@@ -120,6 +120,9 @@ def _reconcile_explanations(result: PlanningResult) -> list[TripExplanation]:
     return list(unique.values())
 
 
+_reconcile_explanations = reconcile_explanations
+
+
 def finalize_result(
     problem: DayProblem,
     result: PlanningResult,
@@ -135,7 +138,7 @@ def finalize_result(
         result = result.model_copy(update={"explanations": explanations})
     elif not result.explanations:
         result = result.model_copy(update={"explanations": default_explanations(problem, result)})
-    result = result.model_copy(update={"explanations": _reconcile_explanations(result)})
+    result = result.model_copy(update={"explanations": reconcile_explanations(result)})
 
     # The notary reads the whole plan. Partial vehicle sets cannot certify.
     report = check_plan(problem, result)

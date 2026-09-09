@@ -56,10 +56,10 @@ native = [
 [project.urls]
 Homepage = "https://github.com/KonkovDV/SynAPS-MobiRoute"
 Repository = "https://github.com/KonkovDV/SynAPS-MobiRoute"
-Documentation = "https://github.com/KonkovDV/SynAPS-MobiRoute/tree/master/docs"
+Documentation = "https://github.com/KonkovDV/SynAPS-MobiRoute/tree/main/docs"
 Issues = "https://github.com/KonkovDV/SynAPS-MobiRoute/issues"
-Changelog = "https://github.com/KonkovDV/SynAPS-MobiRoute/blob/master/CHANGELOG.md"
-Security = "https://github.com/KonkovDV/SynAPS-MobiRoute/blob/master/SECURITY.md"
+Changelog = "https://github.com/KonkovDV/SynAPS-MobiRoute/blob/main/CHANGELOG.md"
+Security = "https://github.com/KonkovDV/SynAPS-MobiRoute/blob/main/SECURITY.md"
 
 [project.scripts]
 mobiroute = "mobiroute.cli:main"

@@ -37,11 +37,24 @@
   could still claim service), re-fingerprints `config_hash` over the override
   and republishes `plan_id`, so an overridden plan is no longer published under
   the identity of the plan the operator overrode. The journal entry must name
-  the trip being overridden, and an empty reason code is normalised instead of
-  published. Stop clocks are removed by trip ownership (`t1:PU`), so overriding
-  `t1` no longer strips the clocks of `t10` from the same route. Audit and
-  identity hygiene — a manual override is still not an operational
+  the trip being overridden, `apply_reject` only records `REJECT`, and an empty
+  reason code is normalised instead of published. Stop clocks and load maps are
+  removed by trip ownership (`t1:PU`), so overriding `t1` no longer strips the
+  clocks of `t10`. Ride/wait summaries, itineraries and inherited fairness are
+  dropped with the trip so a leftover metric cannot still describe service.
+  Audit and identity hygiene — a manual override is still not an operational
   authorization claim.
+- IMPLEMENTED: greedy (pooling and sequential/FIFO) re-checks the seated driver
+  against every new trip. An untrained driver already on the van is no longer
+  kept for a boarding-assistance insert; day-ahead may swap to a trained driver
+  on that unfinished route. Online still refuses a committed untrained driver
+  (manual review). Search-side qualification only — no driver-certification
+  claim.
+- IMPLEMENTED: CP-SAT fallback republishes `config_hash` and `plan_id` after
+  re-labelling the greedy answer as `CPSAT_FALLBACK_GREEDY` (too-large instance
+  or missing OR-Tools). The fallback can no longer share the greedy seed's
+  identity. Existing fallback plan ids intentionally change. Identity only —
+  the fallback remains a heuristic and never `OPTIMAL`.
 
 ## 0.2.5 — 2026-09-09
 
@@ -275,7 +288,7 @@
 - Adaptive ALNS: Shaw / worst / route / random destroy, roulette weights, SA
   (never fewer served; never `OPTIMAL`). Pattern from SynAPS ALNS + Ropke/Pisinger,
   DARP operators from Hu et al. Omega 2026 (feasibility-test ALNS) — not FJSP.
-- Pickup curb wait \\(\\max(board,5)\\) and appointment earliest alight \\(start-30\\)
+- Pickup curb wait \(\max(board,5)\) and appointment earliest alight \(start-30\)
   (DREDF/FTA analogues, not Moscow law). Early-alight wait is forbidden if another
   passenger is still onboard. Itinerary `travel_path` is the zone shortest path,
   including VIA.

@@ -6,6 +6,7 @@ import unittest
 
 from mobiroute.domain.requests import DayProblem, PlanningResult
 from mobiroute.solvers.beam import solve_beam
+from mobiroute.solvers.greedy import solve_fifo, solve_greedy
 from mobiroute.solvers.nearest import solve_nearest
 from mobiroute.validation.feasibility import check_plan
 from tests.factories import driver, problem, trip, vehicle
@@ -55,6 +56,14 @@ class DriverQualificationLockTest(unittest.TestCase):
     def test_beam_reassigns_a_trained_driver(self) -> None:
         day = mixed_assistance_case()
         self._assert_trained_driver_holds_it(day, solve_beam(day))
+
+    def test_greedy_reassigns_a_trained_driver(self) -> None:
+        day = mixed_assistance_case()
+        self._assert_trained_driver_holds_it(day, solve_greedy(day))
+
+    def test_fifo_reassigns_a_trained_driver(self) -> None:
+        day = mixed_assistance_case()
+        self._assert_trained_driver_holds_it(day, solve_fifo(day))
 
     def test_a_trip_without_assistance_keeps_the_first_free_driver(self) -> None:
         day = problem(

@@ -29,7 +29,8 @@
   runtime.
 - `plan_id` as a feasibility certificate. It fingerprints the planning input and
   the published configuration of the lane that signs it (greedy / beam / CP-SAT /
-  RHC / ALNS / incremental repair / online / manual override) — nothing more.
+  CP-SAT fallback / RHC / ALNS / incremental repair / online / manual override)
+  — nothing more.
 - A manual override as authorization. The journal is an audit record;
   `apply_reject` publishes an unverified plan (`verified_feasible=False`) under a
   new plan identity, and it has to be re-verified before anyone acts on it.

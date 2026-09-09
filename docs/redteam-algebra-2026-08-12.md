@@ -10,6 +10,9 @@
   `MANUAL_REVIEW_REQUIRED` and keeps the frozen-trip detail.
 - Residual «LBBD / RHC still `NotImplementedError`» is stale for RHC (windowed
   greedy heuristic). LBBD remains a stub.
+- Greedy day-ahead now re-checks the seated driver (pooling + FIFO), matching
+  nearest/beam. Online still refuses a committed untrained driver (#44).
+- CP-SAT size fallback no longer inherits the greedy `plan_id`.
 - Seed-42 ops rows that list `TIME_WINDOW_CONFLICT` are the 2026-08-12 measured
   labels, not current greedy publish codes.
 
@@ -77,7 +80,7 @@ Ops greedy served counts for the original sixteen scripts are unchanged vs the e
 | Residual | Why it stays |
 | --- | --- |
 | Live Moscow roads / GPS | Zone matrix + Floyd–Warshall only |
-| LBBD / RHC | Still `NotImplementedError` |
+| LBBD | Still `NotImplementedError` |
 | Native and Python SoA must stay in lockstep | Rebuild `mobiroute_native` after kernel ABI changes; CI pytest builds the wheel |
 | Gschwind–Drexl amortized O(1) insertion test | VIA, stretcher, unavail occupancy, and appointment lobby snap break the auxiliary-data contract; prefix+incremental walk is the honest analogue |
 | 2–3 s `stress_200` pipeline | Day-ahead is ~4 s of sequential lex inserts (3000×200). Traffic +8 keeps a short feasible tail; leftovers still re-greedy. Measured **8.1 s**, not 2–3 s. See `docs/native-acceleration.md` |
