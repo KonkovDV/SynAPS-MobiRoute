@@ -1,6 +1,6 @@
 # Limitations and forbidden claims
 
-## Not proven / PARTIAL in v0.2.1
+## Not proven / PARTIAL in v0.2.3
 
 - Improvement of Moscow social taxi KPIs
 - Compatibility with Мосавтосантранс production APIs
@@ -31,7 +31,7 @@ product is the domain's own tables, not a kernel shift calendar.
 
 ## Forbidden statements
 
-Pooling in v0.2.1 is **classic pickup/dropoff insertion** with dynamic load, independently
+Pooling in v0.2.3 is **classic pickup/dropoff insertion** with dynamic load, independently
 feasibility-checked. It is not a proven optimal shareability network.
 
 Insertion scoring for greedy / beam / ALNS / RHC / online is Rust `mobiroute_native`.
@@ -39,8 +39,6 @@ Python SoA is an oracle for lockstep tests, not a solver backend, and not a
 license to claim OPTIMAL or an unmeasured ×N speedup. Generator `medium` is
 60 vehicles / 1000 requests. The `stress_200` ~8.1 s full pipeline (day-ahead
 plus disruptions and 8 inserts) is a sample on one machine, not a SLA.
-
-## Forbidden statements
 
 See `docs/claims-review-2026-08-12.md`.
 Never mix MobiRoute with GridPlan / AeroBIM / SynAPS Energy in one Academy application.

@@ -28,8 +28,8 @@ Sample, not a SLA.
 ## Algorithms to compare
 
 FIFO, nearest-feasible, greedy insertion, CP-SAT tiny, ALNS (heuristic),
-LBBD (future), rolling horizon (future), incremental repair (partial via
-disruption recovery).
+rolling horizon (heuristic RHC), incremental repair (partial via disruption
+recovery). LBBD remains a stub (`NotImplementedError`).
 
 ## Required artifacts per run
 

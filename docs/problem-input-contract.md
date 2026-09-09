@@ -18,7 +18,11 @@ Malformed inputs raise `ValueError`. Well-formed but infeasible requests still n
 
 FIFO, greedy, nearest, beam, ALNS, rolling horizon and CP-SAT execute the returned canonical problem. Online insertion validates the problem, the new trip and their combined snapshot before native append, including duplicate request IDs. Disruption recovery normalizes the problem before reading statuses or producing seeds.
 
-`finalize_result` stamps `input_hash` with `fingerprint_problem` (policy, wheelchair-type compatibility, pooling opt-in, fulfillment group). A full JSON dump is not an input identity. Existing dump hashes intentionally differ.
+`finalize_result` is the only publisher of `input_hash`. It stamps
+`fingerprint_problem` (policy, wheelchair-type compatibility, pooling opt-in,
+fulfillment group). Solvers may construct an unsigned result (`input_hash=""`);
+that placeholder is not an identity. A full JSON dump is not an input identity.
+Existing dump hashes intentionally differ.
 
 Empty graphs with no requests or resources produce empty, independently checked plans; greedy and beam do not fabricate a zone or construct an empty native world.
 
