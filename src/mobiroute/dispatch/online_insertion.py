@@ -6,6 +6,7 @@ import uuid
 
 from mobiroute import SYNAPS_COMMIT, __version__
 from mobiroute.adapters.fingerprint import fingerprint, fingerprint_problem
+from mobiroute.domain.linked_trips import dependent_ids, linked_parents
 from mobiroute.domain.models import BookingStatus, ReasonCode, SolutionStatus, StopType
 from mobiroute.domain.policy import DispatchAuthority, PoolingMode
 from mobiroute.domain.requests import (
@@ -23,8 +24,8 @@ from mobiroute.solvers.greedy import solve_greedy
 from mobiroute.solvers.native_accel import acceleration_status
 from mobiroute.validation.feasibility import (
     accessibility_compatible,
-    passenger_rides,
-    pooling_mix_violation,
+    passenger_quota_debits,
+    pooling_stops_violate,
     quota_caps,
     trial_exceeds_quota,
     trial_exceeds_quota_rides,
@@ -227,8 +228,7 @@ def active_trip_ids(problem: DayProblem) -> set[str]:
         for t in problem.requests:
             if t.id not in active:
                 continue
-            parent = t.same_vehicle_as or t.insert_immediately_after
-            if parent and parent not in active:
+            if any(parent not in active for parent in linked_parents(t)):
                 active.discard(t.id)
                 changed = True
     return active
@@ -236,18 +236,7 @@ def active_trip_ids(problem: DayProblem) -> set[str]:
 
 def dependent_trip_ids(problem: DayProblem, trip_id: str) -> set[str]:
     """Outbound cancel/no-show also drops wait-return / insert-after children."""
-    found = {trip_id}
-    changed = True
-    while changed:
-        changed = False
-        for t in problem.requests:
-            if t.id in found:
-                continue
-            parent = t.same_vehicle_as or t.insert_immediately_after
-            if parent in found:
-                found.add(t.id)
-                changed = True
-    return found
+    return dependent_ids(problem.requests, {trip_id})
 
 
 def apply_cancellation(problem: DayProblem, trip_id: str) -> DayProblem:
@@ -516,9 +505,6 @@ def online_insert(
     for fleet_i, i, mid, j, _dur, _wait_s, _mx in scored:
         cand_vid = fleet_ids[fleet_i]
         old_rp = baseline_by_v.get(cand_vid)
-        onboard = set(old_rp.passenger_assignments) if old_rp is not None else set()
-        if pooling_mix_violation(updated, onboard, new_trip):
-            continue
         if accessibility_compatible(vmap[cand_vid], new_trip) is not None:
             continue
         did = (old_rp.driver_id if old_rp is not None else None) or tentative.get(cand_vid)
@@ -528,8 +514,8 @@ def online_insert(
         ev = trial_eval(kernel, fleet_i, i, mid, j, new_idx)
         if ev is None:
             continue
-        trial_used = _rides_by_pid(ev[2], kernel, trips_for_quota)
-        prev = passenger_rides(old_rp, trips_by_id) if old_rp is not None else {}
+        trial_used = _rides_by_pid(ev[2], kernel, trips_for_quota, updated)
+        prev = passenger_quota_debits(updated, old_rp) if old_rp is not None else {}
         if trial_exceeds_quota_rides(
             trial_used,
             quota_cap=quota_cap,
@@ -540,6 +526,8 @@ def online_insert(
             continue
         core = service_stops(list(old_rp.ordered_stops)) if old_rp is not None else []
         seq = _materialize_insert(core, pu, via, do, i, mid, j)
+        if pooling_stops_violate(updated, seq):
+            continue
         trial = route_plan_from_eval(vmap[cand_vid], did, seq, kernel, ev)
         if trial is None:
             continue
@@ -549,12 +537,15 @@ def online_insert(
             )
             if trial is None:
                 continue
+            if pooling_stops_violate(updated, list(trial.ordered_stops)):
+                continue
             if trial_exceeds_quota(
                 trial,
                 trips_for_quota,
                 quota_cap=quota_cap,
                 used_now=used_q,
                 previous_on_vehicle=prev,
+                problem=updated,
             ):
                 quota_blocked = True
                 continue

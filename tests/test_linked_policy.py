@@ -111,6 +111,18 @@ class LinkedPolicyTests(unittest.TestCase):
         self.assertEqual({s.trip_id for s in routes["v1"]}, {"a"})
         self.assertEqual({s.trip_id for s in routes["v2"]}, {"b"})
 
+    def test_dispatch_cancellation_follows_insert_after_when_same_vehicle_differs(self):
+        from mobiroute.dispatch.online_insertion import apply_cancellation
+        from mobiroute.domain.models import BookingStatus
+
+        trips = [trip("a"), trip("b"), trip("c", same="a", after="b")]
+        problem, _result = assembled(trips, [["a"], ["b", "c"]])
+        cancelled = apply_cancellation(problem, "b")
+        status = {t.id: t.booking_status for t in cancelled.requests}
+        self.assertEqual(status["a"], BookingStatus.REQUESTED)
+        self.assertEqual(status["b"], BookingStatus.CANCELLED)
+        self.assertEqual(status["c"], BookingStatus.CANCELLED)
+
 
 def assembled(trips, sequences):
     vehicles = [
