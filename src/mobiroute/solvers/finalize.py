@@ -66,6 +66,44 @@ def empty_result(
     )
 
 
+def _reconcile_explanations(result: PlanningResult) -> list[TripExplanation]:
+    """Published explanations cannot claim a trip was served after it was unserved."""
+    served = set(result.served_requests)
+    rejected = {r.trip_id: non_empty_reason(r.reason_code) for r in result.rejected_requests}
+    out: list[TripExplanation] = []
+    seen: set[str] = set()
+    for ex in result.explanations:
+        seen.add(ex.trip_id)
+        if ex.trip_id in served:
+            out.append(ex)
+            continue
+        code = rejected.get(ex.trip_id, non_empty_reason(ex.reason_code))
+        if ex.accepted:
+            out.append(
+                TripExplanation(
+                    trip_id=ex.trip_id,
+                    accepted=False,
+                    why_this_route="Unserved after search; see reason_code.",
+                    reason_code=code,
+                )
+            )
+        elif ex.reason_code != code:
+            out.append(ex.model_copy(update={"reason_code": code}))
+        else:
+            out.append(ex)
+    for tid, code in rejected.items():
+        if tid not in seen:
+            out.append(
+                TripExplanation(
+                    trip_id=tid,
+                    accepted=False,
+                    why_this_route="Not inserted; see reason_code.",
+                    reason_code=code,
+                )
+            )
+    return out
+
+
 def finalize_result(
     problem: DayProblem,
     result: PlanningResult,
@@ -81,6 +119,7 @@ def finalize_result(
         result = result.model_copy(update={"explanations": explanations})
     elif not result.explanations:
         result = result.model_copy(update={"explanations": default_explanations(problem, result)})
+    result = result.model_copy(update={"explanations": _reconcile_explanations(result)})
 
     # The notary reads the whole plan. Partial vehicle sets cannot certify.
     report = check_plan(problem, result)

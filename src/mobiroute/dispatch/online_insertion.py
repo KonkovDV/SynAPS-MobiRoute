@@ -33,7 +33,6 @@ from mobiroute.validation.feasibility import (
     used_quota_minutes,
 )
 from mobiroute.validation.input import validate_problem, validate_trip
-from mobiroute.validation.reasons import diagnose_rejection, non_empty_reason
 
 TripClocks = tuple[int | None, int | None, int | None, int | None]
 
@@ -385,6 +384,7 @@ def online_insert(
         _rides_by_pid,
         _sync_native_fleet,
         _trip_stops,
+        _unresolved_insert_code,
         _via_stop,
         route_plan_from_eval,
         simulate_stop_sequence,
@@ -494,6 +494,7 @@ def online_insert(
     new_plan = None
     vid = ""
     quota_blocked = False
+    frozen_blocked = False
     cap = trip_quota_remaining(updated, new_trip)
     used_q = used_quota_minutes(problem, baseline)
     qleft = None if cap is None else cap - used_q.get(new_trip.pseudonymous_passenger_id, 0)
@@ -536,6 +537,7 @@ def online_insert(
                 updated, vmap[cand_vid], did, [*core, *_trip_stops(new_trip)], trips_by_id
             )
             if trial is None:
+                frozen_blocked = True
                 continue
             if pooling_stops_violate(updated, list(trial.ordered_stops)):
                 continue
@@ -549,6 +551,7 @@ def online_insert(
                 quota_blocked = True
                 continue
             if _frozen_times_changed(old_rp, trial, frozen):
+                frozen_blocked = True
                 continue
             st, sk = kernel.stops_to_arrays(service_stops(list(trial.ordered_stops)))
             set_route(kernel, fleet_i, st, sk)
@@ -561,21 +564,23 @@ def online_insert(
         break
 
     if new_plan is None:
-        code = (
-            ReasonCode.QUOTA_EXCEEDED.value
-            if quota_blocked
-            else (
-                ReasonCode.WAIT_RETURN_INFEASIBLE.value
-                if new_trip.insert_immediately_after
-                else non_empty_reason(diagnose_rejection(updated, new_trip))
-            )
+        code = _unresolved_insert_code(
+            updated,
+            new_trip,
+            quota_blocked=quota_blocked,
+            frozen_blocked=frozen_blocked,
+        )
+        detail = (
+            "insertion would change frozen trips"
+            if frozen_blocked and code == ReasonCode.MANUAL_REVIEW_REQUIRED.value
+            else "no feasible insertion into existing routes; " + "; ".join(alt_no[:8])
         )
         rejected = [
             *list(baseline.rejected_requests),
             RejectedTrip(
                 trip_id=new_trip.id,
                 reason_code=code,
-                detail="no feasible insertion into existing routes; " + "; ".join(alt_no[:8]),
+                detail=detail,
             ),
         ]
         new_result = baseline.model_copy(

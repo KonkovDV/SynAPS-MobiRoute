@@ -4,10 +4,18 @@ import unittest
 from pathlib import Path
 
 from mobiroute.domain.models import ReasonCode, WheelchairType
-from mobiroute.solvers.greedy import _unresolved_insert_code, _unserve_leftover
+from mobiroute.domain.policy import OperatorPolicy, QuotaDebitBasis
+from mobiroute.domain.requests import RejectedTrip, TripExplanation
+from mobiroute.solvers.finalize import finalize_result
+from mobiroute.solvers.greedy import (
+    _quota_lower_bound_exceeds,
+    _unresolved_insert_code,
+    _unserve_leftover,
+)
 from mobiroute.validation.feasibility import check_plan
 from mobiroute.validation.reasons import diagnose_rejection
 
+from .test_quota_debit_basis import ALIGHT, RIDE, SERVICE
 from .test_quota_evidence import quota_case
 
 
@@ -116,7 +124,7 @@ class RejectionEvidenceTests(unittest.TestCase):
             ReasonCode.TIME_WINDOW_CONFLICT,
         )
 
-    def test_unresolved_insert_keeps_quota_and_wait_return(self):
+    def test_unresolved_insert_necessary_conditions_beat_wait_return(self):
         problem, _ = quota_case(quota=None)
         trip = problem.requests[0]
         self.assertEqual(
@@ -127,6 +135,23 @@ class RejectionEvidenceTests(unittest.TestCase):
         self.assertEqual(
             _unresolved_insert_code(problem, wait),
             ReasonCode.WAIT_RETURN_INFEASIBLE.value,
+        )
+        self.assertEqual(
+            _unresolved_insert_code(problem, wait, frozen_blocked=True),
+            ReasonCode.MANUAL_REVIEW_REQUIRED.value,
+        )
+        tight, _ = quota_case(quota=1, via=True)
+        wait_quota = tight.requests[0].model_copy(update={"insert_immediately_after": "outbound"})
+        self.assertEqual(
+            _unresolved_insert_code(tight, wait_quota),
+            ReasonCode.QUOTA_EXCEEDED.value,
+        )
+        empty, _ = quota_case(quota=None)
+        empty.vehicles = []
+        wait_fleet = empty.requests[0].model_copy(update={"insert_immediately_after": "outbound"})
+        self.assertEqual(
+            _unresolved_insert_code(empty, wait_fleet),
+            ReasonCode.NO_COMPATIBLE_VEHICLE.value,
         )
         self.assertEqual(
             _unresolved_insert_code(problem, trip),
@@ -140,13 +165,86 @@ class RejectionEvidenceTests(unittest.TestCase):
         served = ["t", "u"]
         rejected: list = []
         reasons = {"t": ReasonCode.ACCEPTED.value, "u": ReasonCode.ACCEPTED.value}
+        explanations = [
+            TripExplanation(
+                trip_id="t",
+                accepted=True,
+                why_this_route="lex insert succeeded",
+                reason_code=ReasonCode.ACCEPTED.value,
+            ),
+            TripExplanation(
+                trip_id="u",
+                accepted=True,
+                why_this_route="lex insert succeeded",
+                reason_code=ReasonCode.ACCEPTED.value,
+            ),
+        ]
         trips_by_id = {t.id: t for t in problem.requests}
-        _unserve_leftover(problem, trips_by_id, served, rejected, reasons, {"t", "u"})
+        _unserve_leftover(
+            problem,
+            trips_by_id,
+            served,
+            rejected,
+            reasons,
+            {"t", "u"},
+            explanations=explanations,
+        )
         by_id = {r.trip_id: r.reason_code for r in rejected}
         self.assertEqual(by_id["t"], ReasonCode.QUOTA_EXCEEDED.value)
         self.assertEqual(by_id["u"], ReasonCode.MANUAL_REVIEW_REQUIRED.value)
         self.assertEqual(served, [])
         self.assertNotIn(ReasonCode.TIME_WINDOW_CONFLICT.value, by_id.values())
+        by_ex = {e.trip_id: e for e in explanations}
+        self.assertFalse(by_ex["t"].accepted)
+        self.assertEqual(by_ex["t"].reason_code, ReasonCode.QUOTA_EXCEEDED.value)
+        self.assertFalse(by_ex["u"].accepted)
+        self.assertEqual(by_ex["u"].reason_code, ReasonCode.MANUAL_REVIEW_REQUIRED.value)
+
+    def test_finalize_drops_accepted_explanation_for_unserved_trip(self):
+        problem, result = quota_case(quota=None)
+        planted = result.model_copy(
+            update={
+                "served_requests": [],
+                "rejected_requests": [
+                    RejectedTrip(trip_id="t", reason_code=ReasonCode.QUOTA_EXCEEDED.value)
+                ],
+                "reason_codes": {"t": ReasonCode.QUOTA_EXCEEDED.value},
+                "route_plans": [],
+            }
+        )
+        out = finalize_result(
+            problem,
+            planted,
+            explanations=[
+                TripExplanation(
+                    trip_id="t",
+                    accepted=True,
+                    why_this_route="lex insert succeeded",
+                    reason_code=ReasonCode.ACCEPTED.value,
+                )
+            ],
+        )
+        hit = [e for e in out.explanations if e.trip_id == "t"]
+        self.assertTrue(hit)
+        self.assertFalse(hit[0].accepted)
+        self.assertEqual(hit[0].reason_code, ReasonCode.QUOTA_EXCEEDED.value)
+
+    def test_billable_presearch_gate_uses_debit_not_ride_alone(self):
+        problem, _ = quota_case(quota=SERVICE - 1)
+        problem.requests[0].boarding_duration = 1
+        problem.requests[0].alighting_duration = ALIGHT
+        problem.operator_policy = OperatorPolicy(
+            quota_debit_basis=QuotaDebitBasis.BILLABLE_SERVICE,
+            provenance="laboratory:presearch-debit",
+        )
+        self.assertGreater(SERVICE - 1, RIDE)
+        self.assertTrue(_quota_lower_bound_exceeds(problem, problem.requests[0], SERVICE - 1))
+        ride_only, _ = quota_case(quota=RIDE)
+        ride_only.operator_policy = OperatorPolicy(
+            quota_debit_basis=QuotaDebitBasis.RIDE_DURATION,
+            provenance="laboratory:presearch-ride",
+        )
+        self.assertFalse(_quota_lower_bound_exceeds(ride_only, ride_only.requests[0], RIDE))
 
     def test_search_producers_do_not_hardcode_time_window_conflict(self):
         root = Path(__file__).resolve().parents[1] / "src" / "mobiroute"
