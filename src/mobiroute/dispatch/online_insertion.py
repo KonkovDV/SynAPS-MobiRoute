@@ -564,7 +564,11 @@ def online_insert(
         code = (
             ReasonCode.QUOTA_EXCEEDED.value
             if quota_blocked
-            else non_empty_reason(diagnose_rejection(updated, new_trip))
+            else (
+                ReasonCode.WAIT_RETURN_INFEASIBLE.value
+                if new_trip.insert_immediately_after
+                else non_empty_reason(diagnose_rejection(updated, new_trip))
+            )
         )
         rejected = [
             *list(baseline.rejected_requests),
@@ -620,7 +624,7 @@ def online_insert(
         tid for tid in frozen if tid in bmap and (tid not in nmap or nmap[tid] != bmap[tid])
     ]
     if protect_frozen and frozen_broken:
-        code = ReasonCode.TIME_WINDOW_CONFLICT.value
+        code = ReasonCode.MANUAL_REVIEW_REQUIRED.value
         restored = baseline.model_copy(
             update={
                 "solution_type": "ONLINE_INSERTION",

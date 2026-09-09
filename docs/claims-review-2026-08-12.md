@@ -2,6 +2,14 @@
 
 **Status sentence:** экспериментальный объяснимый оптимизационный контур доступного транспорта по требованию. Проверяется только на синтетических сценариях зон Москвы.
 
+**Errata (2026-09-09).** This snapshot is not rewritten as present tense.
+Allowed-claim 5 pins SynAPS `5168fc7`; the live pin is `07f11ebb`. Evidence-ladder
+`open_data_benchmark` **MISSING** is stale: Cordeau a2-16 is loaded and hash-gated
+(`tests/test_cordeau_a2_16.py`, `claim_level=open_data_benchmark`). That is not a
+literature BKS. The solver table already listed ALNS/RHC as IMPLEMENTED
+heuristics; LBBD remains PLANNED (`NotImplementedError` in `solvers/benders.py`).
+Customer and production evidence stay MISSING. Not MAST KPIs.
+
 ## Allowed claims
 
 1. MobiRoute is an **experimental, explainable optimization kernel** for accessible
