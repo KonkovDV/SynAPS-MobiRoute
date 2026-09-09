@@ -237,6 +237,7 @@ class OperatorPolicyTests(unittest.TestCase):
             pooling_mode=PoolingMode.OPT_IN,
             provenance="laboratory:opt-in-search-label",
         )
+        p.requests[1].pooling_opt_in = True
         result = solve_greedy(p)
         labels = [item for exp in result.explanations for item in exp.alternatives_rejected]
         self.assertFalse(any("POOLING_FORBIDDEN" in item for item in labels))

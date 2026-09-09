@@ -1146,28 +1146,28 @@ def _greedy_core(
                 set_vehicle(kernel, fi, veh, una)
                 native_driver[fi] = did0
             merged = {**trips_by_id, trip.id: trip}
-            pu, do = _pair_stops(trip)
-            via = _via_stop(trip)
             part = score_stored(kernel, new_idx)
             if allowed_vids is not None:
                 part = [row for row in part if fleet_ids[row[0]] in allowed_vids]
-            part = [
-                row
-                for row in part
-                if pooling_stops_violate(
-                    problem,
-                    _materialize_insert(
-                        service_stops(route_stops[fleet_ids[row[0]]]),
-                        pu,
-                        via,
-                        do,
-                        row[1],
-                        row[2],
-                        row[3],
-                    ),
+            scored_ok: list[tuple[int, int, int, int, int, int, int]] = []
+            pu, do = _pair_stops(trip)
+            via = _via_stop(trip)
+            for scored_row in part:
+                seq = _materialize_insert(
+                    service_stops(route_stops[fleet_ids[scored_row[0]]]),
+                    pu,
+                    via,
+                    do,
+                    scored_row[1],
+                    scored_row[2],
+                    scored_row[3],
                 )
-                is None
-            ]
+                issue = pooling_stops_violate(problem, seq)
+                if issue:
+                    alt_no.append(f"{fleet_ids[scored_row[0]]}:{issue.split(':', 1)[0]}")
+                    continue
+                scored_ok.append(scored_row)
+            part = scored_ok
             n_feas = len(part)
             picked, quota_blocked, _picked_key = _consider_scored(
                 part,
