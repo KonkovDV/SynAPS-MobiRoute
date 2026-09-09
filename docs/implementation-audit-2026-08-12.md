@@ -11,6 +11,11 @@ This is **not** a production dispatch product, passenger app, CRM, CAD/AVL, bill
 
 Claim vocabulary used below: `IMPLEMENTED` | `PARTIAL` | `EXPERIMENTAL` | `PLANNED` | `MISSING` | `NOT_VERIFIED`.
 
+**Errata (2026-09-09).** The 2026-08-12 snapshot below is not rewritten. One stale
+row in §10: «Greedy is pooling insertion / not proven by a load≥2 test».
+`tests/test_pooling.py::test_two_standard_passengers_can_share` requires greedy
+max passenger load ≥ 2 and FIFO ≤ 1. That is a load test, not a flag check.
+
 ---
 
 ## 1. MobiRoute commit (audit baseline)
@@ -121,7 +126,7 @@ Properties: UUID5 ids, SHA-256 fingerprint, stable sort, no `hash()`. Zones are 
 | README / docs claim | Code fact |
 | --- | --- |
 | CP-SAT tiny may be OPTIMAL if OR-Tools OPTIMAL and notary passes | Notary is called, but the **model omits** driver uniqueness, `appointment_start`, max-wait as dropoff-window, depot stops, frozen must-serve, wheelchair type. An `OPTIMAL` label can be **mathematically optimal for a weaker model**. Independent check may still pass that weaker plan. |
-| Greedy is pooling insertion | IMPLEMENTED as PD insertion; **not** proven by a load≥2 test (existing test only checks a flag). |
+| Greedy is pooling insertion | IMPLEMENTED as PD insertion; **not** proven by a load≥2 test (existing test only checks a flag). *(stale — see errata 2026-09-09)* |
 | Driver compatibility | PARTIAL: accessibility training in simulate; depot-first assignment; fallback to first driver. |
 | Online insertion / disruption | Insert is PARTIAL; disruption is full re-solve. |
 | Fairness metrics | Subset of the brief’s list. |
