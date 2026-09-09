@@ -8,11 +8,14 @@ Neither a successful nor a failed greedy singleton simulation establishes why a 
 
 The existing reason-code vocabulary is preserved. Consumers must accept the conservative fallback and must not interpret any generic diagnostic as a complete DARP infeasibility certificate or legal eligibility decision.
 
-Greedy leftover rebuild/peel and unresolved insertion (except quota and
-wait-return) use `diagnose_rejection`, not `TIME_WINDOW_CONFLICT`. Frozen-protect
-rollback that would retarget a frozen trip uses `MANUAL_REVIEW_REQUIRED` and
-keeps the detail that insertion would change frozen trips. Search producers must
-not invent a time-window proof for an unresolved assignment.
+Greedy leftover rebuild/peel and unresolved insertion use `diagnose_rejection`
+for necessary-condition evidence (quota, fleet, driver). Wait-return is only the
+label when that diagnostic is unresolved. Frozen-protect rollback and frozen
+clock blocks that leave no feasible insertion use `MANUAL_REVIEW_REQUIRED` and
+keep the detail that insertion would change frozen trips. Search producers must
+not invent a time-window proof for an unresolved assignment. Leftover/peel
+unserve rewrites per-trip explanations so a published `accepted=True` record
+cannot outlive the served set.
 
 ## Cordeau a2-16
 
