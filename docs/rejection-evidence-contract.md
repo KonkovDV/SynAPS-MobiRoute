@@ -2,7 +2,7 @@
 
 Status: IMPLEMENTED for `diagnose_rejection`; other reason-code producers retain their own scope.
 
-The diagnostic consumes validated inputs. Concrete codes describe necessary-condition evidence: no compatible fleet/driver, unavailable compatible shifts, or a shortest-path-plus-VIA-dwell lower bound exceeding the ride quota. A specific vehicle cause is reported only when shared by all failing vehicles; heterogeneous causes use `NO_COMPATIBLE_VEHICLE`. Zero quota alone does not prove an excess when the modeled ride is zero.
+The diagnostic consumes validated inputs. Concrete codes describe necessary-condition evidence: no compatible fleet/driver, unavailable compatible shifts, or a lower bound on the quota debit exceeding the remaining entitlement. That bound is the shortest path plus any VIA dwell, charged in the basis the active operator policy declares, so under `BILLABLE_SERVICE` it also carries the enforced curb wait and the alighting dwell. A specific vehicle cause is reported only when shared by all failing vehicles; heterogeneous causes use `NO_COMPATIBLE_VEHICLE`. Under `RIDE_DURATION`, zero quota alone does not prove an excess when the modeled ride is zero; under `BILLABLE_SERVICE` the service dwell the plan must hold is already an excess.
 
 Neither a successful nor a failed greedy singleton simulation establishes why a global assignment was not found. It may examine only one driver or departure schedule. Appointment fields alone do not prove an appointment conflict. Unresolved cases return `MANUAL_REVIEW_REQUIRED`, not a fabricated time-window conflict. This code does not prove feasibility either, and does not authorize an automatic passenger refusal.
 
