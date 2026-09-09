@@ -112,7 +112,12 @@ def _reconcile_explanations(result: PlanningResult) -> list[TripExplanation]:
                     reason_code=code,
                 )
             )
-    return out
+    # One trip, one published explanation. A second record for the same trip can
+    # only contradict the first; the last decision wins, in first-seen order.
+    unique: dict[str, TripExplanation] = {}
+    for ex in out:
+        unique[ex.trip_id] = ex
+    return list(unique.values())
 
 
 def finalize_result(
