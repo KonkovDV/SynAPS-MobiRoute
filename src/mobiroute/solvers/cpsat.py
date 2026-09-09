@@ -5,7 +5,7 @@ from __future__ import annotations
 from typing import Any
 
 from mobiroute import SYNAPS_COMMIT, __version__
-from mobiroute.adapters.fingerprint import fingerprint
+from mobiroute.adapters.fingerprint import fingerprint, fingerprint_problem
 from mobiroute.domain.constraints import detour_limit, earliest_alight_time, pickup_service_minutes
 from mobiroute.domain.driver_assignment import driver_compatible
 from mobiroute.domain.models import ReasonCode, SolutionStatus, StopType
@@ -335,7 +335,7 @@ def solve_cpsat(problem: DayProblem, time_limit_s: float = 10.0) -> PlanningResu
             "cp_status": float(status),
         },
         reason_codes=reasons,
-        input_hash=fingerprint(problem.model_dump(mode="json")),
+        input_hash=fingerprint_problem(problem),
         config_hash=fingerprint({"solver": "CPSAT_TINY", "tl": time_limit_s}),
         solver_config={
             "name": "CPSAT_TINY",
