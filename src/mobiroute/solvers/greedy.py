@@ -428,12 +428,21 @@ def try_insert_trip(
     if new_idx is None:
         return None
     found = kernel_best_insert(k, vk, dk, stop_trip, stop_kind, new_idx)
-    if found is None:
-        return None
-    i, mid, j, dur, wait, _mx = found
-    seq = _materialize_insert(core, pu, via, do, i, mid, j)
-    if pooling_stops_violate(problem, seq):
-        return None
+    seq: list[Stop] | None = None
+    dur = wait = 0
+    if found is not None:
+        i, mid, j, dur, wait, _mx = found
+        cand = _materialize_insert(core, pu, via, do, i, mid, j)
+        if pooling_stops_violate(problem, cand) is None:
+            seq = cand
+    if seq is None:
+        seq = [*core, pu, *([via] if via is not None else []), do]
+        if pooling_stops_violate(problem, seq):
+            return None
+        plan = simulate_stop_sequence(problem, vehicle, assigned, seq, merged)
+        if plan is None:
+            return None
+        return (plan.route_duration, sum(plan.waiting_times.values()), seq, assigned)
     return (dur, wait, seq, assigned)
 
 
