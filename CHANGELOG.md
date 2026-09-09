@@ -16,6 +16,12 @@
   `SIMULATION_FAILED`), deduplicated, and no longer ends in a dangling
   separator when there is no evidence. Search-side refusal only — no new
   feasibility claim and no driver-certification claim.
+- IMPLEMENTED: ALNS republishes `plan_id` after re-stamping its own
+  `solution_type`, `status` and `config_hash`. The identity now fingerprints the
+  published ALNS answer instead of the greedy seed pass that built the routes
+  (same defect class as RHC in 0.2.4), so two destroy/iteration settings can no
+  longer share one plan identity. Existing ALNS plan ids intentionally change.
+  Identity only — no new feasibility or optimality claim.
 
 ## 0.2.5 — 2026-09-09
 
