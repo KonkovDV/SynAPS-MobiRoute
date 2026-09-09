@@ -36,8 +36,10 @@
   and republishes `plan_id`, so an overridden plan is no longer published under
   the identity of the plan the operator overrode. The journal entry must name
   the trip being overridden, and an empty reason code is normalised instead of
-  published. Audit and identity hygiene — a manual override is still not an
-  operational authorization claim.
+  published. Stop clocks are removed by trip ownership (`t1:PU`), so overriding
+  `t1` no longer strips the clocks of `t10` from the same route. Audit and
+  identity hygiene — a manual override is still not an operational
+  authorization claim.
 
 ## 0.2.5 — 2026-09-09
 

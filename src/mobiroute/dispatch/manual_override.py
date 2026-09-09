@@ -12,6 +12,11 @@ from mobiroute.solvers.finalize import _reconcile_explanations, plan_identity
 from mobiroute.validation.reasons import non_empty_reason
 
 
+def _clock_owner(key: str) -> str:
+    """Stop clocks are keyed `<trip_id>:<stop_type>`; the owner is that prefix."""
+    return key.split(":", 1)[0]
+
+
 class ManualOverride(StrictModel):
     operator_id: str  # pseudonymous staff id — never FIO in open logs
     trip_id: str
@@ -53,8 +58,8 @@ class OverrideJournal(StrictModel):
                 continue
             kept = [s for s in rp.ordered_stops if s.trip_id != trip_id]
             assigns = [t for t in rp.passenger_assignments if t != trip_id]
-            arr = {k: v for k, v in rp.arrival_times.items() if not k.startswith(trip_id)}
-            dep = {k: v for k, v in rp.departure_times.items() if not k.startswith(trip_id)}
+            arr = {k: v for k, v in rp.arrival_times.items() if _clock_owner(k) != trip_id}
+            dep = {k: v for k, v in rp.departure_times.items() if _clock_owner(k) != trip_id}
             plans.append(
                 rp.model_copy(
                     update={

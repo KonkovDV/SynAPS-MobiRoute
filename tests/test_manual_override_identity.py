@@ -70,5 +70,29 @@ class ManualOverrideIdentityTest(unittest.TestCase):
             OverrideJournal().record(blank)
 
 
+class ManualOverrideClockOwnerTest(unittest.TestCase):
+    """Overriding `t1` must not strip the clocks of `t10`."""
+
+    def test_a_sibling_trip_keeps_its_clocks(self):
+        day = problem(
+            [vehicle("veh-1")],
+            [driver("drv-1")],
+            [trip("t1", "Z_NORTH", "Z_SOUTH"), trip("t10", "Z_NORTH", "Z_SOUTH")],
+        )
+        base = solve_greedy(day)
+        shared = [
+            rp
+            for rp in base.route_plans
+            if "t1" in rp.passenger_assignments and "t10" in rp.passenger_assignments
+        ]
+        if not shared:
+            self.skipTest("t1 and t10 are not on one route")
+        out = OverrideJournal().apply_reject(base, "t1", _entry("t1"))
+        clocks = {k for rp in out.route_plans for k in rp.arrival_times}
+        clocks |= {k for rp in out.route_plans for k in rp.departure_times}
+        self.assertFalse({k for k in clocks if k.split(":", 1)[0] == "t1"})
+        self.assertTrue({k for k in clocks if k.split(":", 1)[0] == "t10"})
+
+
 if __name__ == "__main__":
     unittest.main()
