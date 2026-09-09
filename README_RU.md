@@ -13,7 +13,7 @@
 
 | | |
 | --- | --- |
-| Version | **0.2.3** |
+| Version | **0.2.4** |
 | Ветка | `main` |
 | SynAPS pin | [`07f11ebb`](https://github.com/KonkovDV/SynAPS/commit/07f11ebb31357ff65c8c078f94207c965a255cc1) |
 | Зрелость | ISO 16290 TRL 4 (синтетическая лаборатория). Не пилот оператора. |

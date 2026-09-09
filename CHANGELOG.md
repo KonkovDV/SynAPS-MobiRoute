@@ -2,6 +2,26 @@
 
 ## Unreleased
 
+## 0.2.4 — 2026-09-09
+
+- Package identity matches `main`: `__version__` / `pyproject.toml` / READMEs /
+  `APPLICATION.md` / `CITATION.cff` are **0.2.4**. Dated 0.2.2 / 0.2.3 changelog
+  pins are not rewritten. Native crate stays **0.2.0** (ABI unchanged).
+- IMPLEMENTED: greedy leftover rebuild/peel and unresolved greedy insert no
+  longer stamp `TIME_WINDOW_CONFLICT`. Quota and wait-return keep their codes;
+  everything else uses `diagnose_rejection` (unresolved → `MANUAL_REVIEW_REQUIRED`).
+  Frozen-protect rollback uses `MANUAL_REVIEW_REQUIRED` and keeps the detail that
+  insertion would change frozen trips. `TIME_WINDOW_CONFLICT` remains in the
+  vocabulary; search no longer fabricates it.
+- IMPLEMENTED: removed unused `_pool_candidates_native` (and its `score_fleet`
+  import) from greedy. Live pooling scoring is `score_stored` +
+  `pooling_stops_violate`. The native batch ABI `score_fleet` stays for tests.
+- Dated 2026-08-12 snapshot docs keep their measured tables. Errata record:
+  Cordeau a2-16 is an `open_data_benchmark` gate, not literature BKS; ALNS/RHC
+  are heuristics on current main (LBBD still a stub); RT-13's fabricated
+  time-window label is stale; greedy leftover no longer matches the seed-42
+  `TIME_WINDOW_CONFLICT` strings in the ops snapshot.
+
 - IMPLEMENTED: `check_plan` no longer accepts `only_vehicles`. Finalize enriches
   every route. A subset cannot look like a notary. Search pooling labels use the
   notary code (`POOLING_NOT_OPTED_IN` under `OPT_IN`, not a hard-coded
