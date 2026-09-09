@@ -130,8 +130,9 @@ def solve_cpsat(problem: DayProblem, time_limit_s: float = 10.0) -> PlanningResu
                         problem.operator_policy.quota_debit_basis
                         == QuotaDebitBasis.BILLABLE_SERVICE
                     ):
+                        # Debit the dwell the plan holds: max(boarding, 5), not the declared one.
                         model.Add(
-                            ride_len + t.boarding_duration + t.alighting_duration <= qleft
+                            ride_len + board_eff + t.alighting_duration <= qleft
                         ).OnlyEnforceIf(a)
                     else:
                         model.Add(ride_len <= qleft).OnlyEnforceIf(a)

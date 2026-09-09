@@ -84,7 +84,9 @@ def trip_ride_minutes(plan: RoutePlan, trip_id: str) -> int | None:
 
 
 def billable_service_minutes(trip: TripRequest, ride: int) -> int:
-    return max(0, trip.boarding_duration) + ride + max(0, trip.alighting_duration)
+    """Boarding is the curb dwell every plan must hold, not the declared value."""
+    boarding = pickup_service_minutes(max(0, trip.boarding_duration))
+    return boarding + ride + max(0, trip.alighting_duration)
 
 
 def quota_debit_minutes(problem: DayProblem, trip: TripRequest, ride: int) -> int:
