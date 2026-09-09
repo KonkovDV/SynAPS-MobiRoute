@@ -113,7 +113,8 @@ def solve_beam(problem: DayProblem, beam_width: int = 3) -> PlanningResult:
                 if accessibility_compatible(v, trip) is not None:
                     continue
                 occ = occupied - ({drivers[v.id]} if drivers[v.id] else set())
-                did = drivers[v.id] or _assign_driver(
+                # A seated driver is not a licence: re-check this trip's need.
+                did = _assign_driver(
                     problem,
                     v.id,
                     needs_accessibility=trip.needs_boarding_assistance,
@@ -182,10 +183,9 @@ def solve_beam(problem: DayProblem, beam_width: int = 3) -> PlanningResult:
                     tid = stop.trip_id
                     if tid in served:
                         served.remove(tid)
-                    rejected.append(
-                        RejectedTrip(trip_id=tid, reason_code=ReasonCode.TIME_WINDOW_CONFLICT.value)
-                    )
-                    reasons[tid] = ReasonCode.TIME_WINDOW_CONFLICT.value
+                    code = non_empty_reason(diagnose_rejection(problem, trips_by_id[tid]))
+                    rejected.append(RejectedTrip(trip_id=tid, reason_code=code))
+                    reasons[tid] = code
     result = PlanningResult(
         status=SolutionStatus.HEURISTIC_FEASIBLE.value,
         solution_type="BEAM",
