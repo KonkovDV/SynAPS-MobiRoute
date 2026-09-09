@@ -7,6 +7,11 @@
   insertion gates, CP-SAT and the `diagnose_rejection` quota lower bound. A
   declared boarding below the enforced curb wait can no longer understate a
   passenger-day entitlement. Not an operator tariff, billing or legal claim.
+- IMPLEMENTED: nearest and beam re-check driver qualification for every trip, so
+  an already seated untrained driver can no longer keep a trip that needs
+  boarding assistance; a rebuild failure now reports diagnosed evidence instead
+  of a fabricated time-window conflict. Accessibility-training data is policy
+  input, not a certification claim.
 
 ## 0.2.3 — 2026-09-09
 
