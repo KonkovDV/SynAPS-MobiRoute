@@ -2,6 +2,17 @@
 
 ## Unreleased
 
+## 0.2.6 — 2026-09-10
+
+- Package identity matches `main`: `__version__` / `pyproject.toml` / READMEs /
+  `APPLICATION.md` / `CITATION.cff` are **0.2.6**. Dated 0.2.2 / 0.2.3 / 0.2.4 /
+  0.2.5 changelog pins are not rewritten. Native crate stays **0.2.0** (ABI
+  unchanged).
+- IMPLEMENTED: the RHC stamp demotes every exact-lane status (`OPTIMAL` and
+  `FEASIBLE`), not only `OPTIMAL`. A window composition is a sequence of
+  heuristic greedy passes; an exact label cannot survive the stamp (same rule
+  as ALNS). Status honesty only — RHC remains a heuristic.
+
 - IMPLEMENTED: finalize reconciles the served side too. A trip in
   `served_requests` can no longer publish an `accepted=False` rejection record,
   and a trip claimed on both sides keeps the rejection while accounting reports
