@@ -21,6 +21,10 @@ from mobiroute.solvers.greedy import solve_greedy
 from mobiroute.solvers.native_accel import acceleration_status
 from mobiroute.validation.input import validate_problem
 
+# A window composition is a sequence of heuristic passes, so an exact-lane
+# label can never survive the stamp. Same rule as the ALNS stamp.
+_EXACT_LABELS = frozenset({SolutionStatus.OPTIMAL.value, SolutionStatus.FEASIBLE.value})
+
 
 def _window_ends(
     t0: int,
@@ -64,10 +68,10 @@ def solve_rolling_horizon(
 
     for i, window_end in enumerate(ends):
         last = i == len(ends) - 1
+        # One scan of the committed seeds per window, not one per request.
+        seeded = _seeded_ids(seed_stops)
         visible_ids = {
-            t.id
-            for t in active
-            if last or t.earliest_pickup < window_end or t.id in _seeded_ids(seed_stops)
+            t.id for t in active if last or t.earliest_pickup < window_end or t.id in seeded
         }
         sliced = problem.model_copy(
             update={
@@ -112,7 +116,7 @@ def _stamp_rhc(
         **acceleration_status(),
     }
     status = result.status
-    if status == SolutionStatus.OPTIMAL.value:
+    if status in _EXACT_LABELS:
         status = (
             SolutionStatus.PARTIAL.value
             if result.rejected_requests
