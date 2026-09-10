@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
+import time
 from pathlib import Path
 
 from mobiroute.adapters.synthetic_data import MODES, generate_day
@@ -49,6 +51,24 @@ def main(argv: list[str] | None = None) -> int:
     )
     o.add_argument("--out-dir", type=Path, required=True)
     o.add_argument("--seed", type=int, default=42)
+
+    a = sub.add_parser(
+        "academic-benchmark",
+        help="Open-data instance run with claim gating and a reproducibility stamp",
+    )
+    a.add_argument("--instance", type=Path, required=True)
+    a.add_argument(
+        "--solver",
+        choices=["greedy", "nearest", "beam", "alns"],
+        default="greedy",
+    )
+    a.add_argument(
+        "--profile",
+        choices=["literature", "operator"],
+        default="literature",
+        help="literature = comparable-intent run; operator = operator policy applied",
+    )
+    a.add_argument("--out-dir", type=Path, required=True)
 
     args = p.parse_args(argv)
 
@@ -154,6 +174,59 @@ def main(argv: list[str] | None = None) -> int:
             )
         )
         return 0
+
+    if args.cmd == "academic-benchmark":
+        from mobiroute.adapters.cordeau import load_cordeau_a2_16
+        from mobiroute.benchmarks.academic import (
+            BenchmarkProfile,
+            build_cordeau_a2_16_report,
+            build_evidence,
+        )
+        from mobiroute.validation.feasibility import check_plan
+
+        profiles = {
+            "literature": BenchmarkProfile.LITERATURE,
+            "operator": BenchmarkProfile.OPERATOR,
+        }
+        problem = load_cordeau_a2_16(args.instance)
+        started = time.perf_counter()
+        if args.solver == "nearest":
+            result = solve_nearest(problem)
+        elif args.solver == "beam":
+            result = solve_beam(problem)
+        elif args.solver == "alns":
+            result = solve_alns(problem)
+        else:
+            result = solve_greedy(problem)
+        elapsed = time.perf_counter() - started
+        notary = check_plan(problem, result)
+        report = build_cordeau_a2_16_report(problem, result, profile=profiles[args.profile])
+        evidence = build_evidence(
+            result,
+            instance_path=str(args.instance),
+            instance_sha256=hashlib.sha256(args.instance.read_bytes()).hexdigest(),
+            solver=args.solver,
+            seed=problem.seed,
+            wall_clock_seconds=elapsed,
+            notary_feasible=notary.feasible,
+            notary_violations=[str(item) for item in notary.violations],
+            exit_code=0 if notary.feasible else 2,
+        )
+        args.out_dir.mkdir(parents=True, exist_ok=True)
+        (args.out_dir / "academic_benchmark.json").write_text(
+            json.dumps(
+                {
+                    "report": report.model_dump(mode="json"),
+                    "evidence": evidence.model_dump(mode="json"),
+                },
+                indent=2,
+                sort_keys=True,
+            ),
+            encoding="utf-8",
+        )
+        write_json(result, args.out_dir / "result.json")
+        print(log_safe(report.allowed_claim))
+        return 0 if notary.feasible else 2
 
     return 1
 

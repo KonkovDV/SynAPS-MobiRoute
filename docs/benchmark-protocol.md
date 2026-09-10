@@ -28,6 +28,49 @@ superseded bands from the same day (about 95 s → ~24 s → 13–15 s → 10–
 This file previously published 5–6 s / 13–15 s, contradicting the SSOT it
 cites. Samples on one machine, not a SLA, and not re-measured for 0.2.5.
 
+## Comparability profiles
+
+Two profiles exist and are never mixed in one table
+(`mobiroute.benchmarks.academic.BenchmarkProfile`):
+
+| Profile | Constraint algebra | Comparable with literature |
+| --- | --- | --- |
+| `literature_profile_a` | instance constraints only: no operator policy, no extra dwell | intended, and still conditional on the reference cost algebra |
+| `operator_profile_b` | Moscow social-taxi operator policy applied on top of the instance | never |
+
+A profile B run is a service-quality experiment, not a benchmark result. It may
+never be reported next to a literature best-known solution.
+
+## Gap gate
+
+`gap = 100 × (cost − reference) / reference` is computed **only** when every
+condition below holds. Otherwise the published gap is `null` and the blocking
+conditions are published instead. Implementation and tests:
+`src/mobiroute/benchmarks/academic.py`,
+`tests/test_academic_benchmark_gate.py`.
+
+| Condition | Blocker when it fails |
+| --- | --- |
+| Profile is `literature_profile_a` | `PROFILE_NOT_LITERATURE` |
+| The loader reproduces the reference cost algebra | `ALGEBRA_NOT_COMPARABLE` |
+| The plan is notary-verified feasible | `PLAN_NOT_VERIFIED` |
+| Status is `OPTIMAL`, `FEASIBLE` or `HEURISTIC_FEASIBLE` | `STATUS_NOT_COMPARABLE` |
+| Every request in the instance is served | `SERVICE_INCOMPLETE` |
+| Served and rejected sets cover the instance | `ACCOUNTING_INCOMPLETE` |
+| A positive reference objective is supplied | `NO_REFERENCE_OBJECTIVE` |
+
+For Cordeau instances the second condition is false by construction: the
+vendored loader rounds Euclidean travel to integer minutes and adds curb dwell,
+which the published tables do not. No configuration flag unblocks this; only a
+loader that reproduces the reference algebra can.
+
+```bash
+mobiroute academic-benchmark \
+  --instance benchmark/instances/cordeau/a2-16.txt \
+  --solver greedy \
+  --out-dir out/a2-16
+```
+
 ## Algorithms to compare
 
 FIFO, nearest-feasible, greedy insertion, CP-SAT tiny, ALNS (heuristic),
@@ -47,6 +90,11 @@ event_id for dispatch lanes, see
 version, SynAPS commit, instance size, runtime, status, verified_feasibility,
 metrics, provenance, claim_level.
 
+Normative field list, machine-readable stamp and publication rules:
+[`docs/evidence-bundle.md`](evidence-bundle.md). Failed and aborted runs are
+part of the artifact set; reporting only the successful subset is selection
+bias.
+
 ## Forbidden
 
 - Publishing one vanity KPI  
@@ -54,3 +102,4 @@ metrics, provenance, claim_level.
 - Labeling synthetic Moscow-zone data as real Moscow trips  
 - Calling results customer validation without customer data  
 - Quoting a wall-clock band that the timing SSOT has superseded  
+- Quoting a gap against a published objective while `gap_blockers` is non-empty  
