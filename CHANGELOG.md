@@ -52,8 +52,11 @@
   against every new trip. An untrained driver already on the van is no longer
   kept for a boarding-assistance insert; day-ahead may swap to a trained driver
   on that unfinished route. Online still refuses a committed untrained driver
-  (manual review). Search-side qualification only — no driver-certification
-  claim.
+  (manual review). A swap that is scored but not chosen is rolled back in the
+  native fleet payload before the plan is emitted, so published clocks are
+  measured against the driver the route publishes and a losing candidate can no
+  longer hide the seated driver's rest window (notary `DRIVER_REST`).
+  Search-side qualification only — no driver-certification claim.
 - IMPLEMENTED: CP-SAT fallback republishes `config_hash` and `plan_id` after
   re-labelling the greedy answer as `CPSAT_FALLBACK_GREEDY` (too-large instance
   or missing OR-Tools). The fallback can no longer share the greedy seed's
