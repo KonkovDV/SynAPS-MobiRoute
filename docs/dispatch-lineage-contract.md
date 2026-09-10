@@ -24,15 +24,19 @@ Status: IMPLEMENTED for online insertion and disruption recovery. Synthetic labo
   record, and a duplicate record cannot contradict the row next to it.
 - Refusal evidence is search-side and per vehicle. The seated driver of a
   committed route is re-checked against the new request, and the rejection
-  detail names the refusing vehicles (deduplicated, truncated). It records where
-  insertion failed on this baseline, not a proof that no plan exists. Codes and
-  labels are defined in `docs/rejection-evidence-contract.md`.
+  detail names the refusing vehicles (deduplicated, truncated to eight, with
+  the number of omitted vehicles published when the list is cut). It records
+  where insertion failed on this baseline, not a proof that no plan exists.
+  Codes and labels are defined in `docs/rejection-evidence-contract.md`.
 - Event IDs use canonical structured payloads, not request IDs alone. Appointment values and all combined disruption operations contribute. Combined operations are labelled `DISRUPTION`.
 - Child IDs use the `mobiroute:plan:v2` namespace and cover lineage, inputs, execution config, status, served/rejected records, route evidence and running package/SynAPS versions. Exact JSON replay on the same implementation is deterministic. IDs intentionally differ from the previous scheme.
-- Imported baselines without a plan ID receive a content-derived parent reference. IDs are identifiers, not signatures, permissions or reusable native-cache keys.
+- Imported baselines without a plan ID receive a content-derived parent
+  reference, published with an `unsigned:` prefix so a lineage reader can never
+  mistake a content hash for a published plan ID. IDs are identifiers, not
+  signatures, permissions or reusable native-cache keys.
 
 An invalid baseline is not silently repaired or certified. Where a result can be constructed, failed verification yields `NOT_VERIFIED`; malformed inputs may raise instead. No driver command or passenger refusal is authorized by this contract.
 
 This does not establish global DARP optimality, complete mandatory-return chains, legal pooling permission, billing-time semantics or passenger outcomes. Temporal churn is defined in `docs/plan-diff-contract.md`.
 
-Regression: `python -m unittest tests.test_online_result_lineage tests.test_identity_ownership tests.test_incremental_repair_identity tests.test_manual_override_identity tests.test_explanation_dedupe tests.test_cpsat_fallback_identity` with the real native extension built. Includes accepted/rejected replay, forged verification, changed travel inputs, detached results, payload collisions, fault-injected frozen rollback, one-signer `input_hash`, per-solver replay determinism, repair / override / CP-SAT-fallback signing, and explanation uniqueness.
+Regression: `python -m unittest tests.test_online_result_lineage tests.test_identity_ownership tests.test_incremental_repair_identity tests.test_manual_override_identity tests.test_explanation_dedupe tests.test_cpsat_fallback_identity` with the real native extension built. Includes accepted/rejected replay, forged verification, changed travel inputs, detached results, payload collisions, fault-injected frozen rollback, one-signer `input_hash`, per-solver replay determinism, repair / override / CP-SAT-fallback signing, and explanation uniqueness. Unsigned-parent lineage and truncated refusal evidence are covered by `pytest tests/test_unsigned_baseline_lineage.py tests/test_online_refusal_evidence.py`.

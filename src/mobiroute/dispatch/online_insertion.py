@@ -86,7 +86,10 @@ def _trip_vehicle(result: PlanningResult) -> dict[str, str]:
 
 
 def _base_plan_id(baseline: PlanningResult) -> str:
-    return baseline.plan_id or fingerprint(baseline.model_dump(mode="json"))
+    """An unsigned parent is named as unsigned, never passed off as a plan id."""
+    if baseline.plan_id:
+        return baseline.plan_id
+    return f"unsigned:{fingerprint(baseline.model_dump(mode='json'))}"
 
 
 def _trip_driver(result: PlanningResult) -> dict[str, str]:
