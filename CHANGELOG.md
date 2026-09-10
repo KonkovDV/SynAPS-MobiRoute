@@ -42,6 +42,10 @@
   removed by trip ownership (`t1:PU`), so overriding `t1` no longer strips the
   clocks of `t10`. Ride/wait summaries, itineraries and inherited fairness are
   dropped with the trip so a leftover metric cannot still describe service.
+  Totals the override cannot re-measure (`violations` and the ride / quota /
+  billable minutes) are dropped instead of republished, and the override chains
+  what it overrode (`base_plan_id`, `event_type=MANUAL_OVERRIDE`).
+  Re-verification publishes the dropped totals again.
   Audit and identity hygiene — a manual override is still not an operational
   authorization claim.
 - IMPLEMENTED: greedy (pooling and sequential/FIFO) re-checks the seated driver
