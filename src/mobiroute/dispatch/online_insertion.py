@@ -111,18 +111,16 @@ def _active_route_passengers(result: PlanningResult) -> dict[str, tuple[str, ...
     return out
 
 
-def _frozen_break_ids(
-    baseline: PlanningResult,
-    new: PlanningResult,
+def _frozen_breaks(
     frozen: set[str],
+    bmap: dict[str, str],
+    nmap: dict[str, str],
+    bdrv: dict[str, str],
+    ndrv: dict[str, str],
+    bclock: dict[str, TripClocks],
+    nclock: dict[str, TripClocks],
 ) -> list[str]:
     """One predicate: the refusal guard is as strict as the diff it publishes."""
-    bmap = _trip_vehicle(baseline)
-    nmap = _trip_vehicle(new)
-    bdrv = _trip_driver(baseline)
-    ndrv = _trip_driver(new)
-    bclock = _result_clocks(baseline)
-    nclock = _result_clocks(new)
     return sorted(
         tid
         for tid in frozen
@@ -133,6 +131,23 @@ def _frozen_break_ids(
             or ndrv.get(tid, "") != bdrv.get(tid, "")
             or nclock.get(tid) != bclock.get(tid)
         )
+    )
+
+
+def _frozen_break_ids(
+    baseline: PlanningResult,
+    new: PlanningResult,
+    frozen: set[str],
+) -> list[str]:
+    """The same predicate on two results; the diff passes maps it already built."""
+    return _frozen_breaks(
+        frozen,
+        _trip_vehicle(baseline),
+        _trip_vehicle(new),
+        _trip_driver(baseline),
+        _trip_driver(new),
+        _result_clocks(baseline),
+        _result_clocks(new),
     )
 
 
@@ -159,7 +174,7 @@ def compute_diff(baseline: PlanningResult, new: PlanningResult, frozen_ids: set[
     changed_drivers = [
         tid for tid in bmap if tid in nmap and bdrv.get(tid, "") != ndrv.get(tid, "")
     ]
-    broken_frozen = _frozen_break_ids(baseline, new, frozen_ids)
+    broken_frozen = _frozen_breaks(frozen_ids, bmap, nmap, bdrv, ndrv, bclock, nclock)
     unchanged_frozen = sorted({tid for tid in frozen_ids if tid in bmap} - set(broken_frozen))
     broutes = _active_route_passengers(baseline)
     nroutes = _active_route_passengers(new)
