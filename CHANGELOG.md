@@ -16,8 +16,11 @@
   rejection detail lists per-vehicle evidence (`NO_COMPATIBLE_VEHICLE`,
   `NO_QUALIFIED_DRIVER`, `NO_DRIVER`, `INSERT_INFEASIBLE`, `POOLING_BLOCKED`,
   `SIMULATION_FAILED`), deduplicated, and no longer ends in a dangling
-  separator when there is no evidence. Search-side refusal only — no new
-  feasibility claim and no driver-certification claim.
+  separator when there is no evidence. Frozen protection now uses the same
+  predicate as the diff it publishes (vehicle, driver and clocks), so a
+  committed route can no longer be re-seated or retimed under a frozen promise
+  while the published `PlanDiff` reports the break. Search-side refusal only —
+  no new feasibility claim and no driver-certification claim.
 - IMPLEMENTED: ALNS republishes `plan_id` after re-stamping its own
   `solution_type`, `status` and `config_hash`. The identity now fingerprints the
   published ALNS answer instead of the greedy seed pass that built the routes
@@ -295,7 +298,7 @@
 - Adaptive ALNS: Shaw / worst / route / random destroy, roulette weights, SA
   (never fewer served; never `OPTIMAL`). Pattern from SynAPS ALNS + Ropke/Pisinger,
   DARP operators from Hu et al. Omega 2026 (feasibility-test ALNS) — not FJSP.
-- Pickup curb wait \(\max(board,5)\) and appointment earliest alight \(start-30\)
+- Pickup curb wait \\(\\max(board,5)\\) and appointment earliest alight \\(start-30\\)
   (DREDF/FTA analogues, not Moscow law). Early-alight wait is forbidden if another
   passenger is still onboard. Itinerary `travel_path` is the zone shortest path,
   including VIA.
