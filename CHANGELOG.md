@@ -68,9 +68,12 @@
   identity, and a missing OR-Tools install no longer publishes `status=ERROR`
   over a plan the notary verified: both fallback lanes publish the status of the
   plan they hand over (never `OPTIMAL` or `FEASIBLE`), and the missing engine
-  stays in `solver_config` (`reason`, `error`). Existing fallback plan ids
-  intentionally change. Identity and status honesty only — the fallback remains
-  a heuristic and never `OPTIMAL`.
+  stays in `solver_config` (`reason`, `error`). The tiny lane no longer reports
+  the OR-Tools status code among `objective_values` — a solver enum is not an
+  objective, and the code is already published as
+  `solver_config["ortools_status"]`. Existing fallback plan ids intentionally
+  change. Identity and status honesty only — the fallback remains a heuristic
+  and never `OPTIMAL`.
 
 ## 0.2.5 — 2026-09-09
 
