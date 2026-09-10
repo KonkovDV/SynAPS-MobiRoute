@@ -13,7 +13,7 @@ Language: **EN** | [RU](README_RU.md)
 
 | | |
 | --- | --- |
-| Version | **0.2.6** |
+| Version | **0.2.7** |
 | Default branch | `main` |
 | SynAPS pin | [`07f11ebb`](https://github.com/KonkovDV/SynAPS/commit/07f11ebb31357ff65c8c078f94207c965a255cc1) (engineering reference / adapter; SynAPS `main` as of 2026-09-09). ADR-0004 regressions: fail-closed coverage, calendar encode, kernel claims-lint. KI-N12 stays closed. |
 | Maturity | ISO 16290 TRL 4 (synthetic lab). Not an operator pilot. |
