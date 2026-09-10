@@ -10,49 +10,41 @@ from mobiroute.validation.feasibility import check_plan
 from tests.factories import driver, problem, trip, vehicle
 
 
-def _swap_case() -> tuple[object, object, object]:
+def _swap_case() -> tuple[object, object]:
+    """The assist trip is out of reach for every payload, so the swap always loses."""
     seated = trip("t-seed", "Z_NORTH", "Z_SOUTH", earliest=60, latest=400, max_wait=400)
-    assist = trip("t-assist", "Z_EAST", "Z_WEST", earliest=60, latest=180, assist=True)
+    assist = trip("t-assist", "Z_EAST", "Z_WEST", earliest=0, latest=2, assist=True)
     p = problem(
-        [vehicle("v1"), vehicle("v2")],
-        [
-            driver("d1", trained=False, unavail=[(0, 200)]),
-            driver("d2"),
-            driver("d3"),
-        ],
+        [vehicle("v1")],
+        [driver("d1", trained=False, unavail=[(0, 200)]), driver("d2")],
         [seated, assist],
     )
-    return p, seated, assist
+    return p, seated
+
+
+def _solve(p, seated):
+    return solve_greedy(p, seed_stops={"v1": _trip_stops(seated)}, seed_drivers={"v1": "d1"})
 
 
 def test_a_losing_driver_swap_does_not_measure_the_published_route() -> None:
     if not native_available():
         pytest.skip("mobiroute_native not built")
-    p, seated, _assist = _swap_case()
-    res = solve_greedy(
-        p,
-        seed_stops={"v1": _trip_stops(seated)},
-        seed_drivers={"v1": "d1"},
-    )
-    seed_route = next(rp for rp in res.route_plans if rp.vehicle_id == "v1")
-    assert seed_route.driver_id == "d1"
-    # The seated driver rests until 200: published clocks may not start before it.
-    assert min(seed_route.arrival_times.values()) >= 200
+    p, seated = _swap_case()
+    res = _solve(p, seated)
+    route = next(rp for rp in res.route_plans if rp.vehicle_id == "v1")
+    assert route.driver_id == "d1"
+    # d1 rests until 200, so the published pickup cannot be measured without it.
+    pickup = next(i.pickup_time for i in route.passenger_itineraries if i.trip_id == "t-seed")
+    assert pickup >= 200
     report = check_plan(p, res)
     assert report.feasible, report.violations
     assert res.objective_values["violations"] == 0.0
 
 
-def test_the_assist_trip_is_served_by_a_trained_driver() -> None:
+def test_the_scored_assist_trip_is_refused_with_evidence() -> None:
     if not native_available():
         pytest.skip("mobiroute_native not built")
-    p, seated, _assist = _swap_case()
-    res = solve_greedy(
-        p,
-        seed_stops={"v1": _trip_stops(seated)},
-        seed_drivers={"v1": "d1"},
-    )
-    if "t-assist" not in res.served_requests:
-        return
-    route = next(rp for rp in res.route_plans if "t-assist" in rp.passenger_assignments)
-    assert route.driver_id in {"d2", "d3"}
+    p, seated = _swap_case()
+    res = _solve(p, seated)
+    assert "t-assist" not in res.served_requests
+    assert "t-assist" in {r.trip_id for r in res.rejected_requests}
