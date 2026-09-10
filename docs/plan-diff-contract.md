@@ -8,7 +8,9 @@ Status: IMPLEMENTED for `compute_diff`. Synthetic laboratory reporting, not froz
   Assignment churn (`changed_trips`) does not include them.
 - Frozen trips with the same vehicle are `unchanged_frozen_trips` only when
   pickup/dropoff arrival and departure and the driver also match. Otherwise they
-  are `broken_frozen_trips`. Online freeze protection uses the same clocks.
+  are `broken_frozen_trips`. Online freeze protection calls the same predicate
+  (vehicle, driver, clocks), so the refusal guard and this report cannot
+  disagree about one trip.
 - `changed_driver_trips` reports driver identity changes even when the vehicle is unchanged.
 - `changed_routes` includes add-only, remove-only, composition-changed, retimed and driver-changed vehicles. `added_routes` / `removed_routes` / `retimed_routes` name those subsets.
 - `plan_churn` keeps the previous assignment keys and adds `retimed_trips`, `changed_drivers`, `broken_frozen`, `temporal_churn` and `changed_routes`.
