@@ -20,10 +20,13 @@ Loader: `mobiroute.adapters.cordeau`. Hash-gate:
 vendored in this drop.
 
 
-`stress_200` wall-clock (this machine, seed 42): overnight greedy about 5–6 s;
-full pipeline (day-ahead + batch disruption + traffic + 8 online inserts)
-about 13–15 s. SSOT: [`docs/native-acceleration.md`](native-acceleration.md).
-Sample, not a SLA.
+`stress_200` wall-clock (this machine, seed 42, measured 2026-08-12): day-ahead
+greedy about 4.0–4.1 s; full pipeline (day-ahead + batch disruption + traffic +
+8 online inserts) about 8.1 s. SSOT:
+[`docs/native-acceleration.md`](native-acceleration.md), which also records the
+superseded bands from the same day (about 95 s → ~24 s → 13–15 s → 10–11 s).
+This file previously published 5–6 s / 13–15 s, contradicting the SSOT it
+cites. Samples on one machine, not a SLA, and not re-measured for 0.2.5.
 
 ## Algorithms to compare
 
@@ -31,11 +34,18 @@ FIFO, nearest-feasible, greedy insertion, CP-SAT tiny, ALNS (heuristic),
 rolling horizon (heuristic RHC), incremental repair (partial via disruption
 recovery). LBBD remains a stub (`NotImplementedError`).
 
+CP-SAT tiny runs only at most 40 active requests and 12 vehicles. Above that
+gate, and when OR-Tools is missing, the lane hands over a greedy plan
+relabelled `CPSAT_FALLBACK_GREEDY` with its own `config_hash` and `plan_id`.
+Report it as its own lane: it is never `OPTIMAL` and it is not a CP-SAT result.
+
 ## Required artifacts per run
 
-algorithm, seed, input_hash, config_hash, code version, SynAPS commit,
-instance size, runtime, status, verified_feasibility, metrics, provenance,
-claim_level.
+algorithm, seed, input_hash, config_hash, plan_id (plus base_plan_id and
+event_id for dispatch lanes, see
+[`docs/dispatch-lineage-contract.md`](dispatch-lineage-contract.md)), code
+version, SynAPS commit, instance size, runtime, status, verified_feasibility,
+metrics, provenance, claim_level.
 
 ## Forbidden
 
@@ -43,3 +53,4 @@ claim_level.
 - Calling GREEDY/ALNS/RHC optimal  
 - Labeling synthetic Moscow-zone data as real Moscow trips  
 - Calling results customer validation without customer data  
+- Quoting a wall-clock band that the timing SSOT has superseded  
