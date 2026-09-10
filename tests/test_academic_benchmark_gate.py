@@ -52,7 +52,7 @@ def test_adapted_cordeau_algebra_blocks_every_published_gap() -> None:
     assert report.service_rate == 1.0
     assert report.gap_percent is None
     assert report.gap_blockers == ["ALGEBRA_NOT_COMPARABLE"]
-    assert "no gap against published results" in report.allowed_claim
+    assert "no publishable gap" in report.allowed_claim
 
 
 def test_operator_profile_can_never_publish_a_literature_gap() -> None:
@@ -61,7 +61,10 @@ def test_operator_profile_can_never_publish_a_literature_gap() -> None:
     result = _fixture_result(served=served, verified=True, status="HEURISTIC_FEASIBLE")
 
     report = build_cordeau_a2_16_report(
-        problem, result, profile=BenchmarkProfile.OPERATOR, algebra_matches_reference=True
+        problem,
+        result,
+        profile=BenchmarkProfile.OPERATOR,
+        algebra_matches_reference=True,
     )
 
     assert report.profile == BenchmarkProfile.OPERATOR
