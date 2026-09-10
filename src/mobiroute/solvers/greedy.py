@@ -488,6 +488,23 @@ def _clear_native_slot(kernel: ProblemKernel, fleet_i: int, vehicle_id: str) -> 
     set_vehicle(kernel, fleet_i, veh, una)
 
 
+def _resync_native_drivers(
+    kernel: ProblemKernel,
+    problem: DayProblem,
+    vehicle_driver: dict[str, str | None],
+    native_driver: dict[int, str | None],
+) -> None:
+    """A scored driver swap that lost must not measure the published route."""
+    for fleet_i, v in enumerate(problem.vehicles):
+        did = vehicle_driver[v.id]
+        if native_driver.get(fleet_i) == did:
+            continue
+        dk = kernel.drivers.get(did) if did else None
+        veh, una = vehicle_payload(kernel.vehicles[v.id], dk)
+        set_vehicle(kernel, fleet_i, veh, una)
+        native_driver[fleet_i] = did
+
+
 def _rides_by_pid(
     ride_pairs: list[tuple[int, int]],
     kernel: ProblemKernel,
@@ -1401,6 +1418,7 @@ def _greedy_core(
         )
 
     route_plans: list[RoutePlan] = []
+    _resync_native_drivers(kernel, problem, vehicle_driver, native_driver)
     emit_evals = eval_fleet(kernel)
     for fi, v in enumerate(problem.vehicles):
         if not route_stops[v.id]:
