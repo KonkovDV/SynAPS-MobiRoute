@@ -63,8 +63,12 @@
 - IMPLEMENTED: CP-SAT fallback republishes `config_hash` and `plan_id` after
   re-labelling the greedy answer as `CPSAT_FALLBACK_GREEDY` (too-large instance
   or missing OR-Tools). The fallback can no longer share the greedy seed's
-  identity. Existing fallback plan ids intentionally change. Identity only —
-  the fallback remains a heuristic and never `OPTIMAL`.
+  identity, and a missing OR-Tools install no longer publishes `status=ERROR`
+  over a plan the notary verified: both fallback lanes publish the status of the
+  plan they hand over (never `OPTIMAL` or `FEASIBLE`), and the missing engine
+  stays in `solver_config` (`reason`, `error`). Existing fallback plan ids
+  intentionally change. Identity and status honesty only — the fallback remains
+  a heuristic and never `OPTIMAL`.
 
 ## 0.2.5 — 2026-09-09
 
