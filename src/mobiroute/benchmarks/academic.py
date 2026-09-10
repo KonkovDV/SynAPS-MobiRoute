@@ -143,15 +143,11 @@ def build_academic_report(
         gap = 100.0 * (distance - reference_objective) / reference_objective
 
     if gap is None:
-        claim = (
-            f"{result.claim_level}: run recorded; no gap against published results "
-            f"may be quoted ({', '.join(blockers)})"
-        )
+        blocked = ", ".join(blockers)
+        claim = f"{result.claim_level}: run recorded, no publishable gap ({blocked})"
     else:
-        claim = (
-            f"{result.claim_level}: full-service verified run, gap {gap:.2f}% against "
-            f"{reference_source or 'the reference objective'}"
-        )
+        source = reference_source or "the reference objective"
+        claim = f"{result.claim_level}: full-service verified run, gap {gap:.2f}% vs {source}"
 
     return AcademicBenchmarkReport(
         instance_id=problem.problem_id,

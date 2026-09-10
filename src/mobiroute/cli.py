@@ -184,6 +184,10 @@ def main(argv: list[str] | None = None) -> int:
         )
         from mobiroute.validation.feasibility import check_plan
 
+        profiles = {
+            "literature": BenchmarkProfile.LITERATURE,
+            "operator": BenchmarkProfile.OPERATOR,
+        }
         problem = load_cordeau_a2_16(args.instance)
         started = time.perf_counter()
         if args.solver == "nearest":
@@ -196,12 +200,7 @@ def main(argv: list[str] | None = None) -> int:
             result = solve_greedy(problem)
         elapsed = time.perf_counter() - started
         notary = check_plan(problem, result)
-        profile = (
-            BenchmarkProfile.LITERATURE
-            if args.profile == "literature"
-            else BenchmarkProfile.OPERATOR
-        )
-        report = build_cordeau_a2_16_report(problem, result, profile=profile)
+        report = build_cordeau_a2_16_report(problem, result, profile=profiles[args.profile])
         evidence = build_evidence(
             result,
             instance_path=str(args.instance),
