@@ -26,7 +26,7 @@ greedy about 4.0–4.1 s; full pipeline (day-ahead + batch disruption + traffic 
 [`docs/native-acceleration.md`](native-acceleration.md), which also records the
 superseded bands from the same day (about 95 s → ~24 s → 13–15 s → 10–11 s).
 This file previously published 5–6 s / 13–15 s, contradicting the SSOT it
-cites. Samples on one machine, not a SLA, and not re-measured for 0.2.5.
+cites. Samples on one machine, not a SLA, and not re-measured for 0.2.5–0.2.7.
 
 ## Comparability profiles
 

@@ -2,6 +2,31 @@
 
 ## Unreleased
 
+## 0.2.7 — 2026-09-10
+
+- Package identity matches `main`: `__version__` / `pyproject.toml` / READMEs /
+  `APPLICATION.md` / `CITATION.cff` are **0.2.7**. Dated 0.2.2 / 0.2.3 / 0.2.4 /
+  0.2.5 / 0.2.6 changelog pins are not rewritten. Native crate stays **0.2.0**
+  (ABI unchanged).
+- IMPLEMENTED: an open-data gap is no longer a prose number. `build_academic_report`
+  fills `gap_percent` only when the run is the literature profile, the cost algebra
+  matches the reference, the notary verified the plan, status is comparable, every
+  request is served, accounting is complete, and a positive reference objective is
+  supplied; otherwise the gap is `None` and `gap_blockers` lists why
+  (`PROFILE_NOT_LITERATURE`, `ALGEBRA_NOT_COMPARABLE`, `PLAN_NOT_VERIFIED`,
+  `STATUS_NOT_COMPARABLE`, `SERVICE_INCOMPLETE`, `ACCOUNTING_INCOMPLETE`,
+  `NO_REFERENCE_OBJECTIVE`). The vendored Cordeau loader keeps
+  `ALGEBRA_NOT_COMPARABLE` permanently (integer minutes plus curb dwell). Claim
+  hygiene only — this is not a published gap and not a new solver.
+- IMPLEMENTED: `mobiroute academic-benchmark` writes `academic_benchmark.json`
+  (`report` + `evidence` stamp: version, SynAPS pin, native backend, instance
+  sha256, hashes, `plan_id`, notary verdict, wall-clock). Exit code follows the
+  notary, not "the process finished".
+- Docs: evidence-bundle contract, Academy of Innovators flow-10 submission pack
+  with a claim ladder, 2025–2026 DARP SOTA review, and comparability profiles in
+  the benchmark protocol. None of those documents authorises a literature gap,
+  a MAST partnership, or live Moscow data.
+
 ## 0.2.6 — 2026-09-10
 
 - Package identity matches `main`: `__version__` / `pyproject.toml` / READMEs /
