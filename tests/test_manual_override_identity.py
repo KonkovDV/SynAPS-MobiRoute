@@ -73,6 +73,19 @@ class ManualOverrideIdentityTest(unittest.TestCase):
         self.assertFalse(out.fairness_metrics.service_coverage)
         self.assertEqual(out.objective_values.get("served"), float(len(out.served_requests)))
 
+    def test_the_override_drops_totals_it_cannot_re_measure(self):
+        _tid, out = self._reject_first_served()
+        # The baseline carries notary totals; the override cannot re-measure them.
+        self.assertIn("violations", self.base.objective_values)
+        self.assertEqual(set(out.objective_values), {"served", "rejected"})
+        self.assertEqual(out.objective_values["rejected"], float(len(out.rejected_requests)))
+
+    def test_the_override_chains_the_plan_it_overrode(self):
+        _tid, out = self._reject_first_served()
+        self.assertEqual(out.base_plan_id, self.base.plan_id)
+        self.assertEqual(out.event_type, "MANUAL_OVERRIDE")
+        self.assertNotEqual(out.plan_id, out.base_plan_id)
+
     def test_apply_reject_refuses_a_non_reject_action(self):
         accept = _entry().model_copy(update={"action": "ACCEPT"})
         with self.assertRaises(ValueError):
