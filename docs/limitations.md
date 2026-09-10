@@ -34,6 +34,20 @@
 - A manual override as authorization. The journal is an audit record;
   `apply_reject` publishes an unverified plan (`verified_feasible=False`) under a
   new plan identity, and it has to be re-verified before anyone acts on it.
+  In analogue practice an override or a driver reassignment is a dated, signed
+  and re-verified operator action with retained source documents: Honolulu OTS
+  schedulers and dispatchers are directed to override computer-generated
+  schedules and divert drivers for unscheduled trips; the Jacksonville JTA
+  follow-up audit (798A) asks that modifications be dated, signed and verified
+  after finding ~17% of trips with late pickup/dropoff or trip-length
+  violations and 48% of complaints tied to scheduling and same-day dispatcher
+  insertion; Minnesota OSA agreed-upon-procedures reports retain driver
+  exception reports, trip sheets and run guides; the Washington SOS transit
+  retention schedule keeps "assignment/reassignment" records. Those are other
+  operators' controls, cited as analogues — MobiRoute claims none of them.
+- Frozen protection as a passenger promise. It is a refusal predicate over
+  vehicle, driver and published pickup/dropoff clocks, shared with
+  `compute_diff`. It does not prove that dispatch honoured the plan.
 
 Kernel note (SynAPS ADR-0005, pin `07f11ebb`): `WorkCenter.calendar` is encoded
 by CP-SAT/ALNS/LBBD (occupancy in one shift) and clipped on greedy-family
