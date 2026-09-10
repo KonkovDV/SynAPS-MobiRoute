@@ -58,6 +58,13 @@ def _stamp_cpsat_fallback(
     return stamped.model_copy(update={"plan_id": plan_identity(stamped)})
 
 
+def _fallback_status(res: PlanningResult) -> str:
+    """A fallback publishes the status of the plan it hands over, never OPTIMAL."""
+    if res.status in {SolutionStatus.OPTIMAL.value, SolutionStatus.FEASIBLE.value}:
+        return SolutionStatus.HEURISTIC_FEASIBLE.value
+    return res.status
+
+
 def solve_cpsat(problem: DayProblem, time_limit_s: float = 10.0) -> PlanningResult:
     """
     Sequential (non-pooling) assignment for tiny fleets.
@@ -70,12 +77,9 @@ def solve_cpsat(problem: DayProblem, time_limit_s: float = 10.0) -> PlanningResu
     active = [t for t in problem.requests if t.booking_status.value not in {"CANCELLED", "NO_SHOW"}]
     if len(active) > 40 or len(problem.vehicles) > 12:
         res = solve_greedy(problem)
-        status = res.status
-        if status in {SolutionStatus.OPTIMAL.value, SolutionStatus.FEASIBLE.value}:
-            status = SolutionStatus.HEURISTIC_FEASIBLE.value
         return _stamp_cpsat_fallback(
             res,
-            status=status,
+            status=_fallback_status(res),
             reason="instance_too_large_for_tiny_cpsat",
         )
 
@@ -83,9 +87,12 @@ def solve_cpsat(problem: DayProblem, time_limit_s: float = 10.0) -> PlanningResu
         from ortools.sat.python import cp_model
     except ImportError:
         res = solve_greedy(problem)
+        # A missing engine is a fact about this lane, not a verdict on the plan
+        # the notary just verified. The status keeps describing the published
+        # plan; the missing dependency stays in `solver_config`.
         return _stamp_cpsat_fallback(
             res,
-            status=SolutionStatus.ERROR.value,
+            status=_fallback_status(res),
             reason="ortools_missing",
             extra={"error": "ortools_missing"},
         )
