@@ -16,11 +16,13 @@
   rejection detail lists per-vehicle evidence (`NO_COMPATIBLE_VEHICLE`,
   `NO_QUALIFIED_DRIVER`, `NO_DRIVER`, `INSERT_INFEASIBLE`, `POOLING_BLOCKED`,
   `SIMULATION_FAILED`), deduplicated, and no longer ends in a dangling
-  separator when there is no evidence. Frozen protection now uses the same
-  predicate as the diff it publishes (vehicle, driver and clocks), so a
-  committed route can no longer be re-seated or retimed under a frozen promise
-  while the published `PlanDiff` reports the break. Search-side refusal only —
-  no new feasibility claim and no driver-certification claim.
+  separator when there is no evidence; when more than eight vehicles refused,
+  the detail names how many were omitted instead of dropping them silently.
+  Frozen protection now uses the same predicate as the diff it publishes
+  (vehicle, driver and clocks), so a committed route can no longer be re-seated
+  or retimed under a frozen promise while the published `PlanDiff` reports the
+  break. Search-side refusal only — no new feasibility claim and no
+  driver-certification claim.
 - IMPLEMENTED: ALNS republishes `plan_id` after re-stamping its own
   `solution_type`, `status` and `config_hash`. The identity now fingerprints the
   published ALNS answer instead of the greedy seed pass that built the routes

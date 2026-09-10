@@ -36,6 +36,8 @@ from mobiroute.validation.input import validate_problem, validate_trip
 
 TripClocks = tuple[int | None, int | None, int | None, int | None]
 
+EVIDENCE_VEHICLE_LIMIT = 8
+
 
 def _trip_clocks(route: RoutePlan) -> dict[str, TripClocks]:
     """Pickup/dropoff arrival and departure. Dwell-only shifts are still retiming."""
@@ -109,6 +111,16 @@ def _active_route_passengers(result: PlanningResult) -> dict[str, tuple[str, ...
         if rp.passenger_assignments:
             out[rp.vehicle_id] = tuple(sorted(rp.passenger_assignments))
     return out
+
+
+def _refusal_evidence(alt_no: list[str]) -> list[str]:
+    """Truncated evidence still says how many refusals it does not show."""
+    unique = list(dict.fromkeys(alt_no))
+    shown = unique[:EVIDENCE_VEHICLE_LIMIT]
+    omitted = len(unique) - len(shown)
+    if omitted:
+        shown.append(f"+{omitted} more vehicle{'s' if omitted > 1 else ''}")
+    return shown
 
 
 def _frozen_breaks(
@@ -613,7 +625,7 @@ def online_insert(
             frozen_blocked=frozen_blocked,
         )
         # One vehicle can fail at several insertion points; publish it once.
-        evidence = list(dict.fromkeys(alt_no))[:8]
+        evidence = _refusal_evidence(alt_no)
         detail = (
             "insertion would change frozen trips"
             if frozen_blocked and code == ReasonCode.MANUAL_REVIEW_REQUIRED.value
