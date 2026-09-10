@@ -41,6 +41,18 @@ regressions. See `SYNAPS_COMMIT` in `src/mobiroute/__init__.py`.
 > dynamic replan. Real operational data, industrial integration, and user
 > impact require a separate pilot.
 
+### What a green CI badge does not prove
+
+CI proves lint, types and asserted invariants. It does not prove benchmark
+comparability. A gap against a published objective is emitted **only** when
+every comparability gate passes (literature profile, reference cost algebra,
+notary-verified plan, full service, complete accounting); otherwise the report
+publishes the blockers instead of a number. Contract and tests:
+[`src/mobiroute/benchmarks/academic.py`](src/mobiroute/benchmarks/academic.py),
+[`tests/test_academic_benchmark_gate.py`](tests/test_academic_benchmark_gate.py).
+Rules: [`docs/evidence-bundle.md`](docs/evidence-bundle.md),
+[`docs/benchmark-protocol.md`](docs/benchmark-protocol.md).
+
 ## Quick start
 
 ```bash
@@ -51,6 +63,7 @@ mobiroute generate --mode tiny --seed 42 --out examples/tiny_day.json
 mobiroute solve --problem examples/tiny_day.json --solver greedy --out-dir benchmark/results/tiny_greedy
 mobiroute demo --out-dir benchmark/results/demo
 mobiroute ops-benchmark --seed 42 --out-dir benchmark/results/ops-2026-08-12
+mobiroute academic-benchmark --instance benchmark/instances/cordeau/a2-16.txt --solver greedy --out-dir benchmark/results/a2-16
 pytest -q
 ruff check src tests benchmark
 ```
@@ -97,7 +110,10 @@ See [`docs/architecture.md`](docs/architecture.md). Domain code lives under
 | [`docs/ops-cases-and-benchmark-2026-08-12.md`](docs/ops-cases-and-benchmark-2026-08-12.md) | Ops cases, world analogues, Academy 10th cohort, measured suite |
 | [`docs/edge-cases-algebra-synaps-2026-08-12.md`](docs/edge-cases-algebra-synaps-2026-08-12.md) | Edge cases, DARP algebra, SynAPS pin mapping |
 | [`docs/redteam-algebra-2026-08-12.md`](docs/redteam-algebra-2026-08-12.md) | Red Team: notary holes, sort-order traps, pipeline |
+| [`docs/benchmark-protocol.md`](docs/benchmark-protocol.md) | Instances, comparability profiles, gap gate |
+| [`docs/evidence-bundle.md`](docs/evidence-bundle.md) | What ships with every published number |
 | [`docs/research/paratransit-research-2024-2026.md`](docs/research/paratransit-research-2024-2026.md) | Academic review |
+| [`docs/research/darp-sota-2025-2026.md`](docs/research/darp-sota-2025-2026.md) | DARP state of the art 2025–2026 and what we may not claim from it |
 | [`docs/market/competitors-2026.md`](docs/market/competitors-2026.md) | Market positioning |
 | [`docs/mathematical-formulation.md`](docs/mathematical-formulation.md) | Formal DARP formulation |
 | [`docs/privacy-and-security.md`](docs/privacy-and-security.md) | Privacy rules |
@@ -105,6 +121,7 @@ See [`docs/architecture.md`](docs/architecture.md). Domain code lives under
 | [`docs/claims-review-2026-08-12.md`](docs/claims-review-2026-08-12.md) | Stage-15 honesty gate |
 | [`docs/business-model.md`](docs/business-model.md) | Bottom-up TAM/SAM/SOM |
 | [`docs/academy-innovators-application-ru.md`](docs/academy-innovators-application-ru.md) | Academy application (RU) |
+| [`docs/mik-submission-2026-09-14.md`](docs/mik-submission-2026-09-14.md) | Academy of Innovators flow 10: submission pack and claim ladder (RU) |
 
 ## Contributing / security
 
