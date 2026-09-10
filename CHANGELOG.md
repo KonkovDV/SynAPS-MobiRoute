@@ -16,8 +16,16 @@
   rejection detail lists per-vehicle evidence (`NO_COMPATIBLE_VEHICLE`,
   `NO_QUALIFIED_DRIVER`, `NO_DRIVER`, `INSERT_INFEASIBLE`, `POOLING_BLOCKED`,
   `SIMULATION_FAILED`), deduplicated, and no longer ends in a dangling
-  separator when there is no evidence. Search-side refusal only — no new
-  feasibility claim and no driver-certification claim.
+  separator when there is no evidence; when more than eight vehicles refused,
+  the detail names how many were omitted instead of dropping them silently.
+  Frozen protection now uses the same predicate as the diff it publishes
+  (vehicle, driver and clocks), so a committed route can no longer be re-seated
+  or retimed under a frozen promise while the published `PlanDiff` reports the
+  break. A baseline that carries no `plan_id` is chained as
+  `unsigned:<content hash>`, so a lineage reader cannot mistake a content
+  fingerprint for a published plan id (child ids for unsigned parents
+  intentionally change). Search-side refusal only — no new feasibility claim
+  and no driver-certification claim.
 - IMPLEMENTED: ALNS republishes `plan_id` after re-stamping its own
   `solution_type`, `status` and `config_hash`. The identity now fingerprints the
   published ALNS answer instead of the greedy seed pass that built the routes
@@ -42,19 +50,33 @@
   removed by trip ownership (`t1:PU`), so overriding `t1` no longer strips the
   clocks of `t10`. Ride/wait summaries, itineraries and inherited fairness are
   dropped with the trip so a leftover metric cannot still describe service.
+  Totals the override cannot re-measure (`violations` and the ride / quota /
+  billable minutes) are dropped instead of republished, and the override chains
+  what it overrode (`base_plan_id`, `event_type=MANUAL_OVERRIDE`).
+  Re-verification publishes the dropped totals again.
   Audit and identity hygiene — a manual override is still not an operational
   authorization claim.
 - IMPLEMENTED: greedy (pooling and sequential/FIFO) re-checks the seated driver
   against every new trip. An untrained driver already on the van is no longer
   kept for a boarding-assistance insert; day-ahead may swap to a trained driver
   on that unfinished route. Online still refuses a committed untrained driver
-  (manual review). Search-side qualification only — no driver-certification
-  claim.
+  (manual review). A swap that is scored but not chosen is rolled back in the
+  native fleet payload before the plan is emitted, so published clocks are
+  measured against the driver the route publishes and a losing candidate can no
+  longer hide the seated driver's rest window (notary `DRIVER_REST`).
+  Search-side qualification only — no driver-certification claim.
 - IMPLEMENTED: CP-SAT fallback republishes `config_hash` and `plan_id` after
   re-labelling the greedy answer as `CPSAT_FALLBACK_GREEDY` (too-large instance
   or missing OR-Tools). The fallback can no longer share the greedy seed's
-  identity. Existing fallback plan ids intentionally change. Identity only —
-  the fallback remains a heuristic and never `OPTIMAL`.
+  identity, and a missing OR-Tools install no longer publishes `status=ERROR`
+  over a plan the notary verified: both fallback lanes publish the status of the
+  plan they hand over (never `OPTIMAL` or `FEASIBLE`), and the missing engine
+  stays in `solver_config` (`reason`, `error`). The tiny lane no longer reports
+  the OR-Tools status code among `objective_values` — a solver enum is not an
+  objective, and the code is already published as
+  `solver_config["ortools_status"]`. Existing fallback plan ids intentionally
+  change. Identity and status honesty only — the fallback remains a heuristic
+  and never `OPTIMAL`.
 
 ## 0.2.5 — 2026-09-09
 
@@ -288,7 +310,7 @@
 - Adaptive ALNS: Shaw / worst / route / random destroy, roulette weights, SA
   (never fewer served; never `OPTIMAL`). Pattern from SynAPS ALNS + Ropke/Pisinger,
   DARP operators from Hu et al. Omega 2026 (feasibility-test ALNS) — not FJSP.
-- Pickup curb wait \(\max(board,5)\) and appointment earliest alight \(start-30\)
+- Pickup curb wait \\(\\max(board,5)\\) and appointment earliest alight \\(start-30\\)
   (DREDF/FTA analogues, not Moscow law). Early-alight wait is forbidden if another
   passenger is still onboard. Itinerary `travel_path` is the zone shortest path,
   including VIA.

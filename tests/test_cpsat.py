@@ -70,6 +70,20 @@ def test_cpsat_large_heuristic_feasible_or_partial():
     assert res.solution_type == "CPSAT_FALLBACK_GREEDY"
 
 
+def test_cpsat_publishes_the_solver_status_as_config_not_objective():
+    # An OR-Tools enum is a fact about the run, not a measured objective.
+    p = problem(
+        [vehicle("v1")],
+        [driver("d1")],
+        [trip("a", "Z_NORTH", "Z_SOUTH")],
+    )
+    res = solve_cpsat(p, time_limit_s=5.0)
+    assert "cp_status" not in res.objective_values
+    assert {"served", "rejected"} <= set(res.objective_values)
+    if res.solution_type == "CPSAT_TINY":
+        assert isinstance(res.solver_config.get("ortools_status"), int)
+
+
 def test_cpsat_assigns_explicit_driver():
     p = problem(
         [vehicle("v1")],
