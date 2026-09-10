@@ -372,10 +372,11 @@ def solve_cpsat(problem: DayProblem, time_limit_s: float = 10.0) -> PlanningResu
         served_requests=sorted(served),
         rejected_requests=rejected,
         route_plans=route_plans,
+        # A solver status code is not an objective; it is published in
+        # `solver_config["ortools_status"]` below.
         objective_values={
             "served": float(len(served)),
             "rejected": float(len(rejected)),
-            "cp_status": float(status),
         },
         reason_codes=reasons,
         input_hash="",
