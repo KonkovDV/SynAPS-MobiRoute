@@ -6,7 +6,7 @@ from pydantic import Field
 
 from mobiroute import SYNAPS_COMMIT, __version__
 from mobiroute.adapters.fingerprint import fingerprint
-from mobiroute.domain.models import ReasonCode, StrictModel
+from mobiroute.domain.models import ReasonCode, SolutionStatus, StrictModel
 from mobiroute.domain.requests import FairnessMetrics, PlanningResult, RejectedTrip
 from mobiroute.solvers.finalize import plan_identity, reconcile_explanations
 from mobiroute.validation.reasons import non_empty_reason
@@ -96,12 +96,16 @@ class OverrideJournal(StrictModel):
                 "rejected_requests": rejected,
                 "late_requests": [tid for tid in result.late_requests if tid != trip_id],
                 "reason_codes": reasons,
-                "status": "MANUAL_REVIEW_REQUIRED",
+                "status": SolutionStatus.MANUAL_REVIEW_REQUIRED.value,
                 "route_plans": plans,
                 "verified_feasible": False,
                 "fairness_metrics": FairnessMetrics(),
+                # Violations and the ride / quota / billable totals were measured
+                # on the plan the operator overrode. This function has no problem
+                # to re-measure against, so they are dropped rather than
+                # republished: a stale total cannot describe service that just
+                # left the plan. Re-verification publishes them again.
                 "objective_values": {
-                    **result.objective_values,
                     "served": float(len(served)),
                     "rejected": float(len(rejected)),
                 },
@@ -124,6 +128,8 @@ class OverrideJournal(StrictModel):
             update={
                 "explanations": reconcile_explanations(out),
                 "config_hash": fingerprint(payload),
+                "base_plan_id": result.plan_id or result.base_plan_id,
+                "event_type": "MANUAL_OVERRIDE",
             }
         )
         return stamped.model_copy(update={"plan_id": plan_identity(stamped)})

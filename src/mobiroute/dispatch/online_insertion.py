@@ -36,6 +36,8 @@ from mobiroute.validation.input import validate_problem, validate_trip
 
 TripClocks = tuple[int | None, int | None, int | None, int | None]
 
+EVIDENCE_VEHICLE_LIMIT = 8
+
 
 def _trip_clocks(route: RoutePlan) -> dict[str, TripClocks]:
     """Pickup/dropoff arrival and departure. Dwell-only shifts are still retiming."""
@@ -84,7 +86,10 @@ def _trip_vehicle(result: PlanningResult) -> dict[str, str]:
 
 
 def _base_plan_id(baseline: PlanningResult) -> str:
-    return baseline.plan_id or fingerprint(baseline.model_dump(mode="json"))
+    """An unsigned parent is named as unsigned, never passed off as a plan id."""
+    if baseline.plan_id:
+        return baseline.plan_id
+    return f"unsigned:{fingerprint(baseline.model_dump(mode='json'))}"
 
 
 def _trip_driver(result: PlanningResult) -> dict[str, str]:
@@ -111,6 +116,56 @@ def _active_route_passengers(result: PlanningResult) -> dict[str, tuple[str, ...
     return out
 
 
+def _refusal_evidence(alt_no: list[str]) -> list[str]:
+    """Truncated evidence still says how many refusals it does not show."""
+    unique = list(dict.fromkeys(alt_no))
+    shown = unique[:EVIDENCE_VEHICLE_LIMIT]
+    omitted = len(unique) - len(shown)
+    if omitted:
+        shown.append(f"+{omitted} more vehicle{'s' if omitted > 1 else ''}")
+    return shown
+
+
+def _frozen_breaks(
+    frozen: set[str],
+    bmap: dict[str, str],
+    nmap: dict[str, str],
+    bdrv: dict[str, str],
+    ndrv: dict[str, str],
+    bclock: dict[str, TripClocks],
+    nclock: dict[str, TripClocks],
+) -> list[str]:
+    """One predicate: the refusal guard is as strict as the diff it publishes."""
+    return sorted(
+        tid
+        for tid in frozen
+        if tid in bmap
+        and (
+            tid not in nmap
+            or nmap[tid] != bmap[tid]
+            or ndrv.get(tid, "") != bdrv.get(tid, "")
+            or nclock.get(tid) != bclock.get(tid)
+        )
+    )
+
+
+def _frozen_break_ids(
+    baseline: PlanningResult,
+    new: PlanningResult,
+    frozen: set[str],
+) -> list[str]:
+    """The same predicate on two results; the diff passes maps it already built."""
+    return _frozen_breaks(
+        frozen,
+        _trip_vehicle(baseline),
+        _trip_vehicle(new),
+        _trip_driver(baseline),
+        _trip_driver(new),
+        _result_clocks(baseline),
+        _result_clocks(new),
+    )
+
+
 def _event_id(base: str, event_type: str, payload: object) -> str:
     key = fingerprint({"base": base, "type": event_type, "payload": payload})
     return str(uuid.uuid5(uuid.NAMESPACE_URL, f"mobiroute:event:v2:{key}"))
@@ -134,26 +189,8 @@ def compute_diff(baseline: PlanningResult, new: PlanningResult, frozen_ids: set[
     changed_drivers = [
         tid for tid in bmap if tid in nmap and bdrv.get(tid, "") != ndrv.get(tid, "")
     ]
-    broken_frozen = sorted(
-        tid
-        for tid in frozen_ids
-        if tid in bmap
-        and (
-            tid not in nmap
-            or bmap[tid] != nmap[tid]
-            or bdrv.get(tid, "") != ndrv.get(tid, "")
-            or bclock.get(tid) != nclock.get(tid)
-        )
-    )
-    unchanged_frozen = sorted(
-        tid
-        for tid in frozen_ids
-        if tid in bmap
-        and tid in nmap
-        and bmap[tid] == nmap[tid]
-        and bdrv.get(tid, "") == ndrv.get(tid, "")
-        and bclock.get(tid) == nclock.get(tid)
-    )
+    broken_frozen = _frozen_breaks(frozen_ids, bmap, nmap, bdrv, ndrv, bclock, nclock)
+    unchanged_frozen = sorted({tid for tid in frozen_ids if tid in bmap} - set(broken_frozen))
     broutes = _active_route_passengers(baseline)
     nroutes = _active_route_passengers(new)
     added_routes = sorted(set(nroutes) - set(broutes))
@@ -591,7 +628,7 @@ def online_insert(
             frozen_blocked=frozen_blocked,
         )
         # One vehicle can fail at several insertion points; publish it once.
-        evidence = list(dict.fromkeys(alt_no))[:8]
+        evidence = _refusal_evidence(alt_no)
         detail = (
             "insertion would change frozen trips"
             if frozen_blocked and code == ReasonCode.MANUAL_REVIEW_REQUIRED.value
@@ -645,11 +682,7 @@ def online_insert(
             },
         },
     )
-    bmap = _trip_vehicle(baseline)
-    nmap = _trip_vehicle(new_result)
-    frozen_broken = [
-        tid for tid in frozen if tid in bmap and (tid not in nmap or nmap[tid] != bmap[tid])
-    ]
+    frozen_broken = _frozen_break_ids(baseline, new_result, frozen)
     if protect_frozen and frozen_broken:
         code = ReasonCode.MANUAL_REVIEW_REQUIRED.value
         restored = baseline.model_copy(
