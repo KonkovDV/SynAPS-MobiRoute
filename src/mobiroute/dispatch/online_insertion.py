@@ -111,6 +111,31 @@ def _active_route_passengers(result: PlanningResult) -> dict[str, tuple[str, ...
     return out
 
 
+def _frozen_break_ids(
+    baseline: PlanningResult,
+    new: PlanningResult,
+    frozen: set[str],
+) -> list[str]:
+    """One predicate: the refusal guard is as strict as the diff it publishes."""
+    bmap = _trip_vehicle(baseline)
+    nmap = _trip_vehicle(new)
+    bdrv = _trip_driver(baseline)
+    ndrv = _trip_driver(new)
+    bclock = _result_clocks(baseline)
+    nclock = _result_clocks(new)
+    return sorted(
+        tid
+        for tid in frozen
+        if tid in bmap
+        and (
+            tid not in nmap
+            or nmap[tid] != bmap[tid]
+            or ndrv.get(tid, "") != bdrv.get(tid, "")
+            or nclock.get(tid) != bclock.get(tid)
+        )
+    )
+
+
 def _event_id(base: str, event_type: str, payload: object) -> str:
     key = fingerprint({"base": base, "type": event_type, "payload": payload})
     return str(uuid.uuid5(uuid.NAMESPACE_URL, f"mobiroute:event:v2:{key}"))
@@ -134,26 +159,8 @@ def compute_diff(baseline: PlanningResult, new: PlanningResult, frozen_ids: set[
     changed_drivers = [
         tid for tid in bmap if tid in nmap and bdrv.get(tid, "") != ndrv.get(tid, "")
     ]
-    broken_frozen = sorted(
-        tid
-        for tid in frozen_ids
-        if tid in bmap
-        and (
-            tid not in nmap
-            or bmap[tid] != nmap[tid]
-            or bdrv.get(tid, "") != ndrv.get(tid, "")
-            or bclock.get(tid) != nclock.get(tid)
-        )
-    )
-    unchanged_frozen = sorted(
-        tid
-        for tid in frozen_ids
-        if tid in bmap
-        and tid in nmap
-        and bmap[tid] == nmap[tid]
-        and bdrv.get(tid, "") == ndrv.get(tid, "")
-        and bclock.get(tid) == nclock.get(tid)
-    )
+    broken_frozen = _frozen_break_ids(baseline, new, frozen_ids)
+    unchanged_frozen = sorted({tid for tid in frozen_ids if tid in bmap} - set(broken_frozen))
     broutes = _active_route_passengers(baseline)
     nroutes = _active_route_passengers(new)
     added_routes = sorted(set(nroutes) - set(broutes))
@@ -645,11 +652,7 @@ def online_insert(
             },
         },
     )
-    bmap = _trip_vehicle(baseline)
-    nmap = _trip_vehicle(new_result)
-    frozen_broken = [
-        tid for tid in frozen if tid in bmap and (tid not in nmap or nmap[tid] != bmap[tid])
-    ]
+    frozen_broken = _frozen_break_ids(baseline, new_result, frozen)
     if protect_frozen and frozen_broken:
         code = ReasonCode.MANUAL_REVIEW_REQUIRED.value
         restored = baseline.model_copy(
