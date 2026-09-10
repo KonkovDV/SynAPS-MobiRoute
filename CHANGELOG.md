@@ -21,8 +21,11 @@
   Frozen protection now uses the same predicate as the diff it publishes
   (vehicle, driver and clocks), so a committed route can no longer be re-seated
   or retimed under a frozen promise while the published `PlanDiff` reports the
-  break. Search-side refusal only — no new feasibility claim and no
-  driver-certification claim.
+  break. A baseline that carries no `plan_id` is chained as
+  `unsigned:<content hash>`, so a lineage reader cannot mistake a content
+  fingerprint for a published plan id (child ids for unsigned parents
+  intentionally change). Search-side refusal only — no new feasibility claim
+  and no driver-certification claim.
 - IMPLEMENTED: ALNS republishes `plan_id` after re-stamping its own
   `solution_type`, `status` and `config_hash`. The identity now fingerprints the
   published ALNS answer instead of the greedy seed pass that built the routes
