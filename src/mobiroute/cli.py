@@ -41,7 +41,7 @@ def main(argv: list[str] | None = None) -> int:
     s.add_argument("--out-dir", type=Path, required=True)
     s.add_argument("--time-limit", type=float, default=10.0)
 
-    d = sub.add_parser("demo", help="Morning plan \u2192 medical insert \u2192 cancel \u2192 breakdown")
+    d = sub.add_parser("demo", help="Morning plan → medical insert → cancel → breakdown")
     d.add_argument("--out-dir", type=Path, required=True)
     d.add_argument("--seed", type=int, default=42)
 
