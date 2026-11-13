@@ -1239,7 +1239,7 @@ impl InsertionEngine {
         veh: Vec<i32>,
         unavail: Vec<i32>,
     ) -> Option<(i32, i32, i32, i32, i32, i32)> {
-        py.allow_threads(|| {
+        py.detach(|| {
             let n_trips = self.table.len() / STRIDE;
             with_pickup_dep(n_trips, |pickup_dep| {
                 best_insert_inner(
@@ -1271,7 +1271,7 @@ impl InsertionEngine {
         unavails: Vec<Vec<i32>>,
         new_idx: i32,
     ) -> Vec<(i32, i32, i32, i32, i32, i32, i32)> {
-        py.allow_threads(|| {
+        py.detach(|| {
             score_fleet_inner(
                 &self.travel,
                 self.n_zones,
@@ -1326,7 +1326,7 @@ impl InsertionEngine {
         fleet_idx: Option<Vec<i32>>,
         max_dur: Option<i32>,
     ) -> Vec<(i32, i32, i32, i32, i32, i32, i32)> {
-        py.allow_threads(|| {
+        py.detach(|| {
             let n_trips = self.table.len() / STRIDE;
             let n = self.fleet.len();
             let cap = max_dur.unwrap_or(i32::MAX);
@@ -1397,7 +1397,7 @@ impl InsertionEngine {
         j: i32,
         new_idx: i32,
     ) -> Option<Vec<(i32, i32)>> {
-        py.allow_threads(|| {
+        py.detach(|| {
             let fv = self.fleet.get(fleet_i)?;
             trial_insert_trace(
                 &self.travel,
@@ -1430,7 +1430,7 @@ impl InsertionEngine {
         Vec<(i32, i32)>,
         Vec<(i32, i32, i32, i32)>,
     )> {
-        py.allow_threads(|| {
+        py.detach(|| {
             let fv = self.fleet.get(fleet_i)?;
             trial_insert_trace(
                 &self.travel,
@@ -1502,7 +1502,7 @@ impl InsertionEngine {
         Vec<(i32, i32)>,
         Vec<(i32, i32, i32, i32)>,
     )> {
-        py.allow_threads(|| {
+        py.detach(|| {
             let fv = self.fleet.get(fleet_i)?;
             eval_stored(
                 &self.travel,
@@ -1528,7 +1528,7 @@ impl InsertionEngine {
             Vec<(i32, i32, i32, i32)>,
         )>,
     > {
-        py.allow_threads(|| {
+        py.detach(|| {
             (0..self.fleet.len())
                 .into_par_iter()
                 .map(|v| {
@@ -1565,7 +1565,7 @@ fn best_insert(
     if detour.iter().any(|&ratio| !valid_detour(ratio)) {
         return None;
     }
-    py.allow_threads(|| {
+    py.detach(|| {
         let n_trips = trip_table.len() / STRIDE;
         let detour_cap = compute_detour_caps(&travel, n_zones, &trip_table, &detour);
         with_pickup_dep(n_trips, |pickup_dep| {
