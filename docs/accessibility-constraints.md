@@ -11,7 +11,7 @@ Hard checks (optimizer may not violate for cost):
 | Companions | seats = 1 + `companion_count` |
 | Service area | `vehicle.service_area` (empty = unrestricted; else pickup **and** dropoff) |
 | Shift | pickup/dropoff within driver/vehicle shift |
-| Driver rest | `driver.unavailable_intervals` occupancy `[t_begin, leave)` (policy; not ГОСТ) |
+| Driver rest | `driver.unavailable_intervals` occupancy `[t_begin, leave)` (policy; not a Mintrans Order No. 424 duty-time certificate) |
 
 Priority hierarchy is explicit in `domain/priorities.py` — not opaque weights.
 
