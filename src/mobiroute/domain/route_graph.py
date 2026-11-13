@@ -23,6 +23,7 @@ def enrich_route(problem: DayProblem, route: RoutePlan) -> RoutePlan:
     if vehicle is None:
         return route
     trips = {t.id: t for t in problem.requests}
+    travel = problem.travel.lookup()
     core = service_stops(list(route.ordered_stops))
     arr = dict(route.arrival_times)
     dep = dict(route.departure_times)
@@ -50,7 +51,7 @@ def enrich_route(problem: DayProblem, route: RoutePlan) -> RoutePlan:
     if core:
         last = core[-1]
         last_dep = dep.get(last.id, vehicle.shift_start)
-        ret = last_dep + problem.travel.travel(last.location, vehicle.depot_id)
+        ret = last_dep + travel(last.location, vehicle.depot_id)
         arr[end.id] = ret
         dep[end.id] = ret
     else:
@@ -85,7 +86,7 @@ def enrich_route(problem: DayProblem, route: RoutePlan) -> RoutePlan:
     prev_loc = vehicle.depot_id
     prev_dep = vehicle.shift_start
     for stop in ordered:
-        tt = problem.travel.travel(prev_loc, stop.location)
+        tt = travel(prev_loc, stop.location)
         a = arr.get(stop.id, prev_dep + tt)
         d = dep.get(stop.id, a)
         if not onboard:
@@ -149,7 +150,7 @@ def enrich_route(problem: DayProblem, route: RoutePlan) -> RoutePlan:
     dist = 0.0
     prev = vehicle.depot_id
     for stop in ordered:
-        dist += float(problem.travel.travel(prev, stop.location))
+        dist += float(travel(prev, stop.location))
         prev = stop.location
 
     return route.model_copy(

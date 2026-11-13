@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import math
 import random
+from collections.abc import Callable
 
 from mobiroute import SYNAPS_COMMIT, __version__
 from mobiroute.adapters.fingerprint import fingerprint
@@ -41,8 +42,10 @@ def _trip_vehicle(result: PlanningResult) -> dict[str, str]:
     return out
 
 
-def _relatedness(problem: DayProblem, a: TripRequest, b: TripRequest, same_veh: bool) -> int:
-    tau = problem.travel.travel
+def _relatedness(
+    tau: Callable[[str, str], int], a: TripRequest, b: TripRequest, same_veh: bool
+) -> int:
+    """Shaw relatedness (Ropke & Pisinger 2006): space, time, and same route."""
     spatial = tau(a.pickup_zone, b.pickup_zone) + tau(a.dropoff_zone, b.dropoff_zone)
     if a.via_zone and b.via_zone:
         spatial += tau(a.via_zone, b.via_zone)
@@ -77,6 +80,7 @@ def _destroy_shaw(
 ) -> set[str]:
     trips = {t.id: t for t in problem.requests}
     veh = _trip_vehicle(result)
+    tau = problem.travel.lookup()  # one closure per destroy, not per pair
     remaining = sorted(served)
     seed = rng.choice(remaining)
     destroyed = {seed}
@@ -88,7 +92,7 @@ def _destroy_shaw(
             remaining,
             key=lambda tid: (
                 -_relatedness(
-                    problem,
+                    tau,
                     ref,
                     trips[tid],
                     veh.get(ref.id) == veh.get(tid),

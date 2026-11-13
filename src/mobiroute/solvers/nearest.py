@@ -4,9 +4,10 @@ from __future__ import annotations
 
 from mobiroute import SYNAPS_COMMIT, __version__
 from mobiroute.adapters.fingerprint import fingerprint
+from mobiroute.domain.driver_assignment import DriverIndex
 from mobiroute.domain.models import ReasonCode, SolutionStatus
 from mobiroute.domain.priorities import trip_sort_key
-from mobiroute.domain.requests import DayProblem, PlanningResult, RejectedTrip, TripRequest
+from mobiroute.domain.requests import DayProblem, PlanningResult, RejectedTrip, Stop, TripRequest
 from mobiroute.solvers.finalize import finalize_result
 from mobiroute.solvers.greedy import _assign_driver, _quota_lower_bound_exceeds, _simulate_route
 from mobiroute.validation.feasibility import (
@@ -36,6 +37,8 @@ def _nearest_core(problem: DayProblem, ordered: list[TripRequest]) -> PlanningRe
     reasons: dict[str, str] = {}
     # Passenger-day entitlement is a cross-route resource: track it like greedy.
     caps = quota_caps(problem)
+    drivers_index = DriverIndex(problem)
+    stops_cache: dict[str, list[Stop]] = {}
     used_now: dict[str, int] = {}
     veh_used: dict[str, dict[str, int]] = {v.id: {} for v in problem.vehicles}
 
@@ -58,9 +61,11 @@ def _nearest_core(problem: DayProblem, ordered: list[TripRequest]) -> PlanningRe
             driver_id = _assign_driver(
                 problem,
                 v.id,
+                vehicle=v,
                 needs_accessibility=trip.needs_boarding_assistance,
                 occupied_driver_ids=occ,
                 preferred_id=vehicle_driver[v.id],
+                index=drivers_index,
             )
             if driver_id is None:
                 continue
@@ -68,7 +73,7 @@ def _nearest_core(problem: DayProblem, ordered: list[TripRequest]) -> PlanningRe
             anchor = routes[v.id][-1].dropoff_zone if routes[v.id] else v.depot_id
             dist = problem.travel.travel(anchor, trip.pickup_zone)
             trial = routes[v.id] + [trip]
-            plan = _simulate_route(problem, v, driver_id, trial)
+            plan = _simulate_route(problem, v, driver_id, trial, stops_cache)
             if plan is None:
                 continue
             if trial_exceeds_quota(
