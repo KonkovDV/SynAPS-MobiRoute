@@ -1,6 +1,6 @@
 # Support
 
-- **Docs:** [`docs/`](docs/)
+- **Docs:** [`docs/`](docs)
 - **Issues:** https://github.com/KonkovDV/SynAPS-MobiRoute/issues
 - **Security:** [`SECURITY.md`](SECURITY.md)
 - **Upstream scheduling engine:** https://github.com/KonkovDV/SynAPS

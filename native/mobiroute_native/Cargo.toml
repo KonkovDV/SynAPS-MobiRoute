@@ -1,6 +1,6 @@
 [package]
 name = "mobiroute_native"
-version = "0.2.0"
+version = "0.3.0"
 edition = "2021"
 description = "Required PyO3 hot path for MobiRoute DARP insertion scoring"
 license = "MIT"
@@ -19,3 +19,11 @@ codegen-units = 1
 opt-level = 3
 panic = "abort"
 strip = true
+
+[lints.clippy]
+# PyO3 entry points and the insertion hot path pass flat buffers by design:
+# bundling them into structs would add a copy per call across the FFI boundary.
+too_many_arguments = "allow"
+type_complexity = "allow"
+# Insertion positions index several parallel arrays (prefix states, stops).
+needless_range_loop = "allow"

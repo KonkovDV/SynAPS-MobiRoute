@@ -32,17 +32,27 @@ NATIVE_REQUIRED = (
     "--manifest-path native/mobiroute_native/Cargo.toml"
 )
 
+# The kernel's scheduling semantics (e.g. the appointment pickup floor) must
+# match the Python oracle and notary. A wheel from another minor line is refused.
+NATIVE_ABI = "0.3"
+
 _native: Any | None = None
 _native_best_insert: Any | None = None
 _engine_cls: Any | None = None
+_native_error: str | None = None
 
 if os.getenv("MOBIROUTE_DISABLE_NATIVE") == "1":
     _native = None
 else:
     try:
         _native = importlib.import_module("mobiroute_native")
-        _native_best_insert = getattr(_native, "best_insert", None)
-        _engine_cls = getattr(_native, "InsertionEngine", None)
+        found = str(getattr(_native, "__version__", "unknown"))
+        if not found.startswith(NATIVE_ABI + "."):
+            _native_error = f"mobiroute_native {found} does not match required {NATIVE_ABI}.x"
+            _native = None
+        else:
+            _native_best_insert = getattr(_native, "best_insert", None)
+            _engine_cls = getattr(_native, "InsertionEngine", None)
     except Exception:
         _native = None
         _native_best_insert = None
@@ -54,17 +64,20 @@ def native_available() -> bool:
 
 
 def acceleration_status() -> dict[str, object]:
-    return {
+    status: dict[str, object] = {
         "native_available": native_available(),
         "insertion_backend": "native" if native_available() else "missing",
         "disable_env": os.getenv("MOBIROUTE_DISABLE_NATIVE") == "1",
     }
+    if _native_error:
+        status["native_error"] = _native_error
+    return status
 
 
 def attach_native(k: ProblemKernel) -> ProblemKernel:
     """Keep travel + trip tables in Rust for the whole solve."""
     if _engine_cls is None:
-        raise RuntimeError(NATIVE_REQUIRED)
+        raise RuntimeError(NATIVE_REQUIRED + (f" ({_native_error})" if _native_error else ""))
     k.native_engine = _engine_cls(
         list(k.travel),
         k.n_zones,

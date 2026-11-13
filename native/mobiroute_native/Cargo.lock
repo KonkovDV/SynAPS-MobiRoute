@@ -77,7 +77,7 @@ dependencies = [
 
 [[package]]
 name = "mobiroute_native"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "pyo3",
  "rayon",
