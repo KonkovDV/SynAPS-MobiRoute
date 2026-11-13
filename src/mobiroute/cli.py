@@ -92,6 +92,36 @@ def main(argv: list[str] | None = None) -> int:
     lit.add_argument("--out-dir", type=Path, required=True)
     lit.add_argument("--svg", action="store_true", help="also write routes.svg and timeline.svg")
 
+    v = sub.add_parser(
+        "vrp-solve",
+        help="Rich VRP: heterogeneous fleet, capacity vector, windows, pickup and delivery",
+    )
+    src = v.add_mutually_exclusive_group(required=True)
+    src.add_argument(
+        "--instance", type=Path, help="Solomon, Li & Lim, Sartori-Buriol, Cordeau or JSON file"
+    )
+    src.add_argument(
+        "--generate", choices=["cargo", "shuttle", "plant"], help="synthetic operating day"
+    )
+    v.add_argument("--seed", type=int, default=7)
+    v.add_argument("--orders", type=int, default=None, help="size of a generated day")
+    v.add_argument("--solver", choices=["alns", "ortools", "exact"], default="alns")
+    v.add_argument("--iterations", type=int, default=5000)
+    v.add_argument("--time-limit", type=float, default=None)
+    v.add_argument("--backend", choices=["auto", "python", "native"], default="auto")
+    v.add_argument("--out-dir", type=Path, required=True)
+    v.add_argument("--svg", action="store_true", help="also write routes.svg")
+
+    rt = sub.add_parser(
+        "vrp-dispatch", help="Replay a day of live orders through a dispatch policy"
+    )
+    rt.add_argument("--day", choices=["shuttle", "plant"], default="shuttle")
+    rt.add_argument("--seed", type=int, default=11)
+    rt.add_argument(
+        "--policy", choices=["insertion", "insertion+alns", "ortools-resolve"], default="insertion"
+    )
+    rt.add_argument("--out-dir", type=Path, required=True)
+
     args = p.parse_args(argv)
 
     try:
@@ -342,7 +372,134 @@ def _dispatch(args: argparse.Namespace) -> int:
         print(log_safe(lit_report.allowed_claim))
         return code
 
+    if args.cmd == "vrp-solve":
+        return _vrp_solve(args)
+
+    if args.cmd == "vrp-dispatch":
+        return _vrp_dispatch(args)
+
     return 1
+
+
+def _vrp_instance(args: argparse.Namespace) -> object:
+    from mobiroute.vrp.generators import cargo_day, plant_day, shuttle_day
+    from mobiroute.vrp.io import load_benchmark
+
+    if args.instance is not None:
+        inst, _digest = load_benchmark(args.instance)
+        return inst
+    if args.generate == "cargo":
+        return cargo_day(args.seed, n_orders=args.orders or 120)
+    if args.generate == "shuttle":
+        return shuttle_day(args.seed, n_orders=args.orders or 160)
+    return plant_day(args.seed, n_moves=args.orders or 140)
+
+
+def _vrp_solve(args: argparse.Namespace) -> int:
+    from mobiroute.vrp.alns import AlnsConfig, solve
+    from mobiroute.vrp.exact import solve_exact
+    from mobiroute.vrp.model import Instance
+    from mobiroute.vrp.ortools_lane import solve_ortools
+    from mobiroute.vrp.verify import Verdict
+
+    inst = _vrp_instance(args)
+    assert isinstance(inst, Instance)
+    started = time.perf_counter()
+    verdict: Verdict
+    if args.solver == "ortools":
+        run = solve_ortools(inst, time_limit=args.time_limit or 10.0)
+        solution, verdict, label = run.solution, run.verdict, f"OR-Tools {run.status}"
+    elif args.solver == "exact":
+        ex = solve_exact(inst, time_limit=args.time_limit or 60.0)
+        solution, verdict, label = ex.solution, ex.verdict, f"CP-SAT {ex.status}"
+    else:
+        res = solve(
+            inst,
+            AlnsConfig(
+                iterations=args.iterations,
+                time_limit=args.time_limit,
+                seed=args.seed,
+                backend=args.backend,
+            ),
+        )
+        solution, verdict, label = (
+            res.solution,
+            res.verdict,
+            f"ALNS {res.iterations} it, {res.backend}",
+        )
+    elapsed = time.perf_counter() - started
+    args.out_dir.mkdir(parents=True, exist_ok=True)
+    (args.out_dir / "solution.json").write_text(solution.to_json(inst), encoding="utf-8")
+    report = {
+        "instance": inst.name,
+        "solver": label,
+        "seconds": round(elapsed, 3),
+        "feasible": verdict.feasible,
+        "complete": verdict.complete,
+        "violations": list(verdict.violations),
+        "vehicles": verdict.cost.vehicles,
+        "vehicles_by_type": verdict.cost.vehicles_by_type,
+        "distance": round(verdict.cost.distance, 4),
+        "cost": round(verdict.cost.total, 4),
+        "unassigned": list(verdict.unassigned),
+        "routes": [
+            {
+                "vehicle_type": r.vehicle_type,
+                "stops": list(r.nodes),
+                "service_start": [round(x, 3) for x in r.start_times],
+                "peak_load": list(r.peak_load),
+                "min_duration": round(r.min_duration, 3),
+            }
+            for r in verdict.routes
+        ],
+    }
+    (args.out_dir / "verdict.json").write_text(json.dumps(report, indent=2), encoding="utf-8")
+    if args.svg:
+        from mobiroute.vrp.render import routes_svg
+
+        (args.out_dir / "routes.svg").write_text(
+            routes_svg(inst, solution, title=f"{inst.name}: {label}"), encoding="utf-8"
+        )
+    print(log_safe(f"{inst.name}: {verdict.summary()} [{label}, {elapsed:.1f} s]"))
+    return 0 if verdict.feasible else 2
+
+
+def _vrp_dispatch(args: argparse.Namespace) -> int:
+    from mobiroute.vrp.generators import plant_day, shuttle_day
+    from mobiroute.vrp.realtime import simulate
+
+    inst = shuttle_day(args.seed) if args.day == "shuttle" else plant_day(args.seed)
+    report = simulate(inst, args.policy)
+    args.out_dir.mkdir(parents=True, exist_ok=True)
+    data = {
+        "instance": report.instance,
+        "policy": report.policy,
+        "verified": report.verified,
+        "kpi": report.kpi,
+        "decisions": [
+            {
+                "order": d.request,
+                "released": d.released,
+                "accepted": d.accepted,
+                "vehicle": d.vehicle,
+                "pickup_start": d.pickup_start,
+                "latency_ms": d.latency_ms,
+                "reason": d.reason,
+            }
+            for d in report.decisions
+        ],
+    }
+    (args.out_dir / "dispatch.json").write_text(json.dumps(data, indent=2), encoding="utf-8")
+    k = report.kpi
+    print(
+        log_safe(
+            f"{report.instance} [{report.policy}]: "
+            f"accepted {k['accepted']:.0f}/{k['orders']:.0f}, "
+            f"call-to-pickup {k['response_mean_min']:.1f} min, "
+            f"decision {k['decision_ms_mean']:.2f} ms, verified={report.verified}"
+        )
+    )
+    return 0 if report.verified else 2
 
 
 def _run_kernel_solver(problem: DayProblem, solver: str, *, time_limit_s: float) -> PlanningResult:
