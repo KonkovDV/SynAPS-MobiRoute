@@ -8,8 +8,13 @@ from mobiroute.domain.models import ReasonCode, SolutionStatus
 from mobiroute.domain.priorities import trip_sort_key
 from mobiroute.domain.requests import DayProblem, PlanningResult, RejectedTrip, TripRequest
 from mobiroute.solvers.finalize import finalize_result
-from mobiroute.solvers.greedy import _assign_driver, _simulate_route
-from mobiroute.validation.feasibility import accessibility_compatible
+from mobiroute.solvers.greedy import _assign_driver, _quota_lower_bound_exceeds, _simulate_route
+from mobiroute.validation.feasibility import (
+    accessibility_compatible,
+    passenger_quota_debits,
+    quota_caps,
+    trial_exceeds_quota,
+)
 from mobiroute.validation.input import validate_problem
 from mobiroute.validation.reasons import diagnose_rejection, non_empty_reason
 
@@ -29,9 +34,21 @@ def _nearest_core(problem: DayProblem, ordered: list[TripRequest]) -> PlanningRe
     served: list[str] = []
     rejected: list[RejectedTrip] = []
     reasons: dict[str, str] = {}
+    # Passenger-day entitlement is a cross-route resource: track it like greedy.
+    caps = quota_caps(problem)
+    used_now: dict[str, int] = {}
+    veh_used: dict[str, dict[str, int]] = {v.id: {} for v in problem.vehicles}
 
     for trip in ordered:
+        pid = trip.pseudonymous_passenger_id
+        left = caps[pid] - used_now.get(pid, 0) if pid in caps else None
+        if _quota_lower_bound_exceeds(problem, trip, left):
+            code = ReasonCode.QUOTA_EXCEEDED.value
+            rejected.append(RejectedTrip(trip_id=trip.id, reason_code=code))
+            reasons[trip.id] = code
+            continue
         candidates = []
+        quota_blocked = False
         occupied = {d for d in vehicle_driver.values() if d}
         for v in problem.vehicles:
             if accessibility_compatible(v, trip) is not None:
@@ -52,19 +69,38 @@ def _nearest_core(problem: DayProblem, ordered: list[TripRequest]) -> PlanningRe
             dist = problem.travel.travel(anchor, trip.pickup_zone)
             trial = routes[v.id] + [trip]
             plan = _simulate_route(problem, v, driver_id, trial)
-            if plan is not None:
-                candidates.append((dist, plan.route_duration, v.id, driver_id))
+            if plan is None:
+                continue
+            if trial_exceeds_quota(
+                plan,
+                quota_cap=caps,
+                used_now=used_now,
+                previous_on_vehicle=veh_used[v.id],
+                problem=problem,
+            ):
+                quota_blocked = True
+                continue
+            candidates.append((dist, plan.route_duration, v.id, driver_id, plan))
         if not candidates:
-            code = non_empty_reason(diagnose_rejection(problem, trip))
+            code = (
+                ReasonCode.QUOTA_EXCEEDED.value
+                if quota_blocked
+                else non_empty_reason(diagnose_rejection(problem, trip))
+            )
             rejected.append(RejectedTrip(trip_id=trip.id, reason_code=code))
             reasons[trip.id] = code
             continue
         candidates.sort(key=lambda x: (x[0], x[1], x[2]))
-        _dist, _dur, vid, did = candidates[0]
+        _dist, _dur, vid, did, chosen = candidates[0]
         routes[vid].append(trip)
         vehicle_driver[vid] = did
         served.append(trip.id)
         reasons[trip.id] = ReasonCode.ACCEPTED.value
+        for owner, mins in veh_used[vid].items():
+            used_now[owner] = used_now.get(owner, 0) - mins
+        veh_used[vid] = passenger_quota_debits(problem, chosen)
+        for owner, mins in veh_used[vid].items():
+            used_now[owner] = used_now.get(owner, 0) + mins
 
     route_plans: list[RoutePlan] = []
     for v in problem.vehicles:

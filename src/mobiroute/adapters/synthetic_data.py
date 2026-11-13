@@ -96,7 +96,8 @@ _MODE_SIZES = {
     "tiny": (5, 20, 2),
     "small": (20, 200, 3),
     "medium": (60, 1000, 4),
-    "large": (180, 2000, 5),
+    # Depot count is bounded by the Z_DEPOT_* zones in the matrix (four).
+    "large": (180, 2000, 4),
     "wheelchair_heavy": (10, 40, 2),
     "medical_priority": (8, 30, 2),
     "pooled_rides": (6, 24, 2),
@@ -158,6 +159,8 @@ def generate_day(mode: str = "tiny", seed: int = 42) -> DayProblem:
     n_veh, n_req, n_depots = _MODE_SIZES[mode]
     travel = _travel_matrix()
     depots = [f"Z_DEPOT_{i + 1}" for i in range(n_depots)]
+    if any(depot not in ZONES for depot in depots):
+        raise ValueError(f"generator mode {mode} needs depots outside the zone matrix")
 
     vehicles: list[Vehicle] = []
     drivers: list[Driver] = []
