@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import time
 from pathlib import Path
+from typing import Any
 
 from mobiroute.adapters.stress_day import N_REQUESTS, N_VEHICLES, generate_stress_day, inventory
 from mobiroute.adapters.synthetic_data import _stable_uuid
@@ -19,7 +20,7 @@ from mobiroute.dispatch.online_insertion import (
     online_insert,
 )
 from mobiroute.domain.models import ServicePriority, WheelchairType
-from mobiroute.domain.requests import DayProblem, PlanningResult, TripRequest
+from mobiroute.domain.requests import DayProblem, PlanningResult, Stop, TripRequest
 from mobiroute.domain.route_graph import service_stops
 from mobiroute.solvers.greedy import solve_greedy
 from mobiroute.solvers.native_accel import acceleration_status, native_available
@@ -29,8 +30,12 @@ OUT_DIR = Path("benchmark/results/stress-2026-08-12")
 
 
 def _row(
-    name: str, dt: float, problem: DayProblem, res: PlanningResult, extra: dict | None = None
-) -> dict:
+    name: str,
+    dt: float,
+    problem: DayProblem,
+    res: PlanningResult,
+    extra: dict[str, Any] | None = None,
+) -> dict[str, Any]:
     n = max(1, len(problem.requests))
     active = sum(
         1 for t in problem.requests if t.booking_status.value not in {"CANCELLED", "NO_SHOW"}
@@ -68,7 +73,7 @@ def _seeded_replan(problem: DayProblem, baseline: PlanningResult) -> PlanningRes
     disabled_v = {v.id for v in problem.vehicles if v.shift_end <= v.shift_start}
     disabled_d = {d.id for d in problem.drivers if not d.availability}
     active_ids = active_trip_ids(problem)
-    seed_stops = {v.id: [] for v in problem.vehicles}
+    seed_stops: dict[str, list[Stop]] = {v.id: [] for v in problem.vehicles}
     seed_drivers: dict[str, str | None] = {v.id: None for v in problem.vehicles}
     for rp in baseline.route_plans:
         if rp.vehicle_id in disabled_v:
@@ -115,7 +120,7 @@ def _emergency(seed: int, k: int) -> TripRequest:
     )
 
 
-def run_stress(seed: int = 42, out_dir: Path | None = None) -> dict:
+def run_stress(seed: int = 42, out_dir: Path | None = None) -> dict[str, Any]:
     dest = out_dir or OUT_DIR
     dest.mkdir(parents=True, exist_ok=True)
     if not native_available():

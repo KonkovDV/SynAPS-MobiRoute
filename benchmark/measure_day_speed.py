@@ -16,10 +16,13 @@ import pstats
 import subprocess
 import sys
 import time
+from collections.abc import Callable
 from io import StringIO
 from pathlib import Path
+from typing import Any
 
 from mobiroute.adapters.synthetic_data import generate_day
+from mobiroute.domain.requests import DayProblem, PlanningResult
 from mobiroute.solvers.alns import solve_alns
 from mobiroute.solvers.beam import solve_beam
 from mobiroute.solvers.cpsat import solve_cpsat
@@ -42,7 +45,7 @@ def _host() -> dict[str, object]:
     }
 
 
-def _instance_stats(problem) -> dict[str, object]:
+def _instance_stats(problem: DayProblem) -> dict[str, object]:
     reqs = problem.requests
     return {
         "vehicles": len(problem.vehicles),
@@ -57,7 +60,9 @@ def _instance_stats(problem) -> dict[str, object]:
     }
 
 
-def _row(name: str, mode: str, problem, fn) -> dict:
+def _row(
+    name: str, mode: str, problem: DayProblem, fn: Callable[[], PlanningResult]
+) -> dict[str, Any]:
     stats = _instance_stats(problem)
     t0 = time.perf_counter()
     res = fn()
@@ -87,8 +92,8 @@ def _row(name: str, mode: str, problem, fn) -> dict:
     return out
 
 
-def _run_native_suite(modes: set[str]) -> list[dict]:
-    rows: list[dict] = []
+def _run_native_suite(modes: set[str]) -> list[dict[str, Any]]:
+    rows: list[dict[str, Any]] = []
     print("accel", acceleration_status(), flush=True)
     if "tiny" in modes:
         tiny = generate_day("tiny", 42)
@@ -110,10 +115,10 @@ def _run_native_suite(modes: set[str]) -> list[dict]:
     return rows
 
 
-def _run_python_suite(modes: set[str]) -> list[dict]:
+def _run_python_suite(modes: set[str]) -> list[dict[str, Any]]:
     if os.getenv("MOBIROUTE_DISABLE_NATIVE") != "1":
         raise RuntimeError("python suite must run with MOBIROUTE_DISABLE_NATIVE=1")
-    rows: list[dict] = []
+    rows: list[dict[str, Any]] = []
     print("accel", acceleration_status(), flush=True)
     if "tiny" in modes:
         tiny = generate_day("tiny", 42)
@@ -136,7 +141,7 @@ def _run_python_suite(modes: set[str]) -> list[dict]:
     return rows
 
 
-def _spawn_python(modes: set[str]) -> list[dict]:
+def _spawn_python(modes: set[str]) -> list[dict[str, Any]]:
     env = os.environ.copy()
     env["MOBIROUTE_DISABLE_NATIVE"] = "1"
     env["PYTHONPATH"] = str(ROOT / "src") + os.pathsep + env.get("PYTHONPATH", "")
@@ -172,14 +177,17 @@ def main() -> None:
     OUT_DIR.mkdir(parents=True, exist_ok=True)
 
     if args.backend == "python":
-        rows = _run_python_suite(modes)
-        payload = {"host": _host(), "accel": acceleration_status(), "rows": rows}
+        payload = {
+            "host": _host(),
+            "accel": acceleration_status(),
+            "rows": _run_python_suite(modes),
+        }
         (OUT_DIR / "day_speed_python.json").write_text(
             json.dumps(payload, indent=2, sort_keys=True), encoding="utf-8"
         )
         return
 
-    rows: list[dict] = []
+    rows: list[dict[str, Any]] = []
     if args.backend in {"native", "all"}:
         rows.extend(_run_native_suite(modes))
     if args.backend == "all":
