@@ -181,3 +181,41 @@ def test_kernel_plans_are_literature_infeasible_only_through_the_lobby_rule() ->
     report = build_literature_report(inst, CORDEAU_A2_16_SHA256, run, relaxed)
     assert report.gap_percent is None
     assert "PLAN_NOT_VERIFIED" in report.gap_blockers
+
+
+@pytest.mark.parametrize("backend", ["SCIP", "HIGHS", "CBC"])
+def test_mip_finds_the_hand_optimum_on_every_backend(backend: str) -> None:
+    from mobiroute.benchmarks.cordeau_exact import solve_exact_mip
+
+    inst = _tiny()
+    run = solve_exact_mip(inst, backend=backend, time_limit_s=30.0)
+    assert run.status == "OPTIMAL"
+    assert run.routes == [[1, 3, 2, 4]]
+    assert run.model_objective == pytest.approx(20.0)
+    # The LP relaxation is a valid lower bound, and big-M makes it weak.
+    assert run.lp_relaxation_bound is not None
+    assert run.lp_relaxation_bound <= 20.0 + 1e-6
+    assert verify_routes(inst, run.routes).cost == pytest.approx(20.0)
+
+
+def test_mip_rejects_unknown_backends() -> None:
+    from mobiroute.benchmarks.cordeau_exact import solve_exact_mip
+
+    with pytest.raises(ValueError, match="MIP_BACKEND_UNSUPPORTED"):
+        solve_exact_mip(_tiny(), backend="GUROBI")
+
+
+@pytest.mark.slow
+def test_a2_16_mip_proves_the_published_optimum() -> None:
+    from mobiroute.benchmarks.cordeau_exact import lp_relaxation_bound, solve_exact_mip
+
+    inst, digest = load_cordeau_bytes(_A2_16.read_bytes(), instance_id="a2-16")
+    run = solve_exact_mip(inst, backend="SCIP", time_limit_s=300.0)
+    verdict = verify_routes(inst, run.routes)
+    assert verdict.feasible and verdict.full_service
+    assert verdict.cost >= 294.25 - 0.005
+    if run.status == "OPTIMAL":
+        assert abs(verdict.cost - 294.25) <= 0.005
+        assert build_literature_report(inst, digest, run, verdict).gap_blockers == []
+    bound = lp_relaxation_bound(inst)
+    assert bound is not None and bound < 294.25

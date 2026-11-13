@@ -77,11 +77,18 @@ def main(argv: list[str] | None = None) -> int:
 
     lit = sub.add_parser(
         "literature-benchmark",
-        help="Exact CP-SAT on the published Cordeau (2006) algebra, independently verified",
+        help="Exact CP-SAT or MIP on the published Cordeau (2006) algebra, independently verified",
     )
     lit.add_argument("--instance", type=Path, required=True)
+    lit.add_argument("--solver", choices=["cpsat", "mip"], default="cpsat")
+    lit.add_argument(
+        "--backend",
+        choices=["SCIP", "HIGHS", "CBC"],
+        default="SCIP",
+        help="MIP backend (only with --solver mip)",
+    )
     lit.add_argument("--time-limit", type=float, default=60.0)
-    lit.add_argument("--workers", type=int, default=1, help="1 = deterministic search")
+    lit.add_argument("--workers", type=int, default=1, help="CP-SAT workers; 1 is deterministic")
     lit.add_argument("--out-dir", type=Path, required=True)
 
     args = p.parse_args(argv)
@@ -272,12 +279,16 @@ def _dispatch(args: argparse.Namespace) -> int:
             build_literature_report,
             load_cordeau_bytes,
             solve_exact_cpsat,
+            solve_exact_mip,
             verify_routes,
         )
 
         raw = args.instance.read_bytes()
         instance, digest = load_cordeau_bytes(raw, instance_id=args.instance.stem)
-        run = solve_exact_cpsat(instance, time_limit_s=args.time_limit, workers=args.workers)
+        if args.solver == "mip":
+            run = solve_exact_mip(instance, backend=args.backend, time_limit_s=args.time_limit)
+        else:
+            run = solve_exact_cpsat(instance, time_limit_s=args.time_limit, workers=args.workers)
         verdict = verify_routes(instance, run.routes)
         lit_report = build_literature_report(instance, digest, run, verdict)
         code = 0 if verdict.feasible and verdict.full_service else 2
@@ -290,6 +301,8 @@ def _dispatch(args: argparse.Namespace) -> int:
             "instance_path": str(args.instance),
             "instance_sha256": digest,
             "time_limit_s": run.time_limit_s,
+            "solver": run.solver,
+            "backend": run.backend,
             "workers": run.workers,
             "scale": run.scale,
             "wall_clock_seconds": run.wall_clock_seconds,

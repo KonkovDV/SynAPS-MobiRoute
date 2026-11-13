@@ -12,6 +12,9 @@ the comparable lane, and nothing else:
 * :func:`solve_exact_cpsat`, an exact CP-SAT model with conservative integer
   travel times (``ceil`` on a fixed-point grid), so every model solution is
   also feasible with real-valued travel;
+* :func:`solve_exact_mip`, the compact two-index MIP of Furtado, Munari and
+  Morabito (2017) with real-valued travel, on SCIP, HiGHS or CBC, plus its LP
+  relaxation as a (weak, big-M) lower bound;
 * :func:`verify_routes`, an independent verifier that never trusts the solver:
   for a fixed stop sequence the timing constraints are a system of difference
   constraints, which is feasible iff its constraint graph has no negative cycle
@@ -341,16 +344,62 @@ def verify_routes(
 
 class ExactSolveResult(StrictModel):
     solver: str
+    backend: str
     status: str
     routes: list[list[int]]
     model_objective: float | None
     model_bound: float | None
-    scale: int
+    lp_relaxation_bound: float | None = None
+    scale: int | None
     time_limit_s: float
     workers: int
     wall_clock_seconds: float
     arcs: int
     ortools_version: str
+
+
+def _ortools_version() -> str:
+    import ortools
+
+    return str(getattr(ortools, "__version__", "unknown"))
+
+
+def _check_exact_inputs(instance: CordeauInstance, time_limit_s: float) -> None:
+    end = instance.end_depot
+    nodes = instance.nodes
+    if instance.max_route_duration < nodes[end].latest - nodes[0].earliest:
+        raise ValueError("ROUTE_DURATION_NOT_IMPLIED_BY_DEPOT_WINDOW")
+    if time_limit_s <= 0:
+        raise ValueError("SOLVER_PARAMETERS_OUT_OF_RANGE")
+
+
+def _structural_arc(instance: CordeauInstance, i: int, j: int) -> bool:
+    """Arc ``i -> j`` (``j == 0`` is the end depot) allowed by structure alone."""
+    n = instance.n_requests
+    nodes = instance.nodes
+    if i == j:
+        return False
+    if i == 0:
+        return 1 <= j <= n  # a route starts with a pickup
+    if j == 0:
+        return i > n  # and ends with a dropoff
+    if i > n and j == i - n:
+        return False  # own dropoff before own pickup
+    return not (1 <= i <= n and 1 <= j <= n and nodes[i].load + nodes[j].load > instance.capacity)
+
+
+def _routes_from_arcs(chosen: list[tuple[int, int]], n: int) -> list[list[int]]:
+    """The depot has one outgoing arc per route; every other node has one."""
+    succ = {i: j for i, j in chosen if i != 0}
+    routes: list[list[int]] = []
+    for first in sorted(j for i, j in chosen if i == 0):
+        route = [first]
+        node = first
+        while succ.get(node, 0) != 0 and len(route) <= 2 * n:
+            node = succ[node]
+            route.append(node)
+        routes.append(route)
+    return routes
 
 
 def solve_exact_cpsat(
@@ -368,16 +417,14 @@ def solve_exact_cpsat(
     this conservative integer model; :func:`verify_routes` recomputes the
     real-valued cost. Route duration must be implied by the depot window.
     """
-    import ortools
     from ortools.sat.python import cp_model
 
+    _check_exact_inputs(instance, time_limit_s)
+    if scale < 1 or workers < 1:
+        raise ValueError("SOLVER_PARAMETERS_OUT_OF_RANGE")
     n = instance.n_requests
     end = instance.end_depot
     nodes = instance.nodes
-    if instance.max_route_duration < nodes[end].latest - nodes[0].earliest:
-        raise ValueError("ROUTE_DURATION_NOT_IMPLIED_BY_DEPOT_WINDOW")
-    if scale < 1 or workers < 1 or time_limit_s <= 0:
-        raise ValueError("SOLVER_PARAMETERS_OUT_OF_RANGE")
 
     def target(j: int) -> int:
         return end if j == 0 else j
@@ -387,6 +434,14 @@ def solve_exact_cpsat(
 
     def arc_cost(i: int, j: int) -> int:
         return round(instance.distance(i, target(j)) * scale)
+
+    def arc_allowed(i: int, j: int) -> bool:
+        if not _structural_arc(instance, i, j):
+            return False
+        if i == 0 or j == 0:
+            return True
+        ready = (nodes[i].earliest + nodes[i].service) * scale + travel_up(i, j)
+        return ready <= nodes[j].latest * scale
 
     model: Any = cp_model.CpModel()
     service = range(1, 2 * n + 1)
@@ -398,21 +453,6 @@ def solve_exact_cpsat(
     load: dict[int, Any] = {
         i: model.new_int_var(max(0, nodes[i].load), instance.capacity, f"q{i}") for i in service
     }
-
-    def arc_allowed(i: int, j: int) -> bool:
-        if i == j:
-            return False
-        if i == 0:
-            return 1 <= j <= n  # a route starts with a pickup
-        if j == 0:
-            return i > n  # and ends with a dropoff
-        if i > n and j == i - n:
-            return False  # own dropoff before own pickup
-        if 1 <= i <= n and 1 <= j <= n and nodes[i].load + nodes[j].load > instance.capacity:
-            return False
-        ready = (nodes[i].earliest + nodes[i].service) * scale + travel_up(i, j)
-        return ready <= nodes[j].latest * scale
-
     arcs: list[tuple[int, int, Any]] = []
     lits: dict[tuple[int, int], Any] = {}
     for i in range(0, 2 * n + 1):
@@ -453,7 +493,6 @@ def solve_exact_cpsat(
     began = time.perf_counter()
     status = solver.solve(model)
     elapsed = time.perf_counter() - began
-    name = str(solver.status_name(status))
     routes: list[list[int]] = []
     objective: float | None = None
     bound: float | None = None
@@ -461,19 +500,11 @@ def solve_exact_cpsat(
         objective = float(solver.objective_value) / scale
         bound = float(solver.best_objective_bound) / scale
         chosen = [(i, j) for (i, j), lit in lits.items() if solver.value(lit)]
-        # The depot has one outgoing arc per route; every other node has one.
-        firsts = sorted(j for i, j in chosen if i == 0)
-        succ = {i: j for i, j in chosen if i != 0}
-        for first in firsts:
-            route = [first]
-            node = first
-            while succ.get(node, 0) != 0 and len(route) <= 2 * n:
-                node = succ[node]
-                route.append(node)
-            routes.append(route)
+        routes = _routes_from_arcs(chosen, n)
     return ExactSolveResult(
         solver="EXACT_CPSAT_CORDEAU",
-        status=name,
+        backend="CP-SAT",
+        status=str(solver.status_name(status)),
         routes=routes,
         model_objective=objective,
         model_bound=bound,
@@ -482,7 +513,143 @@ def solve_exact_cpsat(
         workers=int(workers),
         wall_clock_seconds=round(elapsed, 3),
         arcs=len(arcs),
-        ortools_version=str(getattr(ortools, "__version__", "unknown")),
+        ortools_version=_ortools_version(),
+    )
+
+
+MIP_BACKENDS = ("SCIP", "HIGHS", "CBC")
+
+
+def _build_mip(instance: CordeauInstance, backend: str, *, relax: bool) -> tuple[Any, Any]:
+    """Compact two-index PDPTW/DARP MIP with route labels (Furtado et al. 2017).
+
+    ``x[i, j]`` routes; ``B`` service starts with exact real-valued travel and
+    arc-specific big-M; ``Q`` load; ``V`` route label: the first pickup of a
+    route names it and every arc copies it, so ``V[i] == V[n + i]`` keeps a
+    request on one vehicle without a vehicle index. Time propagation with
+    positive service times also eliminates subtours.
+    """
+    from ortools.linear_solver import pywraplp
+
+    n = instance.n_requests
+    end = instance.end_depot
+    nodes = instance.nodes
+    cap = instance.capacity
+
+    def target(j: int) -> int:
+        return end if j == 0 else j
+
+    def t(i: int, j: int) -> float:
+        return instance.distance(i, target(j))
+
+    solver: Any = pywraplp.Solver.CreateSolver(backend)
+    if solver is None:
+        raise ValueError(f"MIP_BACKEND_UNAVAILABLE:{backend}")
+    service = range(1, 2 * n + 1)
+    x: dict[tuple[int, int], Any] = {}
+    for i in range(0, 2 * n + 1):
+        for j in range(0, 2 * n + 1):
+            if not _structural_arc(instance, i, j):
+                continue
+            if i and j and nodes[i].earliest + nodes[i].service + t(i, j) > nodes[j].latest + 1e-9:
+                continue
+            x[(i, j)] = solver.NumVar(0, 1, f"x{i}_{j}") if relax else solver.BoolVar(f"x{i}_{j}")
+    start = {i: solver.NumVar(nodes[i].earliest, nodes[i].latest, f"b{i}") for i in service}
+    load = {
+        i: solver.NumVar(max(0, nodes[i].load), min(cap, cap + nodes[i].load), f"q{i}")
+        for i in service
+    }
+    label = {i: solver.NumVar(1, 2 * n, f"v{i}") for i in service}
+    for i in service:
+        solver.Add(sum(x[(i, j)] for j in range(0, 2 * n + 1) if (i, j) in x) == 1)
+        solver.Add(sum(x[(j, i)] for j in range(0, 2 * n + 1) if (j, i) in x) == 1)
+    solver.Add(sum(x[(0, j)] for j in service if (0, j) in x) <= instance.n_vehicles)
+    for (i, j), arc in x.items():
+        if i == 0:
+            big = max(0.0, nodes[0].earliest + nodes[0].service + t(0, j) - nodes[j].earliest)
+            solver.Add(start[j] >= nodes[0].earliest + nodes[0].service + t(0, j) - big * (1 - arc))
+            solver.Add(load[j] >= nodes[j].load - cap * (1 - arc))
+            solver.Add(load[j] <= nodes[j].load + cap * (1 - arc))
+            solver.Add(label[j] >= j * arc)
+            solver.Add(label[j] <= j + 2 * n * (1 - arc))
+        elif j == 0:
+            big = max(0.0, nodes[i].latest + nodes[i].service + t(i, 0) - nodes[end].latest)
+            solver.Add(start[i] + nodes[i].service + t(i, 0) <= nodes[end].latest + big * (1 - arc))
+        else:
+            big = max(0.0, nodes[i].latest + nodes[i].service + t(i, j) - nodes[j].earliest)
+            solver.Add(start[j] >= start[i] + nodes[i].service + t(i, j) - big * (1 - arc))
+            solver.Add(load[j] >= load[i] + nodes[j].load - 2 * cap * (1 - arc))
+            solver.Add(load[j] <= load[i] + nodes[j].load + 2 * cap * (1 - arc))
+            solver.Add(label[j] >= label[i] - 2 * n * (1 - arc))
+            solver.Add(label[j] <= label[i] + 2 * n * (1 - arc))
+    for i in range(1, n + 1):
+        solver.Add(label[i] == label[i + n])
+        solver.Add(start[i + n] >= start[i] + nodes[i].service + t(i, i + n))
+        solver.Add(start[i + n] - start[i] - nodes[i].service <= instance.max_ride_time)
+    solver.Minimize(sum(arc * t(i, j) for (i, j), arc in x.items()))
+    return solver, x
+
+
+def lp_relaxation_bound(instance: CordeauInstance, *, backend: str = "GLOP") -> float | None:
+    """LP relaxation of the compact MIP: a valid but weak lower bound (big-M)."""
+    _check_exact_inputs(instance, 1.0)
+    solver, _ = _build_mip(instance, backend, relax=True)
+    status = solver.Solve()
+    if status != solver.OPTIMAL:
+        return None
+    return float(solver.Objective().Value())
+
+
+def solve_exact_mip(
+    instance: CordeauInstance,
+    *,
+    backend: str = "SCIP",
+    time_limit_s: float = 120.0,
+    with_lp_bound: bool = True,
+) -> ExactSolveResult:
+    """Same instance, same algebra, solved as a MIP with real-valued travel.
+
+    ``OPTIMAL`` is the backend's proof on the exact (unrounded) model, up to its
+    feasibility tolerance; :func:`verify_routes` still decides feasibility.
+    """
+    _check_exact_inputs(instance, time_limit_s)
+    if backend not in MIP_BACKENDS:
+        raise ValueError(f"MIP_BACKEND_UNSUPPORTED:{backend}")
+    solver, x = _build_mip(instance, backend, relax=False)
+    solver.SetTimeLimit(int(time_limit_s * 1000))
+    began = time.perf_counter()
+    status = solver.Solve()
+    elapsed = time.perf_counter() - began
+    names = {
+        solver.OPTIMAL: "OPTIMAL",
+        solver.FEASIBLE: "FEASIBLE",
+        solver.INFEASIBLE: "INFEASIBLE",
+        solver.UNBOUNDED: "UNBOUNDED",
+        solver.ABNORMAL: "ABNORMAL",
+        solver.NOT_SOLVED: "UNKNOWN",
+    }
+    routes: list[list[int]] = []
+    objective: float | None = None
+    bound: float | None = None
+    if status in (solver.OPTIMAL, solver.FEASIBLE):
+        objective = float(solver.Objective().Value())
+        bound = float(solver.Objective().BestBound())
+        chosen = [(i, j) for (i, j), arc in x.items() if arc.solution_value() > 0.5]
+        routes = _routes_from_arcs(chosen, instance.n_requests)
+    return ExactSolveResult(
+        solver="EXACT_MIP_CORDEAU",
+        backend=backend,
+        status=names.get(status, str(status)),
+        routes=routes,
+        model_objective=objective,
+        model_bound=bound,
+        lp_relaxation_bound=lp_relaxation_bound(instance) if with_lp_bound else None,
+        scale=None,
+        time_limit_s=float(time_limit_s),
+        workers=1,
+        wall_clock_seconds=round(elapsed, 3),
+        arcs=len(x),
+        ortools_version=_ortools_version(),
     )
 
 
@@ -555,11 +722,15 @@ def build_literature_report(
         match = " (matches within the reference's rounding)" if within else ""
         # A reference printed to two decimals cannot carry a sign below its rounding.
         shown = 0.0 if within else gap
+        model = (
+            "a conservative integer model"
+            if run.scale is not None
+            else "the real-valued model, within solver tolerance"
+        )
         claim = (
             f"literature algebra, {instance.instance_id}: verified full-service plan, "
             f"cost {cost:.{reference.decimals}f} vs published {reference.objective:.2f}, "
-            f"gap {shown:.2f}%{match}; solver status {run.status} on a conservative "
-            f"integer model"
+            f"gap {shown:.2f}%{match}; {run.backend} status {run.status} on {model}"
         )
     return LiteratureReport(
         instance_id=instance.instance_id,
