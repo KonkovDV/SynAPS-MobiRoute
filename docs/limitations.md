@@ -1,6 +1,6 @@
 # Limitations and forbidden claims
 
-## Not proven / PARTIAL in v0.2.7
+## Not proven / PARTIAL in v0.3.0
 
 - Improvement of Moscow social taxi KPIs
 - Compatibility with Мосавтосантранс production APIs
@@ -19,7 +19,9 @@
 - Personal-data certification / 152-FZ
 - Vehicle shortage resolution
 - Full passenger/driver mobile apps
-- Driver rest as labour-law certificate (ГОСТ 70314 / 580-ФЗ). The field is
+- Driver rest as a labour-law certificate (Mintrans Order No. 424 of 2020-10-16 on
+  drivers' working and rest time; 580-FZ for taxi carriers). Vehicle equipment is
+  not certified to GOST R 70314-2022 (M1 vehicles for disabled passengers). The field is
   policy occupancy windows, same algebra as vehicle shop-out. Multi-day
   rostering is not modelled.
 - Rolling-horizon composition as global re-optimization. Windows are solved in
@@ -57,7 +59,7 @@ product is the domain's own tables, not a kernel shift calendar.
 
 ## Forbidden statements
 
-Pooling in v0.2.7 is **classic pickup/dropoff insertion** with dynamic load, independently
+Pooling in v0.3.0 is **classic pickup/dropoff insertion** with dynamic load, independently
 feasibility-checked. It is not a proven optimal shareability network.
 
 Insertion scoring for greedy / beam / ALNS / RHC / online is Rust `mobiroute_native`.
@@ -71,5 +73,5 @@ Per-vehicle refusal evidence (`NO_COMPATIBLE_VEHICLE`, `NO_QUALIFIED_DRIVER`,
 search-side, deduplicated and truncated to eight vehicles. It records why the
 search refused this request, not that the request is infeasible.
 
-See `docs/claims-review-2026-08-12.md`.
+See `docs/archive/claims-review-2026-08-12.md`.
 Ops-suite service rates are synthetic policy scripts (seed 42), not Moscow social-taxi KPIs.
