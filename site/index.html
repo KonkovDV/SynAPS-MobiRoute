@@ -4,13 +4,18 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>SynAPS-MobiRoute — маршруты, которые можно доказать</title>
-<meta name="description" content="Ядро маршрутизации VRP / PDPTW / DARP: временные окна, pickup &amp; delivery, гетерогенный парк. Вставка на Rust, точные модели CP-SAT и MIP, независимая проверка каждого плана и объяснение, почему маршрут невозможен.">
+<meta name="description" content="Движок маршрутизации для смешанного парка: VRPTW, PDPTW и DARP, вес, объём и паллеты, свои и наёмные машины, заявки в реальном времени. ALNS на ядре Rust, точные модели CP-SAT и MIP, сравнение с OR-Tools и независимая проверка каждого плана.">
 <meta name="keywords" content="VRP, VRPTW, PDPTW, DARP, vehicle routing, pickup and delivery, time windows, heterogeneous fleet, MIP, CP-SAT, OR-Tools, SCIP, HiGHS, ALNS, metaheuristics, Python, Rust">
 <meta name="author" content="Dmitrij Konkov">
 <meta property="og:type" content="website">
-<meta property="og:title" content="SynAPS-MobiRoute — routes you can prove">
-<meta property="og:description" content="VRP / PDPTW routing kernel: Rust insertion, exact CP-SAT and MIP models, an independent notary and why-not certificates.">
+<meta property="og:title" content="SynAPS-MobiRoute — маршруты, которые можно доказать">
+<meta property="og:locale" content="ru_RU">
+<meta property="og:locale:alternate" content="en_US">
+<meta property="og:description" content="Маршрутизация смешанного парка (VRPTW, PDPTW, DARP): ALNS на ядре Rust, точные модели CP-SAT и MIP, сравнение с OR-Tools, заявки в реальном времени и независимая проверка каждого плана.">
 <meta property="og:image" content="https://konkovdv.github.io/SynAPS-MobiRoute/assets/og.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:image:alt" content="Проверенный оптимальный план Cordeau a2-16 и ключевые результаты: 130 эталонов, 38 из 40 доказанных оптимумов, ядро на Rust в 42 раза быстрее">
 <meta property="og:url" content="https://konkovdv.github.io/SynAPS-MobiRoute/">
 <meta name="twitter:card" content="summary_large_image">
 <meta name="color-scheme" content="light dark">
@@ -19,7 +24,7 @@
 <link rel="icon" href="assets/favicon.svg" type="image/svg+xml">
 <link rel="stylesheet" href="assets/site.css">
 <script type="application/ld+json">
-{"@context":"https://schema.org","@type":"SoftwareSourceCode","name":"SynAPS-MobiRoute","codeRepository":"https://github.com/KonkovDV/SynAPS-MobiRoute","programmingLanguage":["Python","Rust"],"license":"https://opensource.org/licenses/MIT","author":{"@type":"Person","name":"Dmitrij Konkov"},"description":"Verifiable routing kernel for pickup-and-delivery problems with time windows (VRP / PDPTW / DARP)."}
+{"@context":"https://schema.org","@type":"SoftwareSourceCode","name":"SynAPS-MobiRoute","codeRepository":"https://github.com/KonkovDV/SynAPS-MobiRoute","programmingLanguage":["Python","Rust"],"license":"https://opensource.org/licenses/MIT","author":{"@type":"Person","name":"Dmitrij Konkov"},"description":"Routing engine for mixed fleets: VRPTW, PDPTW and DARP with capacity vectors, vehicle requirements, own and hired vehicles. ALNS on a Rust kernel, exact CP-SAT and MIP models, an independent verifier."}
 </script>
 </head>
 <body>
@@ -28,11 +33,11 @@
 <nav class="nav" aria-label="Main"><div class="wrap nav-in">
   <a class="brand" href="#top" aria-label="SynAPS-MobiRoute"><svg viewBox="0 0 32 32" aria-hidden="true"><rect width="32" height="32" rx="8" fill="#2a78d6"/><path d="M7 22 14 11l5 7 6-9" stroke="#fff" stroke-width="3" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg><span>MobiRoute</span></a>
   <div class="links">
-    <a href="#pain"><span lang="ru">Проблема</span><span lang="en">Problem</span></a>
     <a href="#solution"><span lang="ru">Решение</span><span lang="en">Solution</span></a>
-    <a href="#proof"><span lang="ru">Доказательства</span><span lang="en">Proof</span></a>
+    <a href="#fleet"><span lang="ru">Парк</span><span lang="en">Fleet</span></a>
+    <a href="#dispatch"><span lang="ru">Диспетчеризация</span><span lang="en">Dispatch</span></a>
+    <a href="#bench"><span lang="ru">Эталоны</span><span lang="en">Benchmarks</span></a>
     <a href="#lab"><span lang="ru">Попробовать</span><span lang="en">Try it</span></a>
-    <a href="#scope"><span lang="ru">Возможности</span><span lang="en">Scope</span></a>
   </div>
   <div class="nav-act">
     <button class="pill-btn" id="lang" type="button" aria-label="Switch language to English">EN</button>
@@ -45,12 +50,12 @@
 <header class="hero" id="top">
   <div class="wrap hero-in">
     <div class="hero-copy">
-      <p class="eyebrow"><span>VRP</span><span>PDPTW</span><span>DARP</span><span>Python + Rust</span></p>
+      <p class="eyebrow"><span>VRPTW</span><span>PDPTW</span><span>DARP</span><span lang="ru">смешанный парк</span><span lang="en">mixed fleet</span><span>Python + Rust</span></p>
       <h1><span lang="ru">Маршруты, которые можно <em>доказать</em>.</span><span lang="en">Routes you can <em>prove</em>.</span></h1>
-      <p class="lead"><span lang="ru">Ядро маршрутизации «забор → доставка» с временными окнами и смешанным парком. Быстрые эвристики на Rust, точные модели CP-SAT и MIP — и независимая проверка, которая либо подтверждает план, либо называет, сколько минут ему не хватает.</span><span lang="en">A pickup-and-delivery routing kernel with time windows and a mixed fleet. Fast Rust heuristics, exact CP-SAT and MIP models, and an independent check that either confirms a plan or tells you how many minutes it is short.</span></p>
+      <p class="lead"><span lang="ru">Движок маршрутизации для смешанного парка: свои и наёмные машины, вес, объём и паллеты, окна, забор и доставка, заявки в реальном времени. ALNS на ядре Rust, точные модели CP-SAT и MIP, сравнение с OR-Tools — и независимая проверка, которая либо подтверждает план, либо называет, сколько минут ему не хватает.</span><span lang="en">A routing engine for a mixed fleet: own and hired vehicles, weight, volume and pallets, time windows, pickup and delivery, orders arriving live. ALNS on a Rust kernel, exact CP-SAT and MIP models, a head-to-head with OR-Tools, and an independent check that either confirms a plan or tells you how many minutes it is short.</span></p>
       <div class="cta">
-        <a class="btn primary" href="#lab"><span lang="ru">Проверить маршрут самому</span><span lang="en">Verify a route yourself</span></a>
-        <a class="btn ghost" href="#proof"><span lang="ru">Смотреть доказательства</span><span lang="en">See the proof</span></a>
+        <a class="btn primary" href="#fleet"><span lang="ru">Смотреть парк в работе</span><span lang="en">See the fleet at work</span></a>
+        <a class="btn ghost" href="#lab"><span lang="ru">Проверить маршрут самому</span><span lang="en">Verify a route yourself</span></a>
       </div>
     </div>
     <figure class="stage">
@@ -66,10 +71,10 @@
   </div>
   <div class="wrap">
     <dl class="stats">
-      <div class="stat reveal"><dt><span lang="ru">опубликованный оптимум воспроизведён</span><span lang="en">published optimum reproduced</span></dt><dd data-count="294.25" data-dec="2">294.25</dd></div>
-      <div class="stat reveal"><dt><span lang="ru">до доказанного оптимума, CP-SAT</span><span lang="en">to a proven optimum, CP-SAT</span></dt><dd data-count="0.5" data-dec="1" data-suf=" с" data-suf-en=" s">0.5 с</dd></div>
-      <div class="stat reveal"><dt><span lang="ru">быстрее на 3200 заказах</span><span lang="en">faster on 3,200 requests</span></dt><dd data-count="17" data-pre="×">×17</dd></div>
-      <div class="stat reveal"><dt><span lang="ru">автотестов</span><span lang="en">automated tests</span></dt><dd data-count="465" data-suf="+">465+</dd></div>
+      <div class="stat reveal"><dt><span lang="ru">открытых эталонов, каждый план проверен</span><span lang="en">public instances, every plan verified</span></dt><dd data-count="130">130</dd></div>
+      <div class="stat reveal"><dt><span lang="ru">малых задач: ALNS находит доказанный оптимум</span><span lang="en">small instances where ALNS finds the proven optimum</span></dt><dd id="stat-exact" data-count="38" data-suf="/40">38/40</dd></div>
+      <div class="stat reveal"><dt><span lang="ru">ответ на новую заявку</span><span lang="en">answer to a new order</span></dt><dd data-count="0.1" data-dec="1" data-suf=" мс" data-suf-en=" ms">0.1 мс</dd></div>
+      <div class="stat reveal"><dt><span lang="ru">быстрее с ядром на Rust, тот же план</span><span lang="en">faster with the Rust kernel, same plan</span></dt><dd id="stat-speed" data-count="42" data-pre="×">×42</dd></div>
     </dl>
   </div>
 </header>
@@ -158,6 +163,81 @@ dropoff 1 cannot start before 402; dropoff 1 → dropoff 12 takes 3 + 15.68 min.
   </div>
 </section>
 
+<section id="fleet" class="sec">
+  <div class="wrap">
+    <p class="kicker reveal"><span lang="ru">Смешанный парк</span><span lang="en">Mixed fleet</span></p>
+    <h2 class="reveal"><span lang="ru">Свои машины — первыми. Наёмные — когда своих не хватает.</span><span lang="en">Own vehicles first. Hired ones only when they run out.</span></h2>
+    <p class="sub reveal"><span lang="ru">Один городской день: два склада, фургоны 1,5 т, грузовики 5 и 10 т, тягач 20 т, свои и наёмные. У заказа — вес, объём и паллеты, окно доставки, рефрижератор, гидроборт или ДОПОГ. Добавляйте заказы: решатель сам выбирает, какие машины выпустить и кого нанять.</span><span lang="en">One city day: two depots, 1.5-t vans, 5-t and 10-t trucks, a 20-t tractor, own and hired. Each order has weight, volume and pallets, a delivery window, and may need refrigeration, a tail lift or ADR. Add orders: the solver decides which vehicles go out and whom to hire.</span></p>
+    <div class="fleet reveal">
+      <div class="card flush fleet-map"><svg id="fleet-map" viewBox="0 0 600 600" role="img" aria-label="Routes of the freight day"></svg></div>
+      <div class="card fleet-side">
+        <div class="slider">
+          <label for="fleet-n"><span><span lang="ru">Заказов за день</span><span lang="en">Orders in the day</span></span><b id="fleet-n-val">100</b></label>
+          <input type="range" id="fleet-n" min="0" max="4" step="1" value="2" aria-describedby="fleet-note">
+          <div class="ticks" aria-hidden="true"><span>40</span><span>70</span><span>100</span><span>130</span><span>160</span></div>
+        </div>
+        <dl class="kpis" id="fleet-kpis"></dl>
+        <div class="mix" id="fleet-mix"></div>
+        <div class="legend"><span><i></i><span lang="ru">своя машина</span><span lang="en">own vehicle</span></span><span><i class="dash"></i><span lang="ru">наёмная</span><span lang="en">hired</span></span></div>
+        <p class="fine" id="fleet-note"><span lang="ru">Стоимость: своя машина — только пробег и часы (машина и водитель оплачены в любом случае); наёмная — плата за выход и тариф на 35% выше. Каждый план проверен независимым верификатором. Данные синтетические.</span><span lang="en">Cost: an own vehicle costs mileage and hours only (truck and driver are paid for anyway); a hired one costs a hire fee and a 35% higher tariff. Every plan is checked by the independent verifier. Synthetic data.</span></p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="dispatch" class="sec alt">
+  <div class="wrap">
+    <p class="kicker reveal"><span lang="ru">Живая диспетчеризация</span><span lang="en">Live dispatch</span></p>
+    <h2 class="reveal"><span lang="ru">Ответ на заявку — за долю миллисекунды. С причиной, если «нет».</span><span lang="en">An answer in a fraction of a millisecond. With a reason when it is no.</span></h2>
+    <p class="sub reveal"><span lang="ru">Смена внутризаводской логистики: перевозки паллет между цехами появляются в течение дня. Каждая получает ответ сразу — вставку в ту часть плана, которую машина ещё не проехала, или отказ с причиной. Раз в 30 минут живое состояние переоптимизируется ALNS.</span><span lang="en">A shift of in-plant logistics: pallet moves between workshops appear during the day. Each gets an answer at once: an insertion into the part of a plan the vehicle has not driven yet, or a refusal with the reason. Every 30 minutes the live state is re-optimised by ALNS.</span></p>
+    <div class="disp reveal">
+      <figure class="stage">
+        <svg id="disp-map" viewBox="0 0 600 600" role="img" aria-label="Replay of the plant day"></svg>
+        <div class="hud four" aria-live="off">
+          <div><small><span lang="ru">время</span><span lang="en">clock</span></small><b id="disp-clock">7:00</b></div>
+          <div><small><span lang="ru">принято</span><span lang="en">accepted</span></small><b id="disp-acc">0 / 0</b></div>
+          <div><small><span lang="ru">подача, ср.</span><span lang="en">to pickup</span></small><b id="disp-resp">—</b></div>
+          <div><small><span lang="ru">решение</span><span lang="en">decision</span></small><b id="disp-ms">—</b></div>
+        </div>
+        <div class="speeds" role="group" aria-label="Replay speed"><button type="button" data-speed="1" aria-pressed="true">×1</button><button type="button" data-speed="3" aria-pressed="false">×3</button></div>
+        <button class="play" id="disp-play" type="button" aria-pressed="true" aria-label="Пауза / Pause"><svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true"><path class="i-pause" fill="currentColor" d="M6 4h4v16H6zM14 4h4v16h-4z"/><path class="i-play" fill="currentColor" d="M7 4l13 8-13 8z"/></svg></button>
+        <figcaption><span lang="ru">Синтетическая смена: 140 перевозок, 9 машин трёх типов. Точка появляется в момент заявки, машины едут по проверенному плану.</span><span lang="en">Synthetic shift: 140 moves, 9 vehicles of three types. A dot appears when the order is placed; vehicles drive the verified plan.</span></figcaption>
+      </figure>
+      <div class="card">
+        <div class="card-head"><h3><span lang="ru">Лента решений</span><span lang="en">Decision feed</span></h3></div>
+        <ol class="feed" id="disp-feed" aria-live="polite"></ol>
+        <table class="policy" id="disp-policies"><thead><tr><th scope="col"><span lang="ru">Политика</span><span lang="en">Policy</span></th><th scope="col"><span lang="ru">Принято</span><span lang="en">Accepted</span></th><th scope="col"><span lang="ru">Подача</span><span lang="en">To pickup</span></th><th scope="col"><span lang="ru">Решение</span><span lang="en">Decision</span></th></tr></thead><tbody></tbody></table>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="bench" class="sec">
+  <div class="wrap">
+    <p class="kicker reveal"><span lang="ru">Эталоны</span><span lang="en">Benchmarks</span></p>
+    <h2 class="reveal"><span lang="ru">130 открытых задач. Каждый план проверен.</span><span lang="en">130 public instances. Every plan verified.</span></h2>
+    <p class="sub reveal"><span lang="ru">Solomon (VRPTW), Li &amp; Lim и Sartori–Buriol (PDPTW на реальных дорожных временах OSRM), Cordeau (DARP). Клетка — один инстанс: цвет показывает разрыв к лучшему известному решению при том же числе машин. Наведите или нажмите.</span><span lang="en">Solomon (VRPTW), Li &amp; Lim and Sartori–Buriol (PDPTW on real OSRM road times), Cordeau (DARP). One cell, one instance: colour is the gap to the best known solution at the same vehicle count. Hover or tap.</span></p>
+    <div class="card heat reveal" id="heat"></div>
+    <div class="grid3">
+      <article class="card reveal">
+        <p class="tag"><span lang="ru">Точная модель — судья</span><span lang="en">The exact model judges</span></p>
+        <div class="big-stat" id="exact-stat">—</div>
+        <p id="exact-text"></p>
+      </article>
+      <article class="card reveal">
+        <p class="tag"><span lang="ru">OR-Tools Routing, равное время</span><span lang="en">OR-Tools Routing, equal time</span></p>
+        <div class="vs" id="ortools-vs"></div>
+        <div class="vs-key"><span><i style="background:var(--s1)"></i>ALNS</span><span><i style="background:var(--muted)"></i>OR-Tools PCI + GLS</span></div>
+      </article>
+      <article class="card reveal">
+        <p class="tag"><span lang="ru">Профилирование → Rust</span><span lang="en">Profiling → Rust</span></p>
+        <div class="vs" id="speed-vs"></div>
+        <div class="vs-key"><span><i style="background:var(--muted)"></i>Python</span><span><i style="background:var(--s1)"></i><span lang="ru">ядро Rust, тот же план</span><span lang="en">Rust kernel, same plan</span></span></div>
+      </article>
+    </div>
+  </div>
+</section>
+
 <section id="proof" class="sec">
   <div class="wrap">
     <p class="kicker reveal"><span lang="ru">Доказательства</span><span lang="en">Proof</span></p>
@@ -167,7 +247,7 @@ dropoff 1 cannot start before 402; dropoff 1 → dropoff 12 takes 3 + 15.68 min.
       <article class="card reveal">
         <div class="card-head"><h3><span lang="ru">Гонка до доказанного оптимума</span><span lang="en">Race to a proven optimum</span></h3><button class="pill-btn" id="race-run" type="button"><span lang="ru">Повторить</span><span lang="en">Replay</span></button></div>
         <div class="bars race" id="race"></div>
-        <p class="fine"><span lang="ru">Анимация в 12 раз быстрее реального времени. Оранжевым — оптимум не доказан за 60 с.</span><span lang="en">Animation runs 12× faster than real time. Orange: optimality not proven in 60 s.</span></p>
+        <p class="fine"><span lang="ru">Анимация в 12 раз быстрее реального времени. ✓ — оптимум доказан; = — эвристика нашла опубликованный оптимум, но не доказывает его; +% — разрыв к оптимуму за отведённое время; 15/16 — план теряет заявку, поэтому он дешевле оптимума и ответом не считается. Оранжевым — оптимальность не доказана.</span><span lang="en">Animation runs 12× faster than real time. ✓ optimum proven; = a heuristic found the published optimum but proves nothing; +% the gap to the optimum when time ran out; 15/16 the plan drops a request, which is why it is cheaper than the optimum and does not count as an answer. Orange: optimality not proven.</span></p>
       </article>
       <article class="card reveal flush">
         <div class="scroll-x" tabindex="0" role="region" aria-label="Solver results"><table id="lab-table"><thead><tr><th scope="col"><span lang="ru">Решатель</span><span lang="en">Solver</span></th><th scope="col"><span lang="ru">Статус</span><span lang="en">Status</span></th><th scope="col" class="num"><span lang="ru">Стоимость</span><span lang="en">Cost</span></th><th scope="col" class="num"><span lang="ru">Время, с</span><span lang="en">Time, s</span></th></tr></thead><tbody></tbody></table></div>
@@ -176,7 +256,7 @@ dropoff 1 cannot start before 402; dropoff 1 → dropoff 12 takes 3 + 15.68 min.
     <article class="insight reveal">
       <div class="pair"><div><p class="mega small">85.27</p><p class="fine"><span lang="ru">нижняя граница LP-релаксации</span><span lang="en">LP relaxation lower bound</span></p></div>
       <div><p class="mega small">294.25</p><p class="fine"><span lang="ru">оптимум</span><span lang="en">optimum</span></p></div></div>
-      <p><span lang="ru"><b>Почему CP-SAT здесь в 49 раз быстрее SCIP.</b> Ограничения big-M дают слабую LP-релаксацию: разрыв 71%. Пропагация времени по дугам в CP-SAT отсекает узкие окна сразу. Вывод для выбора решателя: на плотных окнах — CP; MIP выигрывает, когда добавлены отсечения и важна нижняя граница.</span><span lang="en"><b>Why CP-SAT is 49× faster than SCIP here.</b> Big-M constraints give a weak LP relaxation: a 71% gap. Arc-wise time propagation in CP-SAT prunes tight windows at once. The solver-choice lesson: CP for tight windows; MIP wins once cuts are added and the lower bound matters.</span></p>
+      <p><span lang="ru"><b>Почему CP-SAT здесь в десятки раз быстрее SCIP.</b> Ограничения big-M дают слабую LP-релаксацию: разрыв 71%. Пропагация времени по дугам в CP-SAT отсекает узкие окна сразу. Вывод для выбора решателя: на плотных окнах — CP; MIP выигрывает, когда добавлены отсечения и важна нижняя граница.</span><span lang="en"><b>Why CP-SAT is dozens of times faster than SCIP here.</b> Big-M constraints give a weak LP relaxation: a 71% gap. Arc-wise time propagation in CP-SAT prunes tight windows at once. The solver-choice lesson: CP for tight windows; MIP wins once cuts are added and the lower bound matters.</span></p>
     </article>
     <figure class="fig reveal"><img src="assets/a2-16-timeline.svg" width="852" height="498" loading="lazy" alt="Timeline: for each of 16 requests, its time window, pickup and dropoff starts and the 30-minute ride limit"><figcaption><span lang="ru">Когда обслуживается каждый заказ: серое — узкое окно, линия — поездка, пунктир — лимит 30 минут.</span><span lang="en">When each order is served: grey is the tight window, the line is the ride, dashes mark the 30-minute limit.</span></figcaption></figure>
   </div>
@@ -213,27 +293,31 @@ dropoff 1 cannot start before 402; dropoff 1 → dropoff 12 takes 3 + 15.68 min.
 <section id="scope" class="sec">
   <div class="wrap">
     <p class="kicker reveal"><span lang="ru">Возможности</span><span lang="en">Scope</span></p>
-    <h2 class="reveal"><span lang="ru">Что ядро умеет сегодня — и что в плане.</span><span lang="en">What the kernel does today, and what is planned.</span></h2>
+    <h2 class="reveal"><span lang="ru">Что движок умеет сегодня — и что в плане.</span><span lang="en">What the engine does today, and what is planned.</span></h2>
     <div class="card reveal flush"><div class="scroll-x" tabindex="0" role="region" aria-label="Capabilities"><table class="scope">
       <thead><tr><th scope="col"><span lang="ru">Задача маршрутизации</span><span lang="en">Routing capability</span></th><th scope="col"><span lang="ru">Статус</span><span lang="en">Status</span></th><th scope="col"><span lang="ru">Как реализовано</span><span lang="en">How</span></th></tr></thead>
       <tbody>
         <tr><th scope="row"><span lang="ru">Временные окна (VRPTW)</span><span lang="en">Time windows (VRPTW)</span></th><td><span class="pill ok"><span lang="ru">есть</span><span lang="en">done</span></span></td><td><span lang="ru">окна на заборе и доставке, ужатие окон, лимит поездки и смены</span><span lang="en">windows at pickup and delivery, tightening, ride and shift limits</span></td></tr>
         <tr><th scope="row">Pickup &amp; delivery (PDPTW)</th><td><span class="pill ok"><span lang="ru">есть</span><span lang="en">done</span></span></td><td><span lang="ru">пара на одной машине, порядок, промежуточная остановка</span><span lang="en">pair on one vehicle, precedence, intermediate stop</span></td></tr>
-        <tr><th scope="row"><span lang="ru">Гетерогенный парк</span><span lang="en">Heterogeneous fleet</span></th><td><span class="pill ok"><span lang="ru">есть</span><span lang="en">done</span></span></td><td><span lang="ru">вместимость в двух размерностях, оборудование, зоны, смены; в точной модели — один тип ТС</span><span lang="en">two capacity dimensions, equipment, zones, shifts; the exact model has one vehicle type</span></td></tr>
+        <tr><th scope="row"><span lang="ru">Гетерогенный парк</span><span lang="en">Heterogeneous fleet</span></th><td><span class="pill ok"><span lang="ru">есть</span><span lang="en">done</span></span></td><td><span lang="ru">типы ТС со своими ёмкостью, стоимостью, скоростью, сменой и оборудованием; свои и наёмные; в эвристиках и в точной модели CP-SAT</span><span lang="en">vehicle types with their own capacity, cost, speed, shift and equipment; own and hired; in the heuristics and in the exact CP-SAT model</span></td></tr>
         <tr><th scope="row"><span lang="ru">Совместимость заказ — ТС — водитель</span><span lang="en">Order–vehicle–driver compatibility</span></th><td><span class="pill ok"><span lang="ru">есть</span><span lang="en">done</span></span></td><td><span lang="ru">квалификация, смена, перерывы и недоступность</span><span lang="en">qualification, shift, breaks and unavailability</span></td></tr>
         <tr><th scope="row"><span lang="ru">Точные модели: CP и MIP</span><span lang="en">Exact models: CP and MIP</span></th><td><span class="pill ok"><span lang="ru">есть</span><span lang="en">done</span></span></td><td>CP-SAT, SCIP, HiGHS, CBC, <span lang="ru">LP-граница</span><span lang="en">LP bound</span></td></tr>
-        <tr><th scope="row"><span lang="ru">Эвристики и метаэвристики</span><span lang="en">Heuristics and metaheuristics</span></th><td><span class="pill ok"><span lang="ru">есть</span><span lang="en">done</span></span></td><td><span lang="ru">вставка, beam, ALNS (Shaw, worst, route, random; отжиг), скользящий горизонт</span><span lang="en">insertion, beam, ALNS (Shaw, worst, route, random; annealing), rolling horizon</span></td></tr>
+        <tr><th scope="row"><span lang="ru">Эвристики и метаэвристики</span><span lang="en">Heuristics and metaheuristics</span></th><td><span class="pill ok"><span lang="ru">есть</span><span lang="en">done</span></span></td><td><span lang="ru">regret-вставка, ALNS (5 операторов разрушения, отжиг), guided ejection для сокращения парка, beam, скользящий горизонт</span><span lang="en">regret insertion, ALNS (5 ruin operators, annealing), guided ejection to cut the fleet, beam, rolling horizon</span></td></tr>
         <tr><th scope="row"><span lang="ru">Перепланирование в течение дня</span><span lang="en">Same-day re-planning</span></th><td><span class="pill ok"><span lang="ru">есть</span><span lang="en">done</span></span></td><td><span lang="ru">срочный заказ, отмена, неявка, пробка, поломка; сравнение планов</span><span lang="en">urgent order, cancellation, no-show, traffic, breakdown; plan diff</span></td></tr>
-        <tr><th scope="row"><span lang="ru">Вектор ёмкости: кг, м³, паллеты</span><span lang="en">Capacity vector: kg, m³, pallets</span></th><td><span class="pill plan"><span lang="ru">в плане</span><span lang="en">planned</span></span></td><td><span lang="ru">обобщение двух размерностей до произвольного вектора</span><span lang="en">generalise two dimensions to an arbitrary vector</span></td></tr>
-        <tr><th scope="row"><span lang="ru">Стоимость по типам ТС</span><span lang="en">Cost by vehicle type</span></th><td><span class="pill plan"><span lang="ru">в плане</span><span lang="en">planned</span></span></td><td><span lang="ru">фиксированная за выход + переменная за км и час</span><span lang="en">fixed per dispatch plus variable per km and hour</span></td></tr>
-        <tr><th scope="row"><span lang="ru">Эталоны Li &amp; Lim, Solomon</span><span lang="en">Li &amp; Lim, Solomon benchmarks</span></th><td><span class="pill plan"><span lang="ru">в плане</span><span lang="en">planned</span></span></td><td><span lang="ru">загрузчики и сверка с опубликованными решениями</span><span lang="en">loaders and comparison with published solutions</span></td></tr>
+        <tr><th scope="row"><span lang="ru">Вектор ёмкости: кг, м³, паллеты</span><span lang="en">Capacity vector: kg, m³, pallets</span></th><td><span class="pill ok"><span lang="ru">есть</span><span lang="en">done</span></span></td><td><span lang="ru">любая размерность, в эвристиках, ядре Rust, точной модели и верификаторе</span><span lang="en">any dimension, in the heuristics, the Rust kernel, the exact model and the verifier</span></td></tr>
+        <tr><th scope="row"><span lang="ru">Стоимость по типам ТС</span><span lang="en">Cost by vehicle type</span></th><td><span class="pill ok"><span lang="ru">есть</span><span lang="en">done</span></span></td><td><span lang="ru">плата за выход + руб/км + руб/ч; разные профили скорости</span><span lang="en">fixed fee + per km + per hour; separate speed profiles</span></td></tr>
+        <tr><th scope="row"><span lang="ru">Эталоны Solomon, Li &amp; Lim, Sartori–Buriol, Cordeau</span><span lang="en">Solomon, Li &amp; Lim, Sartori–Buriol, Cordeau</span></th><td><span class="pill ok"><span lang="ru">есть</span><span lang="en">done</span></span></td><td><span lang="ru">130 инстансов с SHA-256, разрыв к лучшим известным решениям</span><span lang="en">130 instances pinned by SHA-256, gaps to best known solutions</span></td></tr>
+        <tr><th scope="row"><span lang="ru">Сравнение с OR-Tools Routing</span><span lang="en">Head-to-head with OR-Tools Routing</span></th><td><span class="pill ok"><span lang="ru">есть</span><span lang="en">done</span></span></td><td><span lang="ru">та же модель, равное время, тот же верификатор</span><span lang="en">same model, equal time, same verifier</span></td></tr>
+        <tr><th scope="row"><span lang="ru">Заявки в реальном времени</span><span lang="en">Orders in real time</span></th><td><span class="pill ok"><span lang="ru">есть</span><span lang="en">done</span></span></td><td><span lang="ru">заморозка проеханного, вставка за доли мс, переоптимизация живого состояния</span><span lang="en">freeze what is driven, insert in a fraction of a ms, re-optimise the live state</span></td></tr>
+        <tr><th scope="row"><span lang="ru">Опоздание вместо «мягких окон»</span><span lang="en">Lateness instead of soft windows</span></th><td><span class="pill ok"><span lang="ru">есть</span><span lang="en">done</span></span></td><td><span lang="ru">минимум максимального и суммарного опоздания (Беллман–Форд, LP)</span><span lang="en">least maximum and total lateness (Bellman–Ford, LP)</span></td></tr>
+        <tr><th scope="row"><span lang="ru">Несколько рейсов, перерывы, время суток</span><span lang="en">Multi-trip, breaks, time of day</span></th><td><span class="pill plan"><span lang="ru">в плане</span><span lang="en">planned</span></span></td><td><span lang="ru">перезагрузка в депо, режим труда и отдыха, часы пик</span><span lang="en">reloading at the depot, driving-time rules, rush hours</span></td></tr>
       </tbody></table></div></div>
 
     <div class="grid2 cargo">
       <div class="reveal">
         <h3 class="h3"><span lang="ru">От пассажиров к грузам: та же алгебра, другие единицы</span><span lang="en">From passengers to cargo: same algebra, other units</span></h3>
-        <p class="sub"><span lang="ru">Пассажирская задача — частный случай PDPTW. При переносе на грузовую логистику меняются единицы ёмкости и стоимость, а не логика расписания.</span><span lang="en">The passenger problem is a special case of PDPTW. Moving to cargo changes capacity units and costs, not the scheduling logic.</span></p>
-        <a class="link" href="https://github.com/KonkovDV/SynAPS-MobiRoute/blob/main/docs/cargo-vrp-porting-plan.md"><span lang="ru">План переноса с этапами и критериями приёмки</span><span lang="en">Porting plan with stages and acceptance criteria</span> →</a>
+        <p class="sub"><span lang="ru">Пассажирская задача — частный случай PDPTW. Грузовой движок использует ту же логику расписания и проверки; меняются единицы ёмкости, стоимость и правила парка.</span><span lang="en">The passenger problem is a special case of PDPTW. The cargo engine uses the same scheduling and verification logic; capacity units, costs and fleet rules change.</span></p>
+        <a class="link" href="https://github.com/KonkovDV/SynAPS-MobiRoute/blob/main/docs/cargo-vrp.md"><span lang="ru">Грузовой VRP: модель, алгоритмы, сценарии</span><span lang="en">Cargo VRP: model, algorithms, scenarios</span> →</a>
       </div>
       <ul class="map reveal">
         <li><span><span lang="ru">Места и колясочные места</span><span lang="en">Seats and wheelchair spaces</span></span><b><span lang="ru">Килограммы, кубометры, паллеты</span><span lang="en">Kilograms, cubic metres, pallets</span></b></li>
@@ -259,19 +343,18 @@ dropoff 1 cannot start before 402; dropoff 1 → dropoff 12 takes 3 + 15.68 min.
       <div class="reveal">
         <h3 class="h3"><span lang="ru">Честные границы</span><span lang="en">Honest limits</span></h3>
         <ul class="limits">
-          <li><span lang="ru">Данные — синтетические сценарии и один открытый эталон. Данных заказчика и пилота нет.</span><span lang="en">Data is synthetic scenarios plus one open benchmark. No customer data, no pilot.</span></li>
-          <li><span lang="ru">Уровень готовности 4: лабораторная проверка. Обещаний экономии нет.</span><span lang="en">Readiness level 4: lab validation. No savings claims.</span></li>
-          <li><span lang="ru">Эвристики ядра работают в своей постановке и с литературой не сравниваются.</span><span lang="en">The kernel heuristics use their own formulation and are not compared with the literature.</span></li>
+          <li><span lang="ru">Данные — открытые эталоны и синтетические дни. Данных заказчика и пилота нет, обещаний экономии тоже.</span><span lang="en">Data: public benchmarks and synthetic days. No customer data, no pilot, no savings claims.</span></li>
+          <li><span lang="ru">Пока один рейс на машину, без перерывов внутри маршрута и без пробок по времени суток.</span><span lang="en">One trip per vehicle for now, no breaks inside a route, no time-of-day traffic.</span></li>
+          <li><span lang="ru">Эвристики не доказывают оптимум; разрыв к лучшим решениям опубликован по каждому инстансу.</span><span lang="en">Heuristics prove no optimum; the gap to the best known solution is published per instance.</span></li>
           <li><span lang="ru">Замеры скорости — на одной машине, это не SLA.</span><span lang="en">Speed numbers come from one machine and are not an SLA.</span></li>
         </ul>
       </div>
       <div class="reveal">
-        <h3 class="h3"><span lang="ru">Три команды до проверенного оптимума</span><span lang="en">Three commands to a verified optimum</span></h3>
+        <h3 class="h3"><span lang="ru">Четыре команды до проверенного плана</span><span lang="en">Four commands to a verified plan</span></h3>
         <div class="code"><button class="pill-btn copy" type="button" data-copy="cmds" aria-label="Copy commands">copy</button><pre tabindex="0"><code id="cmds">pip install -e ".[dev]" maturin
 maturin develop --release -m native/mobiroute_native/Cargo.toml
-mobiroute literature-benchmark \
-  --instance benchmark/instances/cordeau/a2-16.txt \
-  --out-dir out --svg</code></pre></div>
+mobiroute vrp-solve --generate cargo --orders 120 --out-dir out --svg
+mobiroute vrp-dispatch --day plant --policy insertion+alns --out-dir out</code></pre></div>
         <div class="cta"><a class="btn primary" href="https://github.com/KonkovDV/SynAPS-MobiRoute"><span lang="ru">Открыть репозиторий</span><span lang="en">Open the repository</span></a><a class="btn ghost" href="https://github.com/KonkovDV/SynAPS-MobiRoute/blob/main/docs/mathematical-formulation.md"><span lang="ru">Математическая постановка</span><span lang="en">Mathematical formulation</span></a></div>
       </div>
     </div>
@@ -281,7 +364,7 @@ mobiroute literature-benchmark \
 
 <footer class="foot"><div class="wrap">
   <p>SynAPS-MobiRoute · MIT · <a href="https://github.com/KonkovDV">Dmitrij Konkov</a></p>
-  <p><span lang="ru">Источники чисел: </span><span lang="en">Sources: </span><a href="https://github.com/KonkovDV/SynAPS-MobiRoute/blob/main/docs/benchmarks/solver-lab-a2-16.md">solver lab</a> · <a href="https://github.com/KonkovDV/SynAPS-MobiRoute/blob/main/docs/native-acceleration.md"><span lang="ru">скорость</span><span lang="en">speed</span></a> · <a href="https://github.com/KonkovDV/SynAPS-MobiRoute/blob/main/CHANGELOG.md">changelog</a></p>
+  <p><span lang="ru">Источники чисел: </span><span lang="en">Sources: </span><a href="https://github.com/KonkovDV/SynAPS-MobiRoute/blob/main/docs/benchmarks/vrp-public-benchmarks.md"><span lang="ru">эталоны</span><span lang="en">benchmarks</span></a> · <a href="https://github.com/KonkovDV/SynAPS-MobiRoute/blob/main/docs/benchmarks/exact-vs-alns.md">CP-SAT vs ALNS</a> · <a href="https://github.com/KonkovDV/SynAPS-MobiRoute/blob/main/docs/benchmarks/ortools-vs-alns.md">OR-Tools vs ALNS</a> · <a href="https://github.com/KonkovDV/SynAPS-MobiRoute/blob/main/docs/benchmarks/realtime-dispatch.md"><span lang="ru">диспетчеризация</span><span lang="en">dispatch</span></a> · <a href="https://github.com/KonkovDV/SynAPS-MobiRoute/blob/main/docs/benchmarks/solver-lab-a2-16.md">solver lab</a> · <a href="https://github.com/KonkovDV/SynAPS-MobiRoute/blob/main/docs/native-acceleration.md"><span lang="ru">скорость</span><span lang="en">speed</span></a> · <a href="https://github.com/KonkovDV/SynAPS-MobiRoute/blob/main/CHANGELOG.md">changelog</a></p>
 </div></footer>
 
 <noscript><style>.reveal{opacity:1!important;transform:none!important}</style></noscript>
