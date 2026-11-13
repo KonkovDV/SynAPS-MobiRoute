@@ -3,9 +3,12 @@
 import unittest
 from math import inf, nextafter
 
-import mobiroute_native as native
+import pytest
 
 from mobiroute.domain.constraints import detour_limit
+
+# The native wheel is optional at collection time (e.g. the literature CI job).
+native = pytest.importorskip("mobiroute_native")
 
 TRAVEL = [0, 16, 16, 0]
 VEHICLE = [0, 0, 100, 2, 0, 0, 0, 0, 100, 0, 1, 0]
