@@ -55,6 +55,42 @@ v0 implements the **deterministic** core (stochastic travel as future extension)
 27. Rejected requests keep explainable \\(\\rho_r\\)
 28. Reproducible solve (seed, hashes, single thread)
 
+## Time-window tightening (pickup floor)
+
+With alight floor \\(\\underline{a}_r = \\max(0, \\mathrm{appt}_r - 30)\\), ride cap
+\\(\\bar{L}_r = \\min(L_r, \\mathrm{detour}_r)\\) and curb service \\(s_r = \\max(\\mathrm{board}_r, 5)\\),
+every feasible schedule satisfies
+
+\\[ B_{p_r} \\ge e^{*}_r = \\max\\big(e_r,\; \\underline{a}_r - \\bar{L}_r - s_r\\big), \\]
+
+because the ride clock runs from pickup departure \\(B_{p_r} + s_r\\) to dropoff arrival
+\\(\\ge \\underline{a}_r\\). This is a valid inequality (Dumas, Desrosiers & Soumis 1991;
+Cordeau 2006), so an early vehicle holds until \\(e^{*}_r\\) without losing any schedule of
+the sequence. Passenger delay is still measured from \\(e_r\\). Kernel, oracle and notary
+share the formula (`pickup_service_floor`).
+
+## Literature lane (Cordeau 2006 algebra)
+
+Nodes \\(0\\) (depot), pickups \\(1..n\\), dropoffs \\(n+1..2n\\), end depot \\(2n+1\\);
+Euclidean \\(t_{ij} = c_{ij}\\); service \\(d_i\\); windows \\([e_i, l_i]\\); ride limit \\(L\\);
+capacity \\(Q\\); at most \\(K\\) routes.
+
+* **CP-SAT**: `AddMultipleCircuit` over arcs \\(x_{ij}\\); \\(x_{ij} \\Rightarrow B_j \\ge B_i + d_i + \\lceil t_{ij} \\rceil_{1/1000}\\),
+  route label \\(V_j = V_i\\) (first pickup names the route), \\(V_i = V_{n+i}\\),
+  load propagation, \\(B_{n+i} - B_i - d_i \\le L\\). Rounding travel up keeps every model
+  solution feasible in reals.
+* **MIP** (compact two-index, Furtado, Munari & Morabito 2017): degree constraints,
+  \\(\\sum_j x_{0j} \\le K\\), arc big-M \\(B_j \\ge B_i + d_i + t_{ij} - M_{ij}(1 - x_{ij})\\) with
+  \\(M_{ij} = \\max(0, l_i + d_i + t_{ij} - e_j)\\), label and load big-M copies along arcs,
+  ride and precedence rows; real-valued travel, solved by SCIP, HiGHS or CBC. The LP
+  relaxation is reported as a lower bound (85.27 on a2-16 against 294.25: big-M is weak).
+* **Verifier**: for a fixed sequence the constraints
+  \\(B_v - B_u \\le w_{uv}\\) (windows via a zero clock \\(z\\), travel, ride, duration) form a
+  system of difference constraints. It is feasible iff the constraint graph has no negative
+  cycle (Bellman–Ford, CLRS 24.4); the earliest schedule is \\(B_k = -\\delta(k, z)\\). A
+  negative cycle \\(C\\) is the certificate: its constraints cannot all hold and
+  \\(-\\sum_{(u,v) \\in C} w_{uv}\\) is the number of minutes they miss by.
+
 ## Lexicographic objective levels
 
 1. Safety / accessibility / medical hard feasibility  
@@ -93,5 +129,5 @@ Cited to place this formulation, never to claim parity or a shared bound:
   its metrics", Transp. Res. Procedia 24:377–384 (2017) — online metrics.
 
 MobiRoute publishes greedy pooling insertion, beam, ALNS, RHC and a sequential
-tiny CP-SAT on synthetic days plus the Cordeau `a2-16` gate. None of those
-numbers is measured against the instances or bounds above.
+tiny CP-SAT on synthetic days. The only literature comparison is the Cordeau
+`a2-16` literature lane above, gated on the instance SHA-256 and the verifier.

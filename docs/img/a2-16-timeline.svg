@@ -1,0 +1,82 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="852" height="498" viewBox="0 0 852 498" role="img" aria-label="Cordeau a2-16: when each request is served">
+<style>
+  .surface { fill: #fcfcfb; }
+  .ink { fill: #0b0b0b; } .ink2 { fill: #52514e; } .muted { fill: #898781; }
+  .grid { stroke: #e1e0d9; stroke-width: 1; } .axis { stroke: #c3c2b7; stroke-width: 1; }
+  .window { fill: #898781; fill-opacity: 0.22; }
+  .limit { stroke: #898781; stroke-width: 1; stroke-dasharray: 3 3; }
+  .depot { fill: #0b0b0b; }
+  .s0 { stroke: #2a78d6; } .f0 { fill: #2a78d6; } .s1 { stroke: #eb6834; } .f1 { fill: #eb6834; }
+  @media (prefers-color-scheme: dark) {
+    .surface { fill: #1a1a19; }
+    .ink { fill: #f0efec; } .ink2 { fill: #c3c2b7; }
+    .grid { stroke: #2c2c2a; } .axis { stroke: #383835; }
+    .depot { fill: #f0efec; }
+    .s0 { stroke: #3987e5; } .f0 { fill: #3987e5; } .s1 { stroke: #d95926; } .f1 { fill: #d95926; }
+  }
+  text { font-family: system-ui, -apple-system, "Segoe UI", sans-serif; }
+</style>
+<rect class="surface" width="852" height="498" rx="8"/>
+<text class="ink" x="92" y="30" font-size="17" font-weight="600">Cordeau a2-16: when each request is served</text>
+<text class="ink2" x="92" y="52" font-size="12.5">Shaded: the request's tight window · dot = pickup start, ring = dropoff start · dashed: ride limit 30 min</text>
+<line class="grid" x1="92.0" y1="70" x2="92.0" y2="428"/><text class="muted" x="92.0" y="446" font-size="11" text-anchor="middle">0</text>
+<line class="grid" x1="182.0" y1="70" x2="182.0" y2="428"/><text class="muted" x="182.0" y="446" font-size="11" text-anchor="middle">60</text>
+<line class="grid" x1="272.0" y1="70" x2="272.0" y2="428"/><text class="muted" x="272.0" y="446" font-size="11" text-anchor="middle">120</text>
+<line class="grid" x1="362.0" y1="70" x2="362.0" y2="428"/><text class="muted" x="362.0" y="446" font-size="11" text-anchor="middle">180</text>
+<line class="grid" x1="452.0" y1="70" x2="452.0" y2="428"/><text class="muted" x="452.0" y="446" font-size="11" text-anchor="middle">240</text>
+<line class="grid" x1="542.0" y1="70" x2="542.0" y2="428"/><text class="muted" x="542.0" y="446" font-size="11" text-anchor="middle">300</text>
+<line class="grid" x1="632.0" y1="70" x2="632.0" y2="428"/><text class="muted" x="632.0" y="446" font-size="11" text-anchor="middle">360</text>
+<line class="grid" x1="722.0" y1="70" x2="722.0" y2="428"/><text class="muted" x="722.0" y="446" font-size="11" text-anchor="middle">420</text>
+<line class="grid" x1="812.0" y1="70" x2="812.0" y2="428"/><text class="muted" x="812.0" y="446" font-size="11" text-anchor="middle">480</text>
+<line class="axis" x1="92" y1="428" x2="812" y2="428"/><text class="muted" x="452.0" y="466" font-size="11.5" text-anchor="middle">minutes since depot opening</text>
+<text class="ink2" x="82" y="91.0" font-size="11.5" text-anchor="end">request 12</text>
+<rect class="window" x="113.0" y="80.0" width="22.5" height="14" rx="3"><title>pickup 12 window [14, 29]</title></rect>
+<line class="limit" x1="113.0" y1="87.0" x2="162.5" y2="87.0"/><line class="s1" x1="113.0" y1="87.0" x2="137.3" y2="87.0" stroke-width="2"><title>request 12 · vehicle 2 · ride 13.2 of 30 min</title></line><circle class="f1" cx="113.0" cy="87.0" r="4"/><circle class="s1 surface" cx="137.3" cy="87.0" r="4" stroke-width="2"/>
+<text class="ink2" x="82" y="113.0" font-size="11.5" text-anchor="end">request 6</text>
+<rect class="window" x="165.5" y="102.0" width="22.5" height="14" rx="3"><title>dropoff 6 window [49, 64]</title></rect>
+<line class="limit" x1="121.9" y1="109.0" x2="171.4" y2="109.0"/><line class="s1" x1="121.9" y1="109.0" x2="165.5" y2="109.0" stroke-width="2"><title>request 6 · vehicle 2 · ride 26.1 of 30 min</title></line><circle class="f1" cx="121.9" cy="109.0" r="4"/><circle class="s1 surface" cx="165.5" cy="109.0" r="4" stroke-width="2"/>
+<text class="ink2" x="82" y="135.0" font-size="11.5" text-anchor="end">request 10</text>
+<rect class="window" x="140.0" y="124.0" width="22.5" height="14" rx="3"><title>pickup 10 window [32, 47]</title></rect>
+<line class="limit" x1="140.0" y1="131.0" x2="189.5" y2="131.0"/><line class="s0" x1="140.0" y1="131.0" x2="185.2" y2="131.0" stroke-width="2"><title>request 10 · vehicle 1 · ride 27.1 of 30 min</title></line><circle class="f0" cx="140.0" cy="131.0" r="4"/><circle class="s0 surface" cx="185.2" cy="131.0" r="4" stroke-width="2"/>
+<text class="ink2" x="82" y="157.0" font-size="11.5" text-anchor="end">request 5</text>
+<rect class="window" x="215.0" y="146.0" width="22.5" height="14" rx="3"><title>dropoff 5 window [82, 97]</title></rect>
+<line class="limit" x1="165.5" y1="153.0" x2="215.0" y2="153.0"/><line class="s0" x1="165.5" y1="153.0" x2="215.0" y2="153.0" stroke-width="2"><title>request 5 · vehicle 1 · ride 30.0 of 30 min</title></line><circle class="f0" cx="165.5" cy="153.0" r="4"/><circle class="s0 surface" cx="215.0" cy="153.0" r="4" stroke-width="2"/>
+<text class="ink2" x="82" y="179.0" font-size="11.5" text-anchor="end">request 4</text>
+<rect class="window" x="299.0" y="168.0" width="22.5" height="14" rx="3"><title>dropoff 4 window [138, 153]</title></rect>
+<line class="limit" x1="249.5" y1="175.0" x2="299.0" y2="175.0"/><line class="s1" x1="249.5" y1="175.0" x2="299.0" y2="175.0" stroke-width="2"><title>request 4 · vehicle 2 · ride 30.0 of 30 min</title></line><circle class="f1" cx="249.5" cy="175.0" r="4"/><circle class="s1 surface" cx="299.0" cy="175.0" r="4" stroke-width="2"/>
+<text class="ink2" x="82" y="201.0" font-size="11.5" text-anchor="end">request 11</text>
+<rect class="window" x="264.5" y="190.0" width="22.5" height="14" rx="3"><title>pickup 11 window [115, 130]</title></rect>
+<line class="limit" x1="275.7" y1="197.0" x2="325.2" y2="197.0"/><line class="s1" x1="275.7" y1="197.0" x2="287.7" y2="197.0" stroke-width="2"><title>request 11 · vehicle 2 · ride 5.0 of 30 min</title></line><circle class="f1" cx="275.7" cy="197.0" r="4"/><circle class="s1 surface" cx="287.7" cy="197.0" r="4" stroke-width="2"/>
+<text class="ink2" x="82" y="223.0" font-size="11.5" text-anchor="end">request 3</text>
+<rect class="window" x="360.5" y="212.0" width="22.5" height="14" rx="3"><title>dropoff 3 window [179, 194]</title></rect>
+<line class="limit" x1="323.8" y1="219.0" x2="373.3" y2="219.0"/><line class="s1" x1="323.8" y1="219.0" x2="360.5" y2="219.0" stroke-width="2"><title>request 3 · vehicle 2 · ride 21.5 of 30 min</title></line><circle class="f1" cx="323.8" cy="219.0" r="4"/><circle class="s1 surface" cx="360.5" cy="219.0" r="4" stroke-width="2"/>
+<text class="ink2" x="82" y="245.0" font-size="11.5" text-anchor="end">request 14</text>
+<rect class="window" x="332.0" y="234.0" width="22.5" height="14" rx="3"><title>pickup 14 window [160, 175]</title></rect>
+<line class="limit" x1="332.0" y1="241.0" x2="381.5" y2="241.0"/><line class="s0" x1="332.0" y1="241.0" x2="339.8" y2="241.0" stroke-width="2"><title>request 14 · vehicle 1 · ride 2.2 of 30 min</title></line><circle class="f0" cx="332.0" cy="241.0" r="4"/><circle class="s0 surface" cx="339.8" cy="241.0" r="4" stroke-width="2"/>
+<text class="ink2" x="82" y="267.0" font-size="11.5" text-anchor="end">request 15</text>
+<rect class="window" x="362.0" y="256.0" width="22.5" height="14" rx="3"><title>pickup 15 window [180, 195]</title></rect>
+<line class="limit" x1="362.0" y1="263.0" x2="411.5" y2="263.0"/><line class="s0" x1="362.0" y1="263.0" x2="391.9" y2="263.0" stroke-width="2"><title>request 15 · vehicle 1 · ride 17.0 of 30 min</title></line><circle class="f0" cx="362.0" cy="263.0" r="4"/><circle class="s0 surface" cx="391.9" cy="263.0" r="4" stroke-width="2"/>
+<text class="ink2" x="82" y="289.0" font-size="11.5" text-anchor="end">request 13</text>
+<rect class="window" x="389.0" y="278.0" width="22.5" height="14" rx="3"><title>pickup 13 window [198, 213]</title></rect>
+<line class="limit" x1="392.2" y1="285.0" x2="441.7" y2="285.0"/><line class="s1" x1="392.2" y1="285.0" x2="408.9" y2="285.0" stroke-width="2"><title>request 13 · vehicle 2 · ride 8.1 of 30 min</title></line><circle class="f1" cx="392.2" cy="285.0" r="4"/><circle class="s1 surface" cx="408.9" cy="285.0" r="4" stroke-width="2"/>
+<text class="ink2" x="82" y="311.0" font-size="11.5" text-anchor="end">request 9</text>
+<rect class="window" x="506.0" y="300.0" width="22.5" height="14" rx="3"><title>pickup 9 window [276, 291]</title></rect>
+<line class="limit" x1="506.0" y1="307.0" x2="555.5" y2="307.0"/><line class="s1" x1="506.0" y1="307.0" x2="528.3" y2="307.0" stroke-width="2"><title>request 9 · vehicle 2 · ride 11.9 of 30 min</title></line><circle class="f1" cx="506.0" cy="307.0" r="4"/><circle class="s1 surface" cx="528.3" cy="307.0" r="4" stroke-width="2"/>
+<text class="ink2" x="82" y="333.0" font-size="11.5" text-anchor="end">request 8</text>
+<rect class="window" x="539.0" y="322.0" width="22.5" height="14" rx="3"><title>dropoff 8 window [298, 313]</title></rect>
+<line class="limit" x1="518.8" y1="329.0" x2="568.3" y2="329.0"/><line class="s1" x1="518.8" y1="329.0" x2="539.3" y2="329.0" stroke-width="2"><title>request 8 · vehicle 2 · ride 10.7 of 30 min</title></line><circle class="f1" cx="518.8" cy="329.0" r="4"/><circle class="s1 surface" cx="539.3" cy="329.0" r="4" stroke-width="2"/>
+<text class="ink2" x="82" y="355.0" font-size="11.5" text-anchor="end">request 2</text>
+<rect class="window" x="575.0" y="344.0" width="22.5" height="14" rx="3"><title>dropoff 2 window [322, 337]</title></rect>
+<line class="limit" x1="555.0" y1="351.0" x2="604.5" y2="351.0"/><line class="s1" x1="555.0" y1="351.0" x2="586.6" y2="351.0" stroke-width="2"><title>request 2 · vehicle 2 · ride 18.1 of 30 min</title></line><circle class="f1" cx="555.0" cy="351.0" r="4"/><circle class="s1 surface" cx="586.6" cy="351.0" r="4" stroke-width="2"/>
+<text class="ink2" x="82" y="377.0" font-size="11.5" text-anchor="end">request 7</text>
+<rect class="window" x="692.0" y="366.0" width="22.5" height="14" rx="3"><title>dropoff 7 window [400, 415]</title></rect>
+<line class="limit" x1="642.5" y1="373.0" x2="692.0" y2="373.0"/><line class="s0" x1="642.5" y1="373.0" x2="692.0" y2="373.0" stroke-width="2"><title>request 7 · vehicle 1 · ride 30.0 of 30 min</title></line><circle class="f0" cx="642.5" cy="373.0" r="4"/><circle class="s0 surface" cx="692.0" cy="373.0" r="4" stroke-width="2"/>
+<text class="ink2" x="82" y="399.0" font-size="11.5" text-anchor="end">request 1</text>
+<rect class="window" x="695.0" y="388.0" width="22.5" height="14" rx="3"><title>dropoff 1 window [402, 417]</title></rect>
+<line class="limit" x1="645.5" y1="395.0" x2="695.0" y2="395.0"/><line class="s1" x1="645.5" y1="395.0" x2="695.0" y2="395.0" stroke-width="2"><title>request 1 · vehicle 2 · ride 30.0 of 30 min</title></line><circle class="f1" cx="645.5" cy="395.0" r="4"/><circle class="s1 surface" cx="695.0" cy="395.0" r="4" stroke-width="2"/>
+<text class="ink2" x="82" y="421.0" font-size="11.5" text-anchor="end">request 16</text>
+<rect class="window" x="641.0" y="410.0" width="22.5" height="14" rx="3"><title>pickup 16 window [366, 381]</title></rect>
+<line class="limit" x1="662.7" y1="417.0" x2="712.2" y2="417.0"/><line class="s0" x1="662.7" y1="417.0" x2="712.2" y2="417.0" stroke-width="2"><title>request 16 · vehicle 1 · ride 30.0 of 30 min</title></line><circle class="f0" cx="662.7" cy="417.0" r="4"/><circle class="s0 surface" cx="712.2" cy="417.0" r="4" stroke-width="2"/>
+<line class="s0" x1="92" y1="484" x2="114" y2="484" stroke-width="2"/><text class="ink" x="122" y="488" font-size="12">Vehicle 1</text>
+<line class="s1" x1="212" y1="484" x2="234" y2="484" stroke-width="2"/><text class="ink" x="242" y="488" font-size="12">Vehicle 2</text>
+</svg>

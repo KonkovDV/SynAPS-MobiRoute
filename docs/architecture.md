@@ -34,3 +34,16 @@ Manufacturing FJSP models from SynAPS are **not** imported into the DARP domain.
 - Single-thread CP-SAT workers = 1.
 - SHA-256 fingerprints (no `hash()`).
 - Stable UUID5 synthetic IDs.
+
+## Literature lane and reporting (0.3.0)
+
+| Module | Role |
+| --- | --- |
+| `benchmarks/cordeau_exact.py` | Cordeau parser, exact CP-SAT model, compact two-index MIP (SCIP / HiGHS / CBC), LP bound, difference-constraint verifier with why-not certificates, gated literature report |
+| `adapters/cordeau.py` | operator-algebra adapter of the same instance and `cordeau_node_routes` for the literature cross-check |
+| `reporting/svg.py` | dependency-free route map and timeline of a verified plan |
+| `benchmark/solver_lab.py` | one instance through every lane, one verifier; writes JSON and a Markdown table |
+| `site/` | static GitHub Pages presentation fed by committed solver-lab and plan data |
+
+The verifier is a separate implementation from every solver: CP-SAT and the MIP
+propose routes, Bellman–Ford on the route's constraint graph decides.
