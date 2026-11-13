@@ -91,7 +91,15 @@ vehicles, then a disruption shake. Artifact:
 `benchmark/results/stress-2026-08-12/stress_200.json` (gitignored).
 Not real MAST trips. Greedy never `OPTIMAL`.
 
-Re-measured 2026-08-12 after tail-peel + same-vehicle reinsert of dropped
+Re-measured 2026-11-13 (Linux x86_64, Python 3.13, seed 42, single thread) after profile-guided fixes in 0.3.0. On the same machine and day the 0.2.7 code took 47.9 s for the day-ahead pass and 67.6 s for the pipeline: cProfile put 56% of greedy time in `pooling_stops_violate` rebuilding the request map on every candidate. The 2026-08-12 band below (4.0–4.1 s / 8.1 s) did not reproduce here.
+
+| Phase (0.3.0) | Wall-clock | Served / active | Notary |
+| --- | --- | --- | --- |
+| Day-ahead greedy (Rust) | 2.8 s | 2589 / 3045 (`PARTIAL`) | pass |
+| Batch disruption (seeded replan) | 1.1 s | 2533 / 2999 (`PARTIAL`) | pass |
+| **Pipeline total** | **13.1 s** | — | — |
+
+Historical record, 2026-08-12, after tail-peel + same-vehicle reinsert of dropped
 trips, skip redundant `set_vehicle`, TLS pickup-dep reuse, and `score_stored`
 subset/`max_dur` ABI (two consecutive runs, seed 42). Sample, not a SLA:
 

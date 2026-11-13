@@ -9,7 +9,7 @@ pooled_rides, disruption, infeasible, fairness_stress, peak_demand,
 driver_unavailable, vehicle_breakdown, plus **ops_*** policy scripts
 (`ops_clinic_peak` … `ops_shift_close`). Ops suite: `mobiroute ops-benchmark`.
 SSOT write-up and measured seed-42 table:
-[`docs/ops-cases-and-benchmark-2026-08-12.md`](ops-cases-and-benchmark-2026-08-12.md).
+[`docs/ops-cases-and-benchmark-2026-08-12.md`](archive/ops-cases-and-benchmark-2026-08-12.md).
 Ops results are `synthetic_benchmark` only. Greedy/FIFO never `OPTIMAL`.
 Never label ops scripts as real Moscow trips.
 
@@ -20,9 +20,9 @@ Loader: `mobiroute.adapters.cordeau`. Hash-gate:
 vendored in this drop.
 
 
-`stress_200` wall-clock (this machine, seed 42, measured 2026-08-12): day-ahead
-greedy about 4.0–4.1 s; full pipeline (day-ahead + batch disruption + traffic +
-8 online inserts) about 8.1 s. SSOT:
+`stress_200` wall-clock (seed 42, measured 2026-11-13, Linux x86_64, Python 3.13):
+day-ahead greedy 2.8 s; full pipeline (day-ahead + batch disruption + traffic +
+8 online inserts) 13.1 s; 0.2.7 on the same machine: 47.9 s / 67.6 s. SSOT:
 [`docs/native-acceleration.md`](native-acceleration.md), which also records the
 superseded bands from the same day (about 95 s → ~24 s → 13–15 s → 10–11 s).
 This file previously published 5–6 s / 13–15 s, contradicting the SSOT it
