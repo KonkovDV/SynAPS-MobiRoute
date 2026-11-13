@@ -161,7 +161,7 @@ Treat as **FORBIDDEN** or **NOT_VERIFIED** unless a later notary+benchmark says 
 5. **P1** Online: `plan_id` / `base_plan_id` / `event_type`; appointment-changed; lex insertion; rejected trip never dropped.
 6. **P1** Fairness + per-trip explanations + extra reason codes.
 7. **P2** Privacy class names, retention/access-audit docs (no 152-FZ claim).
-8. **P2** Benchmark matrix columns; research/academy/claims sync.
+8. **P2** Benchmark matrix columns; research/claims sync.
 
 ## Capability register (0.1.1)
 
