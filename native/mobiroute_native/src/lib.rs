@@ -85,6 +85,26 @@ fn trip_at(table: &[i32], detour: &[f64], idx: usize) -> TripView {
     }
 }
 
+/// Earliest pickup service start any feasible schedule can use (time-window
+/// tightening, Dumas/Desrosiers/Soumis 1991; Cordeau 2006). The passenger may
+/// not alight before `appt_s - EARLY_DROPOFF_SLACK` and the ride clock is capped
+/// by `min(max_ride, detour_cap)`, so service cannot start before
+/// `alight - ride_cap - curb`. Mirrors `pickup_floor_soa` in the Python oracle.
+#[inline(always)]
+fn pickup_floor(t: &TripView, detour_cap: i32) -> i32 {
+    if t.appt_s < 0 || t.pu < 0 || t.do_ < 0 {
+        return t.earliest;
+    }
+    let alight = (i64::from(t.appt_s) - i64::from(EARLY_DROPOFF_SLACK)).max(0);
+    let mut ride_cap = i64::from(t.max_ride);
+    if detour_cap >= 0 && i64::from(detour_cap) < ride_cap {
+        ride_cap = i64::from(detour_cap);
+    }
+    let svc = i64::from(t.board.max(CURB_WAIT));
+    let floor = (alight - ride_cap - svc).max(i64::from(t.earliest));
+    floor.min(i64::from(i32::MAX)) as i32
+}
+
 #[inline(always)]
 fn detour_limit(direct: i32, ratio: f64) -> i32 {
     let milli = (ratio * 1000.0).round_ties_even() as i64;
@@ -385,13 +405,19 @@ fn apply_stop(
     let svc;
     if kind == 0 {
         let mut hold = 0;
-        let mut pwait = 0;
-        if arrive < t.earliest {
-            hold = t.earliest - arrive;
-            arrive = t.earliest;
+        let cap = if idx < w.detour_cap.len() {
+            w.detour_cap[idx]
         } else {
-            pwait = arrive - t.earliest;
+            -1
+        };
+        // Service waits for the tightened floor; the passenger's delay is
+        // still measured from the earliest pickup they asked for.
+        let floor = pickup_floor(&t, cap);
+        if arrive < floor {
+            hold = floor - arrive;
+            arrive = floor;
         }
+        let pwait = arrive - t.earliest;
         if (hold > t.max_wait && cur.load > 0) || pwait > t.max_wait || arrive > t.latest {
             return false;
         }

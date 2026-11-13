@@ -9,6 +9,7 @@ from mobiroute.domain.constraints import (
     detour_limit,
     earliest_alight_time,
     occupancy_overlaps,
+    pickup_service_floor,
     pickup_service_minutes,
     push_past_unavail,
 )
@@ -76,6 +77,41 @@ def accessibility_compatible(vehicle: Vehicle, trip: TripRequest) -> ReasonCode 
     ):
         return ReasonCode.NO_COMPATIBLE_VEHICLE
     return None
+
+
+def trip_direct_minutes(problem: DayProblem, trip: TripRequest) -> int | None:
+    """Door-to-door itinerary minutes, including VIA dwell; None if a zone is unknown."""
+    try:
+        if trip.via_zone:
+            return (
+                problem.travel.travel(trip.pickup_zone, trip.via_zone)
+                + trip.via_service_duration
+                + problem.travel.travel(trip.via_zone, trip.dropoff_zone)
+            )
+        return problem.travel.travel(trip.pickup_zone, trip.dropoff_zone)
+    except KeyError:
+        return None
+
+
+def trip_pickup_floor(problem: DayProblem, trip: TripRequest) -> int:
+    """Tightened earliest pickup service start shared by search and notary.
+
+    See :func:`mobiroute.domain.constraints.pickup_service_floor`. Derived from
+    the trip's own hard constraints, so the notary does not trust the solver.
+    """
+    if trip.appointment_start is None:
+        return trip.earliest_pickup
+    direct = trip_direct_minutes(problem, trip)
+    if direct is None:
+        return trip.earliest_pickup
+    cap = detour_limit(direct, trip.max_detour_ratio) if direct > 0 else None
+    return pickup_service_floor(
+        trip.earliest_pickup,
+        trip.appointment_start,
+        trip.max_ride_time,
+        trip.boarding_duration,
+        cap,
+    )
 
 
 def trip_ride_minutes(plan: RoutePlan, trip_id: str) -> int | None:
@@ -395,16 +431,19 @@ def check_route(
             if tid in seen_pickup:
                 violations.append(f"DUPLICATE_PICKUP:{tid}")
             seen_pickup.add(tid)
+            # Service may wait for the tightened floor (appointment + ride cap),
+            # never longer: any later start is an unexplained wait.
+            service_floor = trip_pickup_floor(problem, trip)
             raw_arr = prev_dep + tt
-            if raw_arr < trip.earliest_pickup and load > 0:
-                wait = trip.earliest_pickup - raw_arr
+            if raw_arr < service_floor and load > 0:
+                wait = service_floor - raw_arr
                 if wait > trip.max_wait_time:
                     violations.append(f"MAX_WAIT:{tid}")
             if arr > trip.earliest_pickup and arr - trip.earliest_pickup > trip.max_wait_time:
                 violations.append(f"MAX_WAIT:{tid}")
             if arr > trip.latest_pickup:
                 violations.append(f"LATE_PICKUP:{tid}")
-            floor = max(expected, trip.earliest_pickup)
+            floor = max(expected, service_floor)
             if arr > floor:
                 violations.append(f"UNEXPLAINED_WAIT:{tid}")
             if trip.wheelchair_requirement == WheelchairType.STRETCHER and load > 0:

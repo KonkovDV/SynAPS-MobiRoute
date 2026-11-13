@@ -54,6 +54,7 @@ from mobiroute.validation.feasibility import (
     quota_debit_minutes,
     trial_exceeds_quota,
     trial_exceeds_quota_rides,
+    trip_pickup_floor,
 )
 from mobiroute.validation.input import validate_problem
 from mobiroute.validation.reasons import diagnose_rejection, non_empty_reason
@@ -169,13 +170,12 @@ def simulate_stop_sequence(
             return None
         arrive = tnow + tt
         if stop.stop_type == StopType.PICKUP:
-            if arrive < trip.earliest_pickup:
-                hold = trip.earliest_pickup - arrive
-                arrive = trip.earliest_pickup
-                pwait = 0
-            else:
-                hold = 0
-                pwait = arrive - trip.earliest_pickup
+            floor = trip_pickup_floor(problem, trip)
+            hold = 0
+            if arrive < floor:
+                hold = floor - arrive
+                arrive = floor
+            pwait = arrive - trip.earliest_pickup
             if hold > trip.max_wait_time and load > 0:
                 return None
             if pwait > trip.max_wait_time:
