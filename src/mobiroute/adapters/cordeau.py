@@ -22,6 +22,7 @@ from mobiroute.domain.models import (
     EligibilityClass,
     PrivacyClass,
     ServicePriority,
+    StopType,
     WheelchairType,
 )
 from mobiroute.domain.requests import (
@@ -29,6 +30,7 @@ from mobiroute.domain.requests import (
     DayProblem,
     Driver,
     PassengerProfile,
+    PlanningResult,
     TravelMatrix,
     TripRequest,
     Vehicle,
@@ -161,3 +163,23 @@ def parse_cordeau_darp(text: str, *, instance_id: str) -> DayProblem:
 def load_cordeau_a2_16(path: Path | None = None) -> DayProblem:
     target = path or _REPO_A2_16
     return parse_cordeau_darp(target.read_text(encoding="utf-8"), instance_id="cordeau-a2-16")
+
+
+def cordeau_node_routes(result: PlanningResult) -> list[list[int]]:
+    """Kernel stop sequences as Cordeau node ids (zones ``n{i}``), for diagnostics.
+
+    Lets the literature notary re-time an operator-algebra plan. The answer
+    explains non-comparability; it never turns a kernel run into a literature run.
+    """
+    routes: list[list[int]] = []
+    for plan in result.route_plans:
+        seq = [
+            int(stop.location[1:])
+            for stop in plan.ordered_stops
+            if stop.stop_type in (StopType.PICKUP, StopType.DROPOFF)
+            and stop.location.startswith("n")
+            and stop.location[1:].isdigit()
+        ]
+        if seq:
+            routes.append(seq)
+    return routes
