@@ -4,7 +4,8 @@
 
 | Version | Supported |
 | --- | --- |
-| 0.1.x | best-effort (prototype) |
+| 0.3.x | best-effort (prototype) |
+| < 0.3 | not supported |
 
 ## Reporting a vulnerability
 
