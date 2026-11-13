@@ -1,6 +1,7 @@
 // Page behaviour. Everything here is progressive: the content is in the HTML,
 // this file adds motion and the interactive notary.
 import { nodeName, phrase, verifyRoute } from "./notary.mjs";
+import { initVrp } from "./vrp.mjs";
 
 const root = document.documentElement;
 const $ = (id) => document.getElementById(id);
@@ -46,17 +47,19 @@ if (store.get("mr-theme")) root.dataset.theme = store.get("mr-theme");
 /* ---------- reveal, counters, scroll progress, card spotlight ---------- */
 const seen = new WeakSet();
 function countUp(el) {
-  const end = Number(el.dataset.count);
+  // The target is read on every frame: measured data may replace the static
+  // number while the animation runs.
   const dec = Number(el.dataset.dec || 0);
-  const pre = el.dataset.pre || "";
   const suf = () => (lang() === "en" && el.dataset.sufEn !== undefined ? el.dataset.sufEn : el.dataset.suf || "");
-  const paint = (v) => { el.textContent = pre + v.toFixed(dec) + suf(); };
-  el._final = () => paint(end);
-  if (reduce.matches) return paint(end);
+  const paint = (k) => {
+    el.textContent = (el.dataset.pre || "") + (Number(el.dataset.count) * k).toFixed(dec) + suf();
+  };
+  el._final = () => paint(1);
+  if (reduce.matches) return paint(1);
   const t0 = performance.now();
   const tick = (t) => {
     const k = Math.min(1, (t - t0) / 1400);
-    paint(end * (1 - (1 - k) ** 4));
+    paint(1 - (1 - k) ** 4);
     if (k < 1) requestAnimationFrame(tick);
   };
   requestAnimationFrame(tick);
@@ -319,15 +322,26 @@ function race(lab) {
       const row = document.createElement("div");
       row.className = "bar";
       row.innerHTML = '<span class="lbl"></span><div class="track"><div class="fill"></div></div><span class="v"></span>';
-      row.querySelector(".lbl").textContent = x.solver.replace("MIP · ", "MIP ");
+      row.querySelector(".lbl").textContent = x.solver.replace("MIP · ", "MIP ").replace(", rich-VRP engine (10k it)", "").replace(" Routing PCI+GLS (10 s)", "");
       host.appendChild(row);
-      return { x, fill: row.querySelector(".fill"), v: row.querySelector(".v"), proven: x.status === "OPTIMAL" };
+      const proven = x.status === "OPTIMAL";
+      const matched = !proven && x.verified && x.gap_to_published_pct != null && Math.abs(x.gap_to_published_pct) < 0.01;
+      return { x, fill: row.querySelector(".fill"), v: row.querySelector(".v"), proven, matched };
     });
+  };
+  // ✓ proven, = published optimum reached, n/N a plan that leaves requests
+  // out (cheaper, but not an answer), +x% the gap of a complete plan.
+  const mark = (b) => {
+    if (b.proven) return "✓";
+    if (b.matched) return "=";
+    if (b.x.feasible && !b.x.verified && b.x.served) return b.x.served;
+    if (b.x.gap_to_published_pct != null) return `+${b.x.gap_to_published_pct.toFixed(1)}%`;
+    return "✕";
   };
   const finish = (b) => {
     b.fill.style.width = `${Math.max(0.8, (b.x.seconds / horizon) * 100)}%`;
     b.fill.classList.toggle("alt", !b.proven);
-    b.v.textContent = `${b.x.seconds.toFixed(1)} ${s()} ${b.proven ? "✓" : "✕"}`;
+    b.v.textContent = `${b.x.seconds.toFixed(1)} ${s()} ${mark(b)}`;
   };
   const run = () => {
     cancelAnimationFrame(raf);
@@ -358,7 +372,8 @@ function race(lab) {
     const cost = x.cost == null ? (x.bound == null ? "—" : `≥ ${x.bound.toFixed(2)}`) : x.cost.toFixed(2);
     row.innerHTML = `<th scope="row"></th><td><span class="pill ${ok ? "ok" : "mid"}"></span></td><td class="num"></td><td class="num"></td>`;
     row.cells[0].textContent = x.solver;
-    row.cells[1].firstChild.textContent = x.status;
+    const partial = x.feasible && !x.verified && x.served;
+    row.cells[1].firstChild.textContent = partial ? `${x.status} · ${x.served}` : x.status;
     row.cells[2].textContent = cost;
     row.cells[3].textContent = x.seconds.toFixed(1);
   }
@@ -516,3 +531,4 @@ const load = (url) => fetch(url).then((r) => { if (!r.ok) throw new Error(`${url
 setLang(new URLSearchParams(location.search).get("lang") || store.get("mr-lang") || "ru");
 load("data/a2-16.json").then((inst) => { hero(inst); laboratory(inst); }).catch((err) => console.error(err));
 load("data/solver-lab.json").then(race).catch((err) => console.error(err));
+initVrp({ $, tr, lang, svgEl, reduce, rerender, onReveal, load });
