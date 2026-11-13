@@ -15,14 +15,14 @@ Examples of behavior that contributes to a positive environment:
 - Using welcoming and inclusive language
 - Being respectful of differing viewpoints
 - Accepting constructive criticism
-- Focusing on what is best for the community and for vulnerable service users
+- Focusing on what is best for the community
 
 Examples of unacceptable behavior:
 
 - Trolling, insulting/derogatory comments, and personal or political attacks
 - Public or private harassment
 - Publishing others’ private information without explicit permission
-- Committing or requesting real personal/medical trip data into the open repo
+- Committing personal data to the repository
 
 ## Enforcement
 
