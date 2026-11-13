@@ -319,3 +319,14 @@ def test_route_retyping_fixes_the_fleet_mix_trap() -> None:
     res = solve(inst, AlnsConfig(iterations=2000, seed=1))
     assert res.verdict.feasible
     assert search_objective(inst, res.solution) == pytest.approx(756.3367, abs=1e-3)
+
+
+def test_ortools_lane_ignores_nodes_of_absent_orders() -> None:
+    # A live snapshot keeps every node of the day but only a few open orders;
+    # Routing must not be asked to visit the nodes of orders that do not exist.
+    from dataclasses import replace
+
+    day = plant_day(5)
+    inst = replace(day, requests=day.requests[:3])
+    run = solve_ortools(inst, time_limit=1.0)
+    assert run.verdict.feasible and not run.solution.unassigned

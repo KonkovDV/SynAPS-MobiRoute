@@ -72,7 +72,6 @@ def solve_ortools(
     deliveries_only = any(r.pickup is None and r.delivery is not None for r in inst.requests)
     if pickups_only and deliveries_only:
         raise ValueError("ORTOOLS_LANE_MIXED_DEPOT_LOADS_UNSUPPORTED")
-    n = inst.n_nodes
     unit_type: list[int] = []
     for t, vt in enumerate(inst.vehicle_types):
         units = vt.count if max_units_per_type is None else min(vt.count, max_units_per_type)
@@ -80,16 +79,28 @@ def solve_ortools(
         unit_type += [t] * units
     if not unit_type:
         raise ValueError("ORTOOLS_LANE_NO_VEHICLES")
-    starts = [inst.vehicle_types[t].start_depot for t in unit_type]
-    ends = [inst.vehicle_types[t].end_depot for t in unit_type]
+    # Routing treats every node it knows as a mandatory visit, so the model holds
+    # only depots and the nodes of the orders in this instance (a live snapshot
+    # carries the whole day's nodes but only a few open orders).
+    depots = {vt.start_depot for vt in inst.vehicle_types} | {
+        vt.end_depot for vt in inst.vehicle_types
+    }
+    local = sorted(depots | {k for req in inst.requests for k in req.nodes})
+    pos = {k: i for i, k in enumerate(local)}
+    n = len(local)
+    starts = [pos[inst.vehicle_types[t].start_depot] for t in unit_type]
+    ends = [pos[inst.vehicle_types[t].end_depot] for t in unit_type]
     manager: Any = pywrapcp.RoutingIndexManager(n, len(unit_type), starts, ends)
     routing: Any = pywrapcp.RoutingModel(manager)
     solver: Any = routing.solver()
 
     service = [nd.service for nd in inst.nodes]
 
-    def node(index: int) -> int:
+    def loc(index: int) -> int:
         return int(manager.IndexToNode(index))
+
+    def node(index: int) -> int:
+        return local[loc(index)]
 
     # One cost and one time evaluator per vehicle type (callbacks must stay alive).
     keep: list[Any] = []
@@ -98,8 +109,8 @@ def solve_ortools(
     for t, vt in enumerate(inst.vehicle_types):
         profile = inst.profiles[vt.profile]
         tm = [
-            [math.ceil((service[a] + profile.time[a][b]) * scale - 1e-9) for b in range(n)]
-            for a in range(n)
+            [math.ceil((service[a] + profile.time[a][b]) * scale - 1e-9) for b in local]
+            for a in local
         ]
         cm = [
             [
@@ -110,16 +121,16 @@ def solve_ortools(
                     )
                     * scale
                 )
-                for b in range(n)
+                for b in local
             ]
-            for a in range(n)
+            for a in local
         ]
 
         def time_fn(i: int, j: int, tm: list[list[int]] = tm) -> int:
-            return tm[node(i)][node(j)]
+            return tm[loc(i)][loc(j)]
 
         def cost_fn(i: int, j: int, cm: list[list[int]] = cm) -> int:
-            return cm[node(i)][node(j)]
+            return cm[loc(i)][loc(j)]
 
         keep += [time_fn, cost_fn]
         time_cb[t] = routing.RegisterTransitCallback(time_fn)
@@ -142,12 +153,12 @@ def solve_ortools(
         for req in inst.requests:
             q = round(req.demand[d] * scale)
             if req.pickup is not None:
-                deltas[req.pickup] = q
+                deltas[pos[req.pickup]] = q
             if req.delivery is not None:
-                deltas[req.delivery] = -q
+                deltas[pos[req.delivery]] = -q
 
         def demand_fn(i: int, deltas: list[int] = deltas) -> int:
-            return deltas[node(i)]
+            return deltas[loc(i)]
 
         keep.append(demand_fn)
         cb = routing.RegisterUnaryTransitCallback(demand_fn)
@@ -162,10 +173,11 @@ def solve_ortools(
             else:
                 dim.CumulVar(routing.Start(v)).SetValue(0)
 
-    for k, nd in enumerate(inst.nodes):
+    for k in local:
         if inst.request_of(k) < 0:
             continue
-        index = manager.NodeToIndex(k)
+        nd = inst.nodes[k]
+        index = manager.NodeToIndex(pos[k])
         lo = math.ceil(nd.earliest * scale - 1e-9)
         if math.isfinite(nd.latest):
             hi = math.floor(nd.latest * scale + 1e-9)
@@ -202,7 +214,7 @@ def solve_ortools(
                 for q, c in zip(req.demand, inst.vehicle_types[t].capacity, strict=True)
             )
         ]
-        indices = [manager.NodeToIndex(k) for k in req.nodes]
+        indices = [manager.NodeToIndex(pos[k]) for k in req.nodes]
         for index in indices:
             if len(allowed) < len(unit_type):
                 # -1 keeps the "unperformed" value for the disjunction.
