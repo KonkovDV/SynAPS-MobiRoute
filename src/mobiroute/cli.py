@@ -90,6 +90,7 @@ def main(argv: list[str] | None = None) -> int:
     lit.add_argument("--time-limit", type=float, default=60.0)
     lit.add_argument("--workers", type=int, default=1, help="CP-SAT workers; 1 is deterministic")
     lit.add_argument("--out-dir", type=Path, required=True)
+    lit.add_argument("--svg", action="store_true", help="also write routes.svg and timeline.svg")
 
     args = p.parse_args(argv)
 
@@ -322,6 +323,22 @@ def _dispatch(args: argparse.Namespace) -> int:
             ),
             encoding="utf-8",
         )
+        if args.svg and verdict.routes:
+            from mobiroute.reporting.svg import route_map_svg, timeline_svg
+
+            name = instance.instance_id
+            (args.out_dir / "routes.svg").write_text(
+                route_map_svg(
+                    instance, verdict, title=f"{name}: verified plan, cost {verdict.cost:.2f}"
+                ),
+                encoding="utf-8",
+            )
+            (args.out_dir / "timeline.svg").write_text(
+                timeline_svg(instance, verdict, title=f"{name}: when each request is served"),
+                encoding="utf-8",
+            )
+        for cert in verdict.certificates:
+            print(log_safe(cert.explanation_en))
         print(log_safe(lit_report.allowed_claim))
         return code
 

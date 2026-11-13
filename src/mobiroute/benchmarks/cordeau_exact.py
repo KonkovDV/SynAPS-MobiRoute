@@ -35,6 +35,8 @@ from enum import StrEnum
 from itertools import pairwise
 from typing import Any
 
+from pydantic import Field
+
 from mobiroute.domain.models import StrictModel
 
 # Instance bytes this repository vendors (CRLF kept by .gitattributes `-text`).
@@ -169,6 +171,7 @@ class ExactVerdict(StrictModel):
     routes: list[RouteSchedule]
     ride_times: dict[int, float]
     alight_slack: int
+    certificates: list[ScheduleCertificate] = Field(default_factory=list)
 
 
 @dataclass(frozen=True, slots=True)
@@ -209,11 +212,13 @@ def _route_constraints(
 
 def _earliest_schedule(
     n_vertices: int, z: int, edges: list[_Edge], eps: float
-) -> tuple[list[float] | None, list[str]]:
-    """Earliest solution ``B[k] = -dist(k, z)`` or a negative-cycle certificate.
+) -> tuple[list[float] | None, list[_Edge]]:
+    """Earliest solution ``B[k] = -dist(k, z)`` or a negative cycle.
 
-    Bellman-Ford runs on the reversed graph from ``z``; a constraint system of
-    differences is feasible iff the graph has no negative cycle (CLRS 24.4).
+    Bellman-Ford runs on the reversed graph from ``z``; a system of difference
+    constraints is feasible iff its graph has no negative cycle (CLRS 24.4).
+    The returned cycle is the certificate: its constraints cannot all hold, and
+    its total weight is minus the number of minutes they miss by.
     """
     dist = [math.inf] * n_vertices
     pred: list[_Edge | None] = [None] * n_vertices
@@ -240,17 +245,104 @@ def _earliest_schedule(
         if step is None:
             break
         vertex = step.head
-    labels: list[str] = []
+    cycle: list[_Edge] = []
     start = vertex
     for _ in range(n_vertices + 1):
         step = pred[vertex]
         if step is None:
             break
-        labels.append(step.label)
+        cycle.append(step)
         vertex = step.head
         if vertex == start:
             break
-    return None, sorted(set(labels))
+    return None, cycle
+
+
+class ScheduleCertificate(StrictModel):
+    """Why one route has no feasible schedule, in numbers and in words.
+
+    ``short_by`` is the total slack missing on the conflicting constraints: no
+    re-timing of this stop sequence can close it, only a different sequence,
+    fleet or service promise.
+    """
+
+    route: int
+    short_by: float
+    constraints: list[str]
+    explanation_en: str
+    explanation_ru: str
+
+
+def _node_name(instance: CordeauInstance, node: int, lang: str) -> str:
+    n = instance.n_requests
+    if node in (0, instance.end_depot):
+        return "depot" if lang == "en" else "депо"
+    if node <= n:
+        return f"pickup {node}" if lang == "en" else f"подача {node}"
+    return f"dropoff {node - n}" if lang == "en" else f"высадка {node - n}"
+
+
+def _phrase(instance: CordeauInstance, label: str, lang: str, alight_slack: int) -> str:
+    kind, _, ref = label.partition(":")
+    en = lang == "en"
+    if kind in {"LATEST", "EARLIEST"}:
+        node = int(ref)
+        info = instance.nodes[node]
+        name = _node_name(instance, node, lang)
+        if kind == "LATEST":
+            return (
+                f"{name} must start by {info.latest}"
+                if en
+                else (f"{name} — начало не позже {info.latest}")
+            )
+        earliest = info.earliest
+        if alight_slack and instance.n_requests < node <= 2 * instance.n_requests:
+            earliest = max(0, earliest - alight_slack)
+        return (
+            f"{name} cannot start before {earliest}"
+            if en
+            else (f"{name} — начало не раньше {earliest}")
+        )
+    if kind == "TRAVEL":
+        a, b = (int(x) for x in ref.split("->"))
+        service = instance.nodes[a].service
+        travel = instance.distance(a, b)
+        src, dst = _node_name(instance, a, lang), _node_name(instance, b, lang)
+        return (
+            f"{src} -> {dst} takes {service} + {travel:.2f} min (service + travel)"
+            if en
+            else (f"{src} -> {dst}: обслуживание {service} + переезд {travel:.2f} мин")
+        )
+    if kind == "RIDE":
+        return (
+            f"request {ref} may ride at most {instance.max_ride_time} min"
+            if en
+            else (f"заявка {ref} в пути не дольше {instance.max_ride_time} мин")
+        )
+    return (
+        f"the route may last at most {instance.max_route_duration} min"
+        if en
+        else (f"маршрут не дольше {instance.max_route_duration} мин")
+    )
+
+
+def _certificate(
+    instance: CordeauInstance, route: int, cycle: list[_Edge], alight_slack: int
+) -> ScheduleCertificate:
+    short_by = round(-sum(edge.weight for edge in cycle), 6)
+    labels = [edge.label for edge in reversed(cycle)]  # chronological reading order
+    unique = list(dict.fromkeys(labels))
+    en = "; ".join(_phrase(instance, label, "en", alight_slack) for label in unique)
+    ru = "; ".join(_phrase(instance, label, "ru", alight_slack) for label in unique)
+    return ScheduleCertificate(
+        route=route,
+        short_by=short_by,
+        constraints=unique,
+        explanation_en=f"Route {route} cannot be timed: short by {short_by:.2f} min. {en}.",
+        explanation_ru=(
+            f"Маршрут {route} невыполним при любом расписании: не хватает {short_by:.2f} мин. {ru}."
+        ),
+    )
 
 
 def verify_routes(
@@ -292,6 +384,7 @@ def verify_routes(
         else:
             served.append(i)
     schedules: list[RouteSchedule] = []
+    certificates: list[ScheduleCertificate] = []
     rides: dict[int, float] = {}
     total = 0.0
     for r, route in enumerate(non_empty):
@@ -311,9 +404,14 @@ def verify_routes(
             if node <= n and node + n in pos and pos[node + n] < pos[node]:
                 violations.append(f"DROPOFF_BEFORE_PICKUP:{node}")
         z, edges = _route_constraints(instance, seq, alight_slack)
-        times, certificate = _earliest_schedule(len(seq) + 1, z, edges, eps)
+        times, cycle = _earliest_schedule(len(seq) + 1, z, edges, eps)
         if times is None:
-            violations.append(f"SCHEDULE_INFEASIBLE:{r}:{'|'.join(certificate)}")
+            cert = _certificate(instance, r, cycle, alight_slack)
+            certificates.append(cert)
+            violations.append(
+                f"SCHEDULE_INFEASIBLE:{r}:short_by={cert.short_by:.2f}:"
+                f"{'|'.join(sorted(cert.constraints))}"
+            )
             continue
         starts = times[: len(seq)]
         for node in route:
@@ -339,6 +437,7 @@ def verify_routes(
         routes=schedules,
         ride_times=rides,
         alight_slack=alight_slack,
+        certificates=certificates,
     )
 
 

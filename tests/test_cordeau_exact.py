@@ -219,3 +219,39 @@ def test_a2_16_mip_proves_the_published_optimum() -> None:
         assert build_literature_report(inst, digest, run, verdict).gap_blockers == []
     bound = lp_relaxation_bound(inst)
     assert bound is not None and bound < 294.25
+
+
+def test_certificates_quantify_the_missing_minutes_in_both_languages() -> None:
+    # Max ride 3 vs service 1 + travel 4: the cycle RIDE:2 + TRAVEL:2->4 misses by 1.
+    ride = verify_routes(_tiny(**{"1 2 100 1 20": "1 2 100 1 3"}), [[1, 3, 2, 4]])
+    (cert,) = ride.certificates
+    assert cert.short_by == pytest.approx(1.0)
+    assert set(cert.constraints) == {"RIDE:2", "TRAVEL:2->4"}
+    assert "short by 1.00 min" in cert.explanation_en
+    assert "не хватает 1.00 мин" in cert.explanation_ru
+
+    # Dropoff 3 must start by 5; serving request 2 first reaches it at 21.
+    late = _tiny(**{"3 0 4 1 -1 0 100": "3 0 4 1 -1 0 5"})
+    (cert,) = verify_routes(late, [[2, 4, 1, 3]]).certificates
+    assert cert.short_by == pytest.approx(16.0)
+    assert "LATEST:3" in cert.constraints
+    assert "dropoff 1 must start by 5" in cert.explanation_en
+    assert verify_routes(late, [[1, 3, 2, 4]]).certificates == []
+
+
+def test_svg_views_are_valid_and_complete(tmp_path: Path) -> None:
+    import xml.dom.minidom
+
+    from mobiroute.cli import main
+
+    out = tmp_path / "svg"
+    args = ["literature-benchmark", "--instance", str(_A2_16), "--out-dir", str(out), "--svg"]
+    assert main(args) == 0
+    routes = (out / "routes.svg").read_text()
+    timeline = (out / "timeline.svg").read_text()
+    xml.dom.minidom.parseString(routes)
+    xml.dom.minidom.parseString(timeline)
+    assert routes.count("<polyline") == 2  # one per vehicle
+    assert routes.count("<circle") == 32  # every pickup and dropoff
+    assert timeline.count("request ") >= 16
+    assert "prefers-color-scheme: dark" in routes
