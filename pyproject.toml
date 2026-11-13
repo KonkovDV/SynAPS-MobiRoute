@@ -97,7 +97,7 @@ select = ["E", "F", "W", "I", "UP", "B", "SIM", "C4", "RUF"]
 
 [tool.ruff.lint.per-file-ignores]
 "tests/**" = ["T20"]
-"benchmark/**" = ["T20"]
+"benchmark/**" = ["T20", "E501"]  # Markdown table literals
 
 [tool.mypy]
 python_version = "3.12"
