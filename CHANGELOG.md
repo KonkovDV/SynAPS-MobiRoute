@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+- Site rebuilt: animated replay of the verified a2-16 day, before/after of the
+  scheduling fix, solver race, and an in-browser route notary
+  (`site/assets/notary.mjs`, a port of the Bellman–Ford verifier; parity with
+  Python on 513 single-stop moves in `tests/test_site_notary_parity.py`).
+  `benchmark/export_site_data.py` regenerates site data and figures.
+- Docs: driver rest is not a certificate under Mintrans Order No. 424; GOST R
+  70314-2022 concerns M1 vehicle equipment and was cited for the wrong subject.
+
 ## 0.3.0 — 2026-11-13
 
 ### Fixed
