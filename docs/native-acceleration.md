@@ -1,150 +1,80 @@
-# Native insertion acceleration
+# Profiling and the Rust kernels
 
-Greedy, beam, ALNS, and online insertion **require** the PyO3 crate
-`mobiroute_native`. Python SoA (`insertion_kernel.py`) is an algebra oracle for
-lockstep tests, not a solver backend. The DARP model is not FJSP. Heuristics
-remain non-optimal.
+Two hot paths are compiled with PyO3 (`native/mobiroute_native`):
 
-## Status (2026-08-12)
+| Kernel | Used by | Python reference | Parity tests |
+| --- | --- | --- | --- |
+| `VrpKernel` (`src/vrp.rs`) | `mobiroute.vrp`: regret repair, insertion tests, exact route timing, guided ejection | `vrp/insertion.py`, `Alns._eject_insert` | `tests/test_vrp_native.py` — identical plans, identical ALNS trajectories |
+| `InsertionEngine` (`src/lib.rs`) | paratransit kernel: greedy, beam, ALNS, online insertion | `solvers/insertion_kernel.py` (structure-of-arrays oracle) | `tests/test_insertion_kernel.py`, `test_native_*` |
 
-| Layer | Status |
-| --- | --- |
-| Rust `mobiroute_native` scoring + `score_fleet` | REQUIRED for greedy / beam / ALNS / online |
-| Python SoA insertion (`insertion_kernel.py`) | Oracle / lockstep tests only |
-| Claimed ×N wall-clock speedup | FORBIDDEN without a measured artifact in `benchmark/results/` |
-| OPTIMAL from greedy / native scoring | FORBIDDEN |
-
-**Errata (2026-09-09).** Live greedy/online scoring uses stored-fleet
-`score_stored`. `score_fleet` remains the batch ABI and the insertion-kernel
-oracle. Greedy no longer keeps a dead `_pool_candidates_native` wrapper.
-
-Generator `medium` is **60 vehicles / 1000 requests**, not 60 trips.
-
-## Build
+Without the extension the rich-VRP engine falls back to Python and gives the
+same plans, only slower. `MOBIROUTE_DISABLE_NATIVE=1` forces the fallback. The
+paratransit solvers require the extension.
 
 ```bash
 python -m pip install maturin
 python -m maturin develop --release --manifest-path native/mobiroute_native/Cargo.toml
 ```
 
-On Windows GNU (Cyrillic profile paths), the crate sets `rust-lld` for
-`x86_64-pc-windows-gnu`. MSVC remains the default host target.
+## How the rich-VRP engine got fast
 
-`MOBIROUTE_DISABLE_NATIVE=1` unloads the extension; solvers then raise
-`RuntimeError` instead of falling back to Python SoA.
+Every step started from a profile (`cProfile`, sorted by own time), not from a
+guess.
 
-CI `test` and `native-accelerator` jobs build the wheel.
+1. **Pure Python, PDPTW.** `_pair_candidates` (the pickup/delivery scan) and
+   route-state rebuilds took most of the time: about 2 ms per ALNS iteration on
+   100-customer instances. Acceptable for a reference, not for production.
+2. **Pure Python, DARP.** 94% of the time went into exact ride-limit checks,
+   and a third of that was allocating 1.75 M labelled arc objects. A flat
+   three-list Bellman-Ford (`insertion.exact_feasible`) cut an iteration from
+   15.6 to 9.1 ms with the same answers (checked against the labelled version
+   on 720 random sequences).
+3. **Rust repair.** The whole regret-k repair moved to `VrpKernel` — one call
+   per ALNS iteration instead of thousands of evaluations from Python. Every
+   floating-point expression keeps the Python evaluation order, ties break the
+   same way and the noise comes from the same SplitMix64 stream, so the two
+   backends return identical plans.
+4. **The next bottleneck was in Python.** With repair in Rust, Shaw removal
+   dominated: it re-sorted all orders by relatedness for every removed order.
+   Relatedness is static, so each order's ranked neighbour list is computed
+   once and cached: R101 went from 0.59 to 0.32 ms per iteration.
+5. **Guided ejection.** One ejection step made about 200 Python→Rust calls
+   (1.1 ms). The whole scan moved into `VrpKernel.eject_insert`: one call per
+   step, same choice as the Python reference.
 
-## Semantics
+Current cost per iteration ([benchmarks/vrp-speed.md](benchmarks/vrp-speed.md),
+`python benchmark/measure_vrp_speed.py`): Rust is 12× faster on Solomon R101,
+14× on a Sartori–Buriol PDPTW, 42× on Cordeau DARP (exact ride checks), with
+identical plans. On the 8-type cargo day it is 4.4×: there the per-route
+vehicle-type assignment, still in Python, is the next bottleneck — the obvious
+next candidate for the kernel.
 
-Scoring is sequential and deterministic: lexicographic min of
-`(duration, wait_sum, -max_load, i, j)` (and `mid` when the new trip has a VIA).
-`wait_sum` is **passenger** delay after earliest (0 if the vehicle snaps to earliest).
-The winning `(i, mid, j)` is committed in the native fleet; Python builds
-`RoutePlan` from `eval_route` / `trial_eval` stop times. FIFO and the rare
-frozen-retry path still use `simulate_stop_sequence`.
-Trip table stride is **16** (`via`, `via_svc`). One trip row is 64 bytes (one
-cache line); the kernel keeps AoS because scoring is trip-at-a-time, not a
-PDX/SoA dimension scan (Kuffo/Krippner/Boncz, SIGMOD 2025). `best_insert`
-returns a 6-tuple; `mid=-1` if there is no VIA. `score_fleet` returns one
-7-tuple per feasible vehicle: `(fleet_index, i, mid, j, dur, wait, max_load)`.
-Candidates are simulated on a virtual insert (no copied stop arrays).
-The engine keeps a persistent fleet (`set_fleet` / `score_stored` / `commit_insert`)
-and can `eval_route` / `eval_fleet` an existing sequence (seed + emit) without
-Pydantic. `score_stored(new_idx, fleet_idx=None, max_dur=None)` scores a subset
-of vehicles and can abort a vehicle whose current depot-to-depot duration
-already exceeds `max_dur`. Online insertion forks that engine (`Arc` copy-on-write of travel and
-trip tables) and `append_trip` instead of repacking 3200 trips.
-`best_insert` reuses the original-route prefix (Savelsbergh concatenated
-evaluation; Hu/Omega 2026 linear-test analogue) and walks `(i, j)` / VIA
-incrementally. It is **not** Gschwind–Drexl O(1) FTS: VIA, stretcher, unavail
-occupancy, and appointment lobby snap break that auxiliary-data contract.
-Rebuild the wheel after ABI change.
-Pickup dwell is \(\max(\mathrm{board},5)\). Dropoff snaps to
-`appointment_start - 30` when that field is set (lobby cap, not cabin hold).
-VIA detour uses itinerary minutes including VIA service. Vehicle unavail covers
-travel and wait, not only boarding. Compat/assist checks run on the **new** trip
-during insertion; `eval_route` (existing sequence) rechecks every pickup.
-Capacity, stretcher, and windows still cover the whole route.
+## How the paratransit kernel got fast
 
-## Measured wall-clock (not a portable product claim)
+`stress_200` (200 vehicles, 3200 requests, seed 42, one thread):
 
-Remeasured 2026-08-12 after occupancy lockstep (RT-24), CPython 3.13.7,
-Windows 11, 20 logical CPUs, generator `medium` seed 42
-(60 vehicles / 1000 requests, 0 VIA). Artifact:
-`benchmark/results/speed-2026-08-12/day_speed.json` (gitignored).
-Greedy served 991/1000, status `PARTIAL`, never `OPTIMAL`. Not real MAST trips.
+| Version | Day-ahead greedy | Full pipeline* |
+| --- | ---: | ---: |
+| 0.2.7 | 47.9 s | 67.6 s |
+| 0.3.0 | 2.8 s | 13.1 s |
 
-| Backend | Greedy wall-clock |
-| --- | --- |
-| Python SoA (oracle only; not a solver path) | 310.2 s (historical) |
-| `mobiroute_native` before `score_fleet` / virtual insert | 3.73 s |
-| `mobiroute_native` after `score_fleet` / virtual insert | **1.97 s** |
+\*day-ahead, batch disruption, traffic delay, eight urgent inserts.
 
-Do not advertise a portable ×N speedup.
+cProfile put 56% of greedy time into `pooling_stops_violate`, which rebuilt the
+request map for every candidate; the map is now passed in. The Rust side keeps
+a persistent fleet per solve (`set_fleet`, `score_stored`, `commit_insert`),
+reuses the prefix state of the route when scanning `(i, j)`, scores vehicles
+in parallel with rayon and forks copy-on-write for online insertion. A trip is
+one 64-byte row, because scoring reads one trip at a time.
 
-## Stress day `stress_200` (not a portable product claim)
+## What did not help
 
-Same machine, 2026-08-12, generator `stress_200` seed 42:
-**200 vehicles / 3200 requests**, mixed WAV/VIA/wait-return/quota/unavail/dead
-vehicles, then a disruption shake. Artifact:
-`benchmark/results/stress-2026-08-12/stress_200.json` (gitignored).
-Not real MAST trips. Greedy never `OPTIMAL`.
+* Splitting fleet scoring into "empty vehicles first, then loaded vehicles
+  under a duration cap" made one rayon call into several and lost about 1 s
+  on `stress_200`.
+* GPU: the paratransit matrix is 13×13 and the insertion test is sequential and
+  branchy; transfer and launch costs would dominate. GPU VRP solvers win by
+  evaluating many independent neighbourhood moves at once, which is a
+  different algorithm.
 
-Re-measured 2026-11-13 (Linux x86_64, Python 3.13, seed 42, single thread) after profile-guided fixes in 0.3.0. On the same machine and day the 0.2.7 code took 47.9 s for the day-ahead pass and 67.6 s for the pipeline: cProfile put 56% of greedy time in `pooling_stops_violate` rebuilding the request map on every candidate. The 2026-08-12 band below (4.0–4.1 s / 8.1 s) did not reproduce here.
-
-| Phase (0.3.0) | Wall-clock | Served / active | Notary |
-| --- | --- | --- | --- |
-| Day-ahead greedy (Rust) | 2.8 s | 2589 / 3045 (`PARTIAL`) | pass |
-| Batch disruption (seeded replan) | 1.1 s | 2533 / 2999 (`PARTIAL`) | pass |
-| **Pipeline total** | **13.1 s** | — | — |
-
-Historical record, 2026-08-12, after tail-peel + same-vehicle reinsert of dropped
-trips, skip redundant `set_vehicle`, TLS pickup-dep reuse, and `score_stored`
-subset/`max_dur` ABI (two consecutive runs, seed 42). Sample, not a SLA:
-
-| Phase | Wall-clock | Served / active | Notary |
-| --- | --- | --- | --- |
-| Day-ahead greedy (Rust) | 4.0–4.1 s | 2589 / 3045 (`PARTIAL`) | pass |
-| Batch disruption (seeded replan) | 0.93–0.94 s | 2533 / 2999 (`PARTIAL`) | pass |
-| Traffic +8 min (seeded replan) | 2.49–2.50 s | 2233 / 2999 (`PARTIAL`) | pass |
-| 8 online medical inserts | 0.54–0.61 s | 8/8 accepted | pass |
-| **Pipeline total** | **8.1 s** | — | — |
-
-Earlier the same day the pipeline was about 95 s, then ~24 s after stored-fleet
-scoring, then **13–15 s** after persistent eval, then **10–11 s** after prefix
-insert. Treat **8.1 s** as the current observed band on this machine, not a
-product SLA. Served counts after traffic may differ from the 10–11 s band
-because peel keeps a feasible tail instead of wiping the bus. Greedy never
-`OPTIMAL`. Batch disruption previously left one `QUOTA:` notary; that hole is
-closed.
-
-## Algebra (what moved the needle, what did not)
-
-Depot-to-depot duration is monotonic in extra stops. A two-phase “score empties,
-then skip loaded with `current_dur > D`” is correct only after a
-**quota-feasible** \(D\). On `stress_200` that split turned one 200-way Rayon
-call into several smaller ones and **lost** about 1 s on day-ahead. The hot
-path stays one `score_stored` over the fleet.
-
-Uniform +8 min on every arc makes most seeded routes fail `eval_route` (13/188
-ok before peel). Peeling the last dropoff (and wait-return children) then
-re-inserting dropped trips onto **that** vehicle keeps a feasible core without
-a 200-vehicle search per trip. Leftovers still go to global greedy — that is
-why traffic is ~2.5 s, not sub-second. A 2–3 s **pipeline** would need
-day-ahead itself under ~1.5 s; that is still ~3000 sequential lex inserts
-against 200 vehicles and is not this pass.
-
-## GPU (honest no)
-
-Not for this kernel. The travel matrix is **13×13** integers. The hot path is a
-sequential, branchy insertion test (VIA, stretcher exclusive, unavail occupancy,
-appointment lobby snap, hour quota). NVIDIA cuOpt (open-source, Apache 2.0)
-speeds VRP by evaluating **many independent neighborhood moves** in parallel
-(thread block per hypothetical route, insert/eject/swap nets; NVIDIA tech blog
-2024, cuOpt 25.08 routing). That is ALNS/local-search parallelism, not one
-constructive lex insert against a persistent CPU fleet. PCIe plus kernel launch
-would dominate a 13-zone table already in L1. Stay on CPU (Rayon over vehicles).
-A future ALNS neighborhood on a large Euclidean instance could revisit cuOpt;
-it would be a different solver, never `OPTIMAL` from greedy, and not this
-notary-locked DARP.
+Timings are samples on one machine (Linux x86_64, Python 3.13), not an SLA.

@@ -1,93 +1,110 @@
 # SynAPS-MobiRoute
 
-A **DARP / PDPTW** routing kernel whose results can be checked: paired
-pickup-and-delivery requests with time windows, ride-time limits, a
-heterogeneous fleet and request–vehicle–driver compatibility.
+A routing engine for mixed fleets: VRPTW, PDPTW and DARP with a capacity vector
+(kg, m³, pallets), vehicle requirements, shifts, own and hired vehicles. ALNS
+on a Rust kernel, exact CP-SAT and MIP models, a head-to-head with OR-Tools,
+live order dispatch — and an independent check of every plan.
 
 Language: [RU](README.md) | **EN** · Site: [konkovdv.github.io/SynAPS-MobiRoute](https://konkovdv.github.io/SynAPS-MobiRoute/)
 
 [![CI](https://github.com/KonkovDV/SynAPS-MobiRoute/actions/workflows/ci.yml/badge.svg)](https://github.com/KonkovDV/SynAPS-MobiRoute/actions/workflows/ci.yml)
 [![Python 3.12+](https://img.shields.io/badge/python-3.12%2B-blue.svg)](https://www.python.org/)
 [![Rust](https://img.shields.io/badge/kernel-Rust%20%2B%20PyO3-orange.svg)](native/mobiroute_native)
-[![OR-Tools](https://img.shields.io/badge/solvers-CP--SAT%20%C2%B7%20SCIP%20%C2%B7%20HiGHS%20%C2%B7%20CBC-4285F4.svg)](docs/benchmarks/solver-lab-a2-16.md)
+[![OR-Tools](https://img.shields.io/badge/solvers-CP--SAT%20%C2%B7%20SCIP%20%C2%B7%20HiGHS%20%C2%B7%20OR--Tools%20Routing-4285F4.svg)](docs/benchmarks)
 [![mypy strict](https://img.shields.io/badge/types-mypy%20strict-1D9BF0.svg)](https://mypy-lang.org/)
 [![Ruff](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/ruff/main/assets/badge/v2.json)](https://github.com/astral-sh/ruff)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
-[![CITATION.cff](https://img.shields.io/badge/cite-CITATION.cff-orange.svg)](CITATION.cff)
 
-Every published plan is **verified independently**: the timing constraints of
-a route form a system of difference constraints, checked by Bellman–Ford apart
-from any solver. When a route cannot be scheduled you get a **certificate**
+Every plan — from a heuristic, an exact model or OR-Tools — goes through a
+separate verifier that recomputes loads, timing and cost and trusts nothing a
+solver reports. When a trip cannot be scheduled you get a **certificate**
 instead of "infeasible": which constraints conflict and **how many minutes are
 missing**.
 
 ![Verified optimal plan for Cordeau a2-16](docs/img/a2-16-routes.svg)
 
-## Reproducible results
+## Results
 
-| Claim | Result | Command |
+| Claim | Result | Reproduce |
 | --- | --- | --- |
-| Exact model on Cordeau (2006) a2-16 | cost **294.25**, the published proven optimum; CP-SAT **0.5 s** | `mobiroute literature-benchmark --instance benchmark/instances/cordeau/a2-16.txt --out-dir out` |
-| MIP vs CP on the same instance | SCIP 24.5 s and HiGHS 37.3 s reach the same optimum; CBC keeps a 20% gap at 60 s; LP relaxation 85.27 (big-M gap 71%) | `python benchmark/solver_lab.py` → [table](docs/benchmarks/solver-lab-a2-16.md) |
-| Speed on a large synthetic day | 200 vehicles / 3200 requests: greedy insertion **2.8 s** (47.9 s before profiling); 180 / 2000: **1.6 s** | `python benchmark/run_stress_day.py` |
-| Independent notary and red-team tests | hidden onboard waits, forged clocks, overloads are refused | `pytest` |
-| Engineering | 460+ tests, `mypy --strict`, `ruff`, `clippy`, Rust ↔ Python oracle parity | `pytest && ruff check . && mypy` |
+| 130 public instances: Solomon (VRPTW), Li & Lim and Sartori–Buriol (PDPTW, real OSRM road times), Cordeau (DARP) | all 130 plans verified, every order served. Solomon: 54 of 56 at the best-known vehicle count, median gap **0.38%**, 21 matches. Sartori–Buriol: 22 of 25, median 0.92%. Cordeau: 19 of 48 at the published optimum, mean gap 0.50% | `python benchmark/vrp_benchmark.py` → [table](docs/benchmarks/vrp-public-benchmarks.md) |
+| ALNS against proven optima | CP-SAT proved the optimum of 40 of 40 random instances of the full model (2–3 vehicle types, capacity vector, skills, ride limits, shifts); ALNS finds it on **38 of 40** in 0.19 s (CP-SAT 1.7 s), mean gap 0.13% | `python benchmark/exact_vs_alns.py` → [table](docs/benchmarks/exact-vs-alns.md) |
+| OR-Tools Routing (PCI + GLS) at equal time | 18 instances, 10 s each, one verifier: ALNS is never worse. R101 at the best known vs +1.28%; bar-n100-1 (OSRM roads) +0.96% vs +12.2%; one or two vehicles fewer on RC101 and ber-, nyc-, poa-n100-1; on a2-16 OR-Tools drops an order; mixed-fleet cargo days **19%** cheaper | `python benchmark/ortools_vs_alns.py` → [table](docs/benchmarks/ortools-vs-alns.md) |
+| Orders in real time | an answer in **0.1 ms** (max 0.3 ms): insertion into the part of a plan not yet driven; an ALNS pass every 30 minutes raises acceptance and lowers cost (plant, 140 moves: 84.3% → 85.0%). Re-solving everything with OR-Tools for every order (3 s) accepts 86.4% and is 2.5% cheaper, but answers in 2.9 s — about 30,000× slower — and its vehicles arrive 5 minutes later on average. Every final plan verified | `python benchmark/realtime_dispatch.py --with-ortools` → [table](docs/benchmarks/realtime-dispatch.md) |
+| Profiling → Rust kernel | ALNS on the Rust kernel runs **12–42×** faster than the Python reference (VRPTW ×12, PDPTW ×14, DARP ×42) with **bit-identical** plans; ×4.4 on the 8-type cargo day, where vehicle-type selection in Python became the bottleneck | `python benchmark/measure_vrp_speed.py` → [table](docs/benchmarks/vrp-speed.md) |
+| MIP vs CP on Cordeau a2-16 | CP-SAT proves the optimum 294.25 in 0.6 s; SCIP 26.2 s, HiGHS 43.3 s; CBC keeps a 20% gap at 60 s; LP relaxation 85.27 (weak big-M). ALNS reaches the same optimum in 2.9 s; OR-Tools leaves 1 of 16 requests out in 10 s | `python benchmark/solver_lab.py` → [table](docs/benchmarks/solver-lab-a2-16.md) |
+| Engineering | 507 tests, `mypy --strict`, `ruff`, `clippy -D warnings`, Rust ↔ Python bit for bit | `pytest && ruff check . && mypy` |
 
-Measured on the author's machine (Linux x86_64, Python 3.13, single thread);
-not an SLA. Method and raw data: [docs/benchmarks](docs/benchmarks/solver-lab-a2-16.md).
+Measured on one machine (Linux x86_64, Python 3.13, single thread); not an SLA.
 
-## The problem
+## What it solves
 
-A dispatcher plans hundreds of requests, each with hard windows, a ride-time
-limit, vehicle needs (lift, body type, capacity) and driver needs (licence,
-shift, break). Typical failures:
+**City distribution with own and hired vehicles.** Vans, trucks, a tractor;
+orders with weight, volume, pallets, a delivery window, refrigeration, a tail
+lift or ADR. The solver sends out its own vehicles first and hires only the
+class that runs short.
 
-- **silent refusals** of feasible requests. An audit found one here: an
-  as-early-as-possible schedule refused 7 of 16 a2-16 requests, each even when
-  alone; after the fix, 16 of 16;
-- **"optimal" without proof**: the label is set, nobody re-checks the plan;
-- **"infeasible" without a reason**: nobody knows whether to move a window, a
-  vehicle or a promise;
-- **slow re-planning** after cancellations, traffic and breakdowns.
+**In-plant logistics.** Pallet moves between workshops appear during a shift.
+Each gets an answer in a fraction of a millisecond: an insertion into the part
+of a plan not yet driven, or a refusal with the reason (from the shuttle run:
+"the nearest free vehicle reaches the pickup 1.9 min after its window
+closes"). Every 30 minutes the live state is re-optimised.
+
+**On-demand shuttle.** Rides between stops: wait at most 30 minutes, wait plus
+ride at most 45; eight-seat minibuses.
+
+**Passenger transport with special needs** (DARP): ride limits, wheelchairs,
+companions, qualified drivers — the original kernel of the project
+([docs/darp-kernel.md](docs/darp-kernel.md)).
 
 ## How it works
 
 ```mermaid
 flowchart LR
-  A[Requests, fleet, drivers, travel matrix] --> B[Input validation]
-  B --> C{Solver portfolio}
-  C --> D[Rust greedy insertion · beam · ALNS · RHC]
-  C --> E[Exact models: CP-SAT and MIP SCIP · HiGHS · CBC]
-  D --> F[Independent notary]
-  E --> F
-  F -->|feasible| G[Plan, report, SVG, input and config fingerprints]
-  F -->|infeasible| H[Certificate: conflicting constraints and missing minutes]
+  A[Orders, fleet, travel matrices] --> B[Model and validation]
+  B --> C{Solvers}
+  C --> D[ALNS: O1 regret insertion · 5 ruin operators · annealing · guided ejection]
+  D <--> K[Rust VrpKernel — same output as the Python reference]
+  C --> E[Exact CP-SAT · MIP on SCIP / HiGHS]
+  C --> O[OR-Tools Routing — for comparison]
+  C --> R[Live dispatcher]
+  D --> V[Independent verifier]
+  E --> V
+  O --> V
+  R --> V
+  V -->|feasible| P[Plan, cost, SVG map]
+  V -->|infeasible| H[Certificate: conflict and missing minutes]
 ```
 
-| Solver | When | May claim OPTIMAL |
+| Method | When | Proves optimality |
 | --- | --- | --- |
-| Greedy insertion (Rust kernel via PyO3) | default lane, thousands of requests | no |
-| Beam search | bounded branching over insertions | no |
-| ALNS (Shaw / worst / route / random destroy, simulated annealing) | improvement | no |
-| Rolling horizon | a day in time windows | no |
-| CP-SAT tiny (operator algebra) | up to 40 requests | only if OR-Tools proves it **and** the notary is empty |
-| Exact CP-SAT (literature algebra) | Cordeau instances | yes, for its integer model; cost recomputed in reals |
-| MIP SCIP / HiGHS / CBC (two-index formulation, Furtado–Munari–Morabito 2017) | solver comparison, lower bounds | yes, on the backend's proof |
-| Online insertion and recovery | urgent request, cancellation, no-show, traffic, breakdown | no |
+| Regret-k insertion + ALNS (random, worst, Shaw, SISR, route; annealing) | default | no |
+| Guided ejection (Nagata & Bräysy) | cut the fleet | no |
+| Insertion into the live plan | new order during the day | no |
+| CP-SAT, one circuit per vehicle | small instances, any constraint | yes, for its integer model |
+| Furtado–Munari–Morabito MIP on SCIP / HiGHS / CBC | solver comparison, lower bound | yes, by the backend's proof |
+| OR-Tools Routing (PCI + GLS) | baseline | no |
+| Minimal lateness: bisection on Bellman–Ford, LP | when windows cannot all be met | yes (LP) |
+
+Constant-time insertion tests: earliest and latest service start at every
+stop, loads per dimension, and a closed-form shortest route duration from
+prefix and suffix extrema. Details:
+[docs/mathematical-formulation.md](docs/mathematical-formulation.md).
 
 ## "Why not?" — a certificate
 
-Move one dropoff of the optimal a2-16 plan to the end of its route:
+A freight day, a transfer from a supplier to a customer:
 
 ```text
-Route 2 cannot be timed: short by 358.68 min. request 12 may ride at most 30 min;
-pickup 12 must start by 29; dropoff 1 cannot start before 402;
-dropoff 1 -> dropoff 12 takes 3 + 15.68 min (service + travel).
+The trip cannot be scheduled: short by 8.8 min.
+supplier: start no earlier than 09:00 (loading 26 min);
+drive supplier -> customer: 162.8 min;
+customer: unloading must start by 12:00.
 ```
 
-By hand: 402 + 3 + 15.68 − (29 + 3 + 30) = 358.68. The certificate is a
-negative cycle of the constraint graph: no re-timing of this stop sequence
-closes it.
+By hand: 540 + 26 + 162.8 − 720 = 8.8. The certificate is a negative cycle of
+the difference-constraint graph; its weight is the deficit, and the planner
+sees what to change: the customer's window or the supplier's hours.
 
 ![When each request is served: windows, service starts, ride limit](docs/img/a2-16-timeline.svg)
 
@@ -100,36 +117,45 @@ python -m maturin develop --release --manifest-path native/mobiroute_native/Carg
 ```
 
 ```bash
-mobiroute literature-benchmark --instance benchmark/instances/cordeau/a2-16.txt --out-dir out --svg
-mobiroute literature-benchmark --instance benchmark/instances/cordeau/a2-16.txt --out-dir out-mip --solver mip --backend SCIP
-mobiroute academic-benchmark --instance benchmark/instances/cordeau/a2-16.txt --solver alns --out-dir out-kernel
-mobiroute generate --mode medium --seed 42 --out day.json
-mobiroute solve --problem day.json --solver greedy --out-dir out-day
+mobiroute vrp-solve --generate cargo --orders 120 --out-dir out-cargo --svg
+mobiroute vrp-solve --instance benchmark/instances/sartori-buriol/n100/bar-n100-1.txt --time-limit 10 --out-dir out-sb --svg
+mobiroute vrp-solve --generate cargo --orders 60 --solver ortools --time-limit 10 --out-dir out-ortools
+mobiroute vrp-dispatch --day plant --policy insertion+alns --out-dir out-plant
+mobiroute literature-benchmark --instance benchmark/instances/cordeau/a2-16.txt --out-dir out-a2 --svg
 pytest            # fast suite; exact MIP proofs: pytest -m slow
 ```
 
-## Two algebras, never mixed
+```python
+from mobiroute.vrp import AlnsConfig, load_benchmark, solve
 
-- **Literature** (Cordeau 2006): real-valued distances, published service
-  times, hard windows. Only this lane publishes a gap to a published optimum,
-  and only for the byte-identical file (SHA-256).
-- **Operator**: integer minutes, 5-minute curb wait, alighting up to 30
-  minutes before an appointment. Its plans are never compared with the
-  literature, and that is machine-checked: kernel routes become literature-
-  feasible exactly when dropoff windows open 30 minutes early.
+inst, sha256 = load_benchmark("benchmark/instances/solomon/R101.txt")
+result = solve(inst, AlnsConfig(time_limit=10, seed=1))
+print(result.verdict.summary())
+```
 
-## Cargo routing
+Without the compiled Rust kernel the engine runs on its Python reference
+implementation, with the same results, only slower.
 
-The scheduling algebra carries over (paired pickup/delivery, windows, driver
-breaks, insertion, notary); the units change: a capacity vector (kg, m³,
-pallets), per-vehicle-type costs, driver shift rules. Stages and acceptance
-criteria: [docs/cargo-vrp-porting-plan.md](docs/cargo-vrp-porting-plan.md#english-summary).
+## Documentation
+
+| Document | About |
+| --- | --- |
+| [docs/cargo-vrp.md](docs/cargo-vrp.md) | cargo VRP: model, algorithms, scenarios, next steps (RU, EN summary) |
+| [docs/mathematical-formulation.md](docs/mathematical-formulation.md) | model, O(1) insertion, difference constraints, lateness LP, CP-SAT, MIP |
+| [docs/architecture.md](docs/architecture.md) | modules, data flow, design decisions |
+| [docs/native-acceleration.md](docs/native-acceleration.md) | profiling and the Rust kernels |
+| [docs/benchmark-protocol.md](docs/benchmark-protocol.md) | rules for published numbers |
+| [docs/benchmarks/](docs/benchmarks) | tables of every experiment |
+| [docs/darp-kernel.md](docs/darp-kernel.md) | paratransit DARP kernel: rules, dispatch, checks |
+| [docs/limitations.md](docs/limitations.md) | what the engine does not do yet |
+| [benchmark/instances/README.md](benchmark/instances/README.md) | provenance and citations of the instances |
 
 ## Limits
 
-Synthetic Moscow-zone scenarios and the open Cordeau instance. No operator
-data, no pilot, no savings claims (technology readiness level 4: lab
-validation). Details: [docs/limitations.md](docs/limitations.md).
+Public benchmarks and synthetic days; no customer data and no pilot. One trip
+per vehicle for now, no breaks inside a route, no time-of-day traffic;
+heuristics prove no optimum, and the gap to the best known solution is
+published per instance. Details: [docs/limitations.md](docs/limitations.md).
 
 ## License
 
