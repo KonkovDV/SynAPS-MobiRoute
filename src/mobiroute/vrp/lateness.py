@@ -117,6 +117,8 @@ def min_total_lateness(
         solver.Add(start[k + 1] >= start[k] + inst.nodes[a].service + profile.time[a][b_node])
     where = {node: k for k, node in enumerate(seq) if 0 < k < m - 1}
     for k in range(1, m - 1):
+        if inst.request_of(seq[k]) < 0:
+            continue
         req = inst.requests[inst.request_of(seq[k])]
         if req.max_ride is not None and req.pickup == seq[k] and req.delivery in where:
             kd = where[req.delivery]

@@ -321,6 +321,42 @@ def test_route_retyping_fixes_the_fleet_mix_trap() -> None:
     assert search_objective(inst, res.solution) == pytest.approx(756.3367, abs=1e-3)
 
 
+@pytest.mark.parametrize(("seed", "optimum"), [(1023, 4046.03), (1037, 1975.91)])
+def test_alns_reaches_optima_that_need_a_route_merge(seed: int, optimum: float) -> None:
+    # The two instances ALNS missed before the merge operator: CP-SAT proves
+    # these optima, and both put two small routes on one larger vehicle.
+    inst = random_instance(seed, n_requests=8, n_types=3, ride_share=0.4, penalty=1000.0)
+    res = solve(inst, AlnsConfig(iterations=2000, seed=1))
+    assert res.verdict.feasible
+    assert search_objective(inst, res.solution) == pytest.approx(optimum, abs=0.01)
+
+
+def test_merge_operator_turns_the_local_optimum_into_the_optimum() -> None:
+    from mobiroute.vrp.alns import Alns
+
+    inst = random_instance(1037, n_requests=8, n_types=3, ride_share=0.4, penalty=1000.0)
+    alns = Alns(inst, AlnsConfig(seed=1, backend="python"))
+    assert alns.merger is not None
+    ids = {vt.id: t for t, vt in enumerate(inst.vehicle_types)}
+    # The plan ALNS stopped at without the operator: five routes.
+    trapped = Solution(
+        [
+            Route(ids["type0"], [12, 13, 14, 15]),
+            Route(ids["type1"], [7, 1, 8, 2]),
+            Route(ids["type2"], [9, 10]),
+            Route(ids["type0"], [3, 4]),
+            Route(ids["type0"], [11]),
+        ],
+        {2},
+    )
+    assert verify(inst, trapped).feasible
+    merged = alns.merger.improve(trapped)
+    assert verify(inst, merged).feasible
+    assert search_objective(inst, trapped) == pytest.approx(2068.35, abs=0.01)
+    assert search_objective(inst, merged) == pytest.approx(1975.91, abs=0.01)
+    assert sorted(len(r.nodes) for r in merged.routes if r.nodes) == [2, 3, 4, 4]
+
+
 def test_ortools_lane_ignores_nodes_of_absent_orders() -> None:
     # A live snapshot keeps every node of the day but only a few open orders;
     # Routing must not be asked to visit the nodes of orders that do not exist.

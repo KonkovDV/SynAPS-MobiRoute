@@ -68,6 +68,7 @@ def solve_ortools(
     """Solve ``inst`` with OR-Tools Routing and verify the plan independently."""
     from ortools.constraint_solver import pywrapcp, routing_enums_pb2
 
+    inst.require_core_model("ORTOOLS_LANE")
     pickups_only = any(r.pickup is not None and r.delivery is None for r in inst.requests)
     deliveries_only = any(r.pickup is None and r.delivery is not None for r in inst.requests)
     if pickups_only and deliveries_only:

@@ -16,6 +16,8 @@ from mobiroute.vrp.insertion import Compiled
 from mobiroute.vrp.solution import Route, Solution
 
 NativeRepair = Callable[[Solution, int, float, int, "int | None"], Solution]
+#: Major.minor of ``mobiroute_native`` whose ``VrpKernel`` matches this module.
+KERNEL_ABI = "0.5"
 
 
 def _module() -> Any | None:
@@ -25,7 +27,13 @@ def _module() -> Any | None:
         import mobiroute_native
     except ImportError:
         return None
-    return mobiroute_native if hasattr(mobiroute_native, "VrpKernel") else None
+    if not hasattr(mobiroute_native, "VrpKernel"):
+        return None
+    # The kernel's constructor follows the package version: an older build
+    # would misread the arrays, so it is ignored rather than trusted.
+    if not str(getattr(mobiroute_native, "__version__", "")).startswith(KERNEL_ABI + "."):
+        return None
+    return mobiroute_native
 
 
 def available() -> bool:
@@ -35,7 +43,8 @@ def available() -> bool:
 def build_kernel(c: Compiled) -> Any | None:
     """Flatten the compiled instance into the kernel's arrays (shared matrices once)."""
     module = _module()
-    if module is None:
+    if module is None or c.has_traffic:
+        # Time-dependent travel runs on the Python reference only.
         return None
     matrices: list[list[float]] = []
     index: dict[int, int] = {}
@@ -80,6 +89,9 @@ def build_kernel(c: Compiled) -> Any | None:
         allowed,
         c.node_req,
         c.max_cost,
+        c.brk_drive,
+        c.brk_len,
+        c.reload_of,
     )
 
 
