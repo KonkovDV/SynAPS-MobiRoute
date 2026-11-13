@@ -82,6 +82,10 @@ struct RouteState {
     a_pre: Vec<f64>,
     a_suf: Vec<f64>,
     has_ride: bool,
+    /// Driving minutes along the route (rest rule).
+    drive: f64,
+    /// Start position of each position's trip; `None` for a route without reloads.
+    trip_start: Option<Vec<usize>>,
 }
 
 #[pyclass(module = "mobiroute_native")]
@@ -112,6 +116,12 @@ pub struct VrpKernel {
     node_req: Vec<i64>,
     has_ride: bool,
     max_cost: f64,
+    /// Rest rule per type: most driving between rests (inf: none), rest length.
+    brk_drive: Vec<f64>,
+    brk_len: Vec<f64>,
+    /// Vehicle type reloading at each node, -1 for every other node.
+    reload_of: Vec<i64>,
+    has_reload: bool,
 }
 
 struct Slot {
@@ -155,31 +165,17 @@ impl VrpKernel {
             let back = late[k + 1] - s[a] - self.tm(t, a, b);
             late[k] = pick_min(lim[k], back);
         }
-        let dims = self.dims;
-        let mut initial = vec![0.0; dims];
-        for &node in &nodes {
-            let r = self.node_req[node] as usize;
-            if self.pick[r] < 0 {
-                for d in 0..dims {
-                    initial[d] += self.demand[r * dims + d];
-                }
-            }
+        let mut drive = 0.0;
+        for k in 1..m2 {
+            drive += self.tm(t, seq[k - 1], seq[k]);
         }
-        let mut load = Vec::with_capacity((nodes.len() + 1) * dims);
-        load.extend_from_slice(&initial);
-        let mut cur = initial;
-        for &node in &nodes {
-            let r = self.node_req[node] as usize;
-            let sign = if node as i64 == self.pick[r] {
-                1.0
-            } else {
-                -1.0
-            };
-            for d in 0..dims {
-                cur[d] += sign * self.demand[r * dims + d];
-            }
-            load.extend_from_slice(&cur);
-        }
+        let (load, trip_start) = if self.has_reload && nodes.iter().any(|&n| self.reload_of[n] >= 0)
+        {
+            let (load, starts) = self.trip_loads(&nodes);
+            (load, Some(starts))
+        } else {
+            (self.single_trip_loads(&nodes), None)
+        };
         let mut h = vec![0.0; m2];
         for k in 1..m2 {
             let (a, b) = (seq[k - 1], seq[k]);
@@ -211,9 +207,9 @@ impl VrpKernel {
             a_suf[k] = cur_max;
         }
         let has_ride = self.has_ride
-            && nodes
-                .iter()
-                .any(|&n| self.max_ride[self.node_req[n] as usize] < f64::INFINITY);
+            && nodes.iter().any(|&n| {
+                self.node_req[n] >= 0 && self.max_ride[self.node_req[n] as usize] < f64::INFINITY
+            });
         RouteState {
             t,
             nodes,
@@ -228,7 +224,117 @@ impl VrpKernel {
             a_pre,
             a_suf,
             has_ride,
+            drive,
+            trip_start,
         }
+    }
+
+    /// Loads after positions 0..=m of a route without reloads (Python `single_trip_loads`).
+    fn single_trip_loads(&self, nodes: &[usize]) -> Vec<f64> {
+        let dims = self.dims;
+        let mut initial = vec![0.0; dims];
+        for &node in nodes {
+            let r = self.node_req[node] as usize;
+            if self.pick[r] < 0 {
+                for d in 0..dims {
+                    initial[d] += self.demand[r * dims + d];
+                }
+            }
+        }
+        let mut load = Vec::with_capacity((nodes.len() + 1) * dims);
+        load.extend_from_slice(&initial);
+        let mut cur = initial;
+        for &node in nodes {
+            let r = self.node_req[node] as usize;
+            let sign = if node as i64 == self.pick[r] {
+                1.0
+            } else {
+                -1.0
+            };
+            for d in 0..dims {
+                cur[d] += sign * self.demand[r * dims + d];
+            }
+            load.extend_from_slice(&cur);
+        }
+        load
+    }
+
+    /// Loads per trip and each position's trip start (Python `trip_loads`).
+    fn trip_loads(&self, nodes: &[usize]) -> (Vec<f64>, Vec<usize>) {
+        let dims = self.dims;
+        let mut trip_of = Vec::with_capacity(nodes.len());
+        let mut trip = 0usize;
+        for &node in nodes {
+            if self.reload_of[node] >= 0 {
+                trip += 1;
+            }
+            trip_of.push(trip);
+        }
+        let mut start = vec![0.0; (trip + 1) * dims];
+        for (idx, &node) in nodes.iter().enumerate() {
+            let r = self.node_req[node];
+            if r >= 0 && self.pick[r as usize] < 0 {
+                let r = r as usize;
+                let row = trip_of[idx] * dims;
+                for d in 0..dims {
+                    start[row + d] += self.demand[r * dims + d];
+                }
+            }
+        }
+        let mut cur: Vec<f64> = start[0..dims].to_vec();
+        let mut collected = vec![0.0; dims];
+        let mut load = Vec::with_capacity((nodes.len() + 1) * dims);
+        load.extend_from_slice(&cur);
+        let mut trip_start = Vec::with_capacity(nodes.len() + 1);
+        trip_start.push(0usize);
+        for (idx, &node) in nodes.iter().enumerate() {
+            if self.reload_of[node] >= 0 {
+                let row = trip_of[idx] * dims;
+                for d in 0..dims {
+                    cur[d] = cur[d] - collected[d] + start[row + d];
+                }
+                collected.iter_mut().for_each(|x| *x = 0.0);
+                trip_start.push(idx + 1);
+            } else {
+                let r = self.node_req[node] as usize;
+                if node as i64 == self.pick[r] {
+                    for d in 0..dims {
+                        cur[d] += self.demand[r * dims + d];
+                    }
+                    if self.deliv[r] < 0 {
+                        for d in 0..dims {
+                            collected[d] += self.demand[r * dims + d];
+                        }
+                    }
+                } else {
+                    for d in 0..dims {
+                        cur[d] -= self.demand[r * dims + d];
+                    }
+                }
+                let last = *trip_start.last().expect("trip start");
+                trip_start.push(last);
+            }
+            load.extend_from_slice(&cur);
+        }
+        (load, trip_start)
+    }
+
+    /// Positions where a single-node order fits on board trip by trip.
+    fn single_positions(&self, st: &RouteState, fits: &[bool], prefix: bool) -> Vec<usize> {
+        let trip_start = st.trip_start.as_ref().expect("route with reloads");
+        let m = st.seq.len() - 2;
+        let mut ok = vec![false; m + 1];
+        if prefix {
+            for i in 0..=m {
+                ok[i] = fits[i] && (trip_start[i] == i || ok[i - 1]);
+            }
+        } else {
+            for i in (0..=m).rev() {
+                let ends_here = i == m || trip_start[i + 1] == i + 1;
+                ok[i] = fits[i] && (ends_here || ok[i + 1]);
+            }
+        }
+        (0..=m).filter(|&i| ok[i]).collect()
     }
 
     fn fits(&self, st: &RouteState, r: usize) -> Vec<bool> {
@@ -329,7 +435,13 @@ impl VrpKernel {
         duration <= self.max_dur[t] + EPS
     }
 
-    fn exact_feasible(&self, t: usize, nodes: &[usize]) -> bool {
+    fn exact_feasible(
+        &self,
+        t: usize,
+        nodes: &[usize],
+        rest_arc: Option<usize>,
+        rest: f64,
+    ) -> bool {
         let (e, l, s) = (&self.e, &self.l, &self.s);
         let mut seq = Vec::with_capacity(nodes.len() + 2);
         seq.push(self.start[t]);
@@ -363,10 +475,17 @@ impl VrpKernel {
             let (a, b) = (seq[k], seq[k + 1]);
             tails.push(k + 1);
             heads.push(k);
-            weights.push(-(s[a] + self.tm(t, a, b)));
+            if rest_arc == Some(k) {
+                weights.push(-(s[a] + self.tm(t, a, b) + rest));
+            } else {
+                weights.push(-(s[a] + self.tm(t, a, b)));
+            }
         }
         for k in 1..last {
             let node = seq[k];
+            if self.node_req[node] < 0 {
+                continue;
+            }
             let r = self.node_req[node] as usize;
             if self.pick[r] == node as i64 && self.max_ride[r] < f64::INFINITY {
                 let target = self.deliv[r];
@@ -399,6 +518,62 @@ impl VrpKernel {
             }
         }
         (0..tails.len()).all(|x| dist[heads[x]] + weights[x] >= dist[tails[x]] - TIME_EPS)
+    }
+
+    /// Exact feasibility with the rest rule (Python `route_exact`).
+    fn route_exact(&self, t: usize, nodes: &[usize]) -> bool {
+        let limit = self.brk_drive[t];
+        if limit == f64::INFINITY {
+            return self.exact_feasible(t, nodes, None, 0.0);
+        }
+        let mut seq = Vec::with_capacity(nodes.len() + 2);
+        seq.push(self.start[t]);
+        seq.extend_from_slice(nodes);
+        seq.push(self.end[t]);
+        let legs: Vec<f64> = (0..seq.len() - 1)
+            .map(|k| self.tm(t, seq[k], seq[k + 1]))
+            .collect();
+        let mut total = 0.0;
+        for &leg in &legs {
+            total += leg;
+        }
+        if total <= limit + EPS {
+            return self.exact_feasible(t, nodes, None, 0.0);
+        }
+        if total > 2.0 * limit + EPS {
+            return false;
+        }
+        let low = total - limit - EPS;
+        let high = limit + EPS;
+        let mut done = 0.0;
+        for (k, &leg) in legs.iter().enumerate() {
+            let after = done + leg;
+            if ((low <= done && done <= high) || (low <= after && after <= high))
+                && self.exact_feasible(t, nodes, Some(k), self.brk_len[t])
+            {
+                return true;
+            }
+            done = after;
+        }
+        false
+    }
+
+    /// Extra driving of inserting `p`/`d` at `i`/`j` (Python `_drive_delta`).
+    fn drive_delta(&self, st: &RouteState, p: i64, d: i64, i: usize, j: usize) -> f64 {
+        let t = st.t;
+        let seq = &st.seq;
+        let (a, b) = (seq[i], seq[i + 1]);
+        if p < 0 || d < 0 {
+            let u = if p >= 0 { p as usize } else { d as usize };
+            return self.tm(t, a, u) + self.tm(t, u, b) - self.tm(t, a, b);
+        }
+        let (p, d) = (p as usize, d as usize);
+        if j == i {
+            return self.tm(t, a, p) + self.tm(t, p, d) + self.tm(t, d, b) - self.tm(t, a, b);
+        }
+        let (cj, nx) = (seq[j], seq[j + 1]);
+        (self.tm(t, a, p) + self.tm(t, p, b) - self.tm(t, a, b))
+            + (self.tm(t, cj, d) + self.tm(t, d, nx) - self.tm(t, cj, nx))
     }
 
     fn splice(nodes: &[usize], i: usize, j: usize, p: usize, d: Option<usize>) -> Vec<usize> {
@@ -453,25 +628,30 @@ impl VrpKernel {
         let (eu, lu, su) = (self.e[u], self.l[u], self.s[u]);
         let m = seq.len() - 2;
         let mut best: Option<Candidate> = None;
-        let mut first = 0;
-        if !prefix {
-            first = m + 1;
+        // A delivery from the depot rides from its trip's start, a collection to
+        // its trip's end; without reloads the trip is the whole route.
+        let (lo, hi) = if prefix {
+            let mut last = 0;
+            while last <= m && fits[last] {
+                last += 1;
+            }
+            (0, last)
+        } else {
+            let mut first = m + 1;
             while first > 0 && fits[first - 1] {
                 first -= 1;
             }
-        }
-        for i in first..m + 1 {
-            if prefix && !fits[i] {
-                break;
-            }
+            (first, m + 1)
+        };
+        let mut visit = |i: usize| {
             let (a, b) = (seq[i], seq[i + 1]);
             let arr = begin[i] + s[a] + self.tm(t, a, u);
             let bu = pick_max(arr, eu);
             if bu > lu + EPS || bu + su + self.tm(t, u, b) > late[i + 1] + EPS {
-                continue;
+                return;
             }
             if check_dur && !self.min_duration_ok(st, i, None, u, u, 0.0, 0.0) {
-                continue;
+                return;
             }
             let cand = (
                 (self.cs(t, a, u) + self.cs(t, u, b) - self.cs(t, a, b)) + extra,
@@ -482,6 +662,15 @@ impl VrpKernel {
                 out.push(cand);
             } else if best.as_ref().is_none_or(|bst| less(&cand, bst)) {
                 best = Some(cand);
+            }
+        };
+        if st.trip_start.is_some() {
+            for i in self.single_positions(st, fits, prefix) {
+                visit(i);
+            }
+        } else {
+            for i in lo..hi {
+                visit(i);
             }
         }
         best
@@ -581,7 +770,8 @@ impl VrpKernel {
             return None;
         }
         let (p, d) = (self.pick[r], self.deliv[r]);
-        let lazy = self.has_ride && (st.has_ride || self.max_ride[r] < f64::INFINITY);
+        let rests = self.brk_drive[t] < f64::INFINITY;
+        let lazy = (self.has_ride && (st.has_ride || self.max_ride[r] < f64::INFINITY)) || rests;
         let check_dur = !lazy && self.max_dur[t] < f64::INFINITY;
         let fits = self.fits(st, r);
         let m = st.seq.len() - 2;
@@ -608,6 +798,10 @@ impl VrpKernel {
         if !lazy {
             return best;
         }
+        if rests {
+            let room = 2.0 * self.brk_drive[t] - st.drive + EPS;
+            out.retain(|cand| self.drive_delta(st, p, d, cand.1, cand.2) <= room);
+        }
         out.sort_by(|a, b| {
             a.0.partial_cmp(&b.0)
                 .unwrap_or(std::cmp::Ordering::Equal)
@@ -616,7 +810,7 @@ impl VrpKernel {
         });
         for cand in out.iter().take(LAZY_CHECKS) {
             let nodes = self.apply(&st.nodes, r, cand.1, cand.2);
-            if self.exact_feasible(t, &nodes) {
+            if self.route_exact(t, &nodes) {
                 return Some(*cand);
             }
         }
@@ -822,7 +1016,11 @@ impl VrpKernel {
             if !self.allowed[v * self.n_types + *t] {
                 continue;
             }
-            let mut on: Vec<usize> = nodes.iter().map(|&n| self.node_req[n] as usize).collect();
+            let mut on: Vec<usize> = nodes
+                .iter()
+                .filter(|&&n| self.node_req[n] >= 0)
+                .map(|&n| self.node_req[n] as usize)
+                .collect();
             on.sort_unstable();
             on.dedup();
             options.push((0, ri, Vec::new()));
@@ -855,7 +1053,7 @@ impl VrpKernel {
                 .copied()
                 .filter(|&n| !gone.contains(&(n as i64)))
                 .collect();
-            if !eject.is_empty() && !self.exact_feasible(*t, &kept) {
+            if !eject.is_empty() && !self.route_exact(*t, &kept) {
                 continue;
             }
             let st = self.state(*t, kept);
@@ -880,7 +1078,10 @@ impl VrpKernel {
         if t >= self.n_types {
             return Err(PyValueError::new_err("VRP_KERNEL_TYPE_OUT_OF_RANGE"));
         }
-        if nodes.iter().any(|&n| n >= self.n || self.node_req[n] < 0) {
+        if nodes
+            .iter()
+            .any(|&n| n >= self.n || (self.node_req[n] < 0 && self.reload_of[n] != t as i64))
+        {
             return Err(PyValueError::new_err("VRP_KERNEL_NOT_A_SERVICE_NODE"));
         }
         Ok(())
@@ -917,11 +1118,20 @@ impl VrpKernel {
         allowed: Vec<bool>,
         node_req: Vec<i64>,
         max_cost: f64,
+        brk_drive: Vec<f64>,
+        brk_len: Vec<f64>,
+        reload_of: Vec<i64>,
     ) -> PyResult<Self> {
         let n_types = time_idx.len();
         let n_req = pick.len();
         let bad = |what: &str| PyValueError::new_err(format!("VRP_KERNEL_SHAPE:{what}"));
-        if dims == 0 || e.len() != n || l.len() != n || s.len() != n || node_req.len() != n {
+        if dims == 0
+            || e.len() != n
+            || l.len() != n
+            || s.len() != n
+            || node_req.len() != n
+            || reload_of.len() != n
+        {
             return Err(bad("nodes"));
         }
         if matrices.iter().any(|m| m.len() != n * n) {
@@ -938,6 +1148,8 @@ impl VrpKernel {
             start_lim.len(),
             end_lim.len(),
             max_dur.len(),
+            brk_drive.len(),
+            brk_len.len(),
         ];
         if n_types == 0 || per_type.iter().any(|&x| x != n_types) || cap.len() != n_types * dims {
             return Err(bad("types"));
@@ -966,6 +1178,10 @@ impl VrpKernel {
         }
         let shared: Vec<Arc<Vec<f64>>> = matrices.into_iter().map(Arc::new).collect();
         let has_ride = max_ride.iter().any(|&x| x < f64::INFINITY);
+        if reload_of.iter().any(|&x| x >= n_types as i64) {
+            return Err(bad("reload types"));
+        }
+        let has_reload = reload_of.iter().any(|&x| x >= 0);
         Ok(Self {
             n,
             dims,
@@ -993,6 +1209,10 @@ impl VrpKernel {
             node_req,
             has_ride,
             max_cost,
+            brk_drive,
+            brk_len,
+            reload_of,
+            has_reload,
         })
     }
 
@@ -1055,6 +1275,6 @@ impl VrpKernel {
     /// Exact timing feasibility of a fixed sequence (ride and shift limits included).
     fn exact_feasible_route(&self, t: usize, nodes: Vec<usize>) -> PyResult<bool> {
         self.check_route(t, &nodes)?;
-        Ok(self.exact_feasible(t, &nodes))
+        Ok(self.route_exact(t, &nodes))
     }
 }

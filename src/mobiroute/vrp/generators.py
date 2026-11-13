@@ -24,11 +24,13 @@ import math
 import random
 
 from mobiroute.vrp.model import (
+    BreakRule,
     Instance,
     Node,
     Profile,
     Request,
     VehicleType,
+    add_reload_stops,
     euclidean_matrix,
     scaled_matrix,
 )
@@ -257,6 +259,80 @@ def cargo_day(
         dimensions=("kg", "m3", "pallets"),
         source="synthetic cargo day",
     )
+
+
+def dc_day(
+    seed: int = 1,
+    *,
+    n_stores: int = 60,
+    trips: int = 1,
+    reload_time: float = 30.0,
+    rests: bool = True,
+    area_km: float = 40.0,
+) -> Instance:
+    """Store deliveries from one distribution centre in two waves.
+
+    Morning slots 07:00-10:00 and afternoon slots 13:00-16:00; 1-4 pallets
+    per store. Own vans and trucks cost their running cost only, hired ones
+    a fee and a dearer tariff. ``trips > 1`` lets own vehicles return to the
+    DC and reload (``reload_time`` minutes), so one van can serve both waves;
+    ``rests`` applies the 4.5 h / 45 min driving rule to every vehicle.
+    """
+    rng = random.Random(seed)
+    dc = (area_km * 0.5, area_km * 0.5)
+    stores = _clustered_points(rng, n_stores, area_km)
+    nodes: list[Node] = [Node(0, 360.0, 1200.0, 0.0, *dc, "DC")]
+    requests: list[Request] = []
+    for k, (x, y) in enumerate(stores, start=1):
+        lo, hi = (420.0, 600.0) if rng.random() < 0.5 else (780.0, 960.0)
+        pallets = float(rng.randint(1, 4))
+        kg = round(pallets * rng.uniform(250.0, 550.0), 1)
+        nodes.append(Node(k, lo, hi, round(8.0 + 4.0 * pallets, 1), x, y, f"store {k}"))
+        requests.append(Request(f"S{k:03d}", None, k, (kg, pallets)))
+    road = scaled_matrix(euclidean_matrix([dc, *stores]), 1.3)
+    profiles = {
+        "van": Profile("van", scaled_matrix(road, 60.0 / 32.0), road),
+        "truck": Profile("truck", scaled_matrix(road, 60.0 / 26.0), road),
+    }
+    fleet = (
+        # id, (kg, pallets), hire fee, per km, per h, own, hired, profile
+        ("van", (1500.0, 4.0), 2500.0, 18.0, 450.0, 6, 8, "van"),
+        ("truck", (5000.0, 12.0), 4200.0, 26.0, 600.0, 3, 4, "truck"),
+    )
+    rule = BreakRule() if rests else None
+    types: list[VehicleType] = []
+    for vid, cap, fee, per_km, per_h, own, hired, profile in fleet:
+        for is_hired, count in ((False, own), (True, hired)):
+            mark = 1.35 if is_hired else 1.0
+            types.append(
+                VehicleType(
+                    id=f"{vid}{'-hired' if is_hired else ''}",
+                    capacity=cap,
+                    count=count,
+                    shift_start=360.0,
+                    shift_end=1200.0,
+                    fixed_cost=fee if is_hired else 0.0,
+                    cost_per_distance=per_km * mark,
+                    cost_per_time=per_h * mark / 60.0,
+                    max_duration=600.0,
+                    profile=profile,
+                    hired=is_hired,
+                    breaks=rule,
+                )
+            )
+    inst = Instance(
+        name=f"dc-day-{seed}-{n_stores}-{trips}trip",
+        nodes=tuple(nodes),
+        requests=tuple(requests),
+        vehicle_types=tuple(types),
+        profiles=profiles,
+        dimensions=("kg", "pallets"),
+        source="synthetic distribution-centre day",
+    )
+    if trips > 1:
+        for vt in ("van", "truck"):
+            inst = add_reload_stops(inst, vt, trips, reload_time)
+    return inst
 
 
 def _grid_stops(rng: random.Random, count: int, size: float) -> list[tuple[float, float]]:

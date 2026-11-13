@@ -38,11 +38,15 @@ from mobiroute.vrp.insertion import (
     RouteState,
     apply_insertion,
     best_insertion,
-    exact_feasible,
     regret_repair,
     remove_requests,
+    route_exact,
 )
+from mobiroute.vrp.local_search import LocalSearch
+from mobiroute.vrp.local_search import applies as local_search_applies
+from mobiroute.vrp.merge import RouteMerger
 from mobiroute.vrp.model import Instance
+from mobiroute.vrp.setpart import RoutePool, solve_set_partitioning
 from mobiroute.vrp.solution import MUST_SERVE_PENALTY, Solution, evaluate
 from mobiroute.vrp.verify import Verdict, verify
 
@@ -72,6 +76,21 @@ class AlnsConfig:
     noise: float = 0.025
     #: Share of the budget for fleet reduction when vehicles rank first.
     fleet_phase: float = 0.35
+    #: Merge route pairs onto one vehicle (:mod:`mobiroute.vrp.merge`).
+    #: ``None`` means on for fleets with more than one vehicle type.
+    merge: bool | None = None
+    #: The merge scan runs on every new best plan and every ``merge_every`` iterations.
+    merge_every: int = 25
+    #: Relocate / swap / 2-opt* / 2-opt descent on every new best plan of a
+    #: VRPTW instance (:mod:`mobiroute.vrp.local_search`).
+    local_search: bool = True
+    #: Recombine the routes of accepted plans by set partitioning
+    #: (:mod:`mobiroute.vrp.setpart`) during the search and once at the end.
+    setpart: bool = False
+    #: Iterations between set-partitioning solves; 0 means an eighth of the budget.
+    sp_every: int = 0
+    #: Budget of one set-partitioning solve (CP-SAT deterministic seconds).
+    sp_time: float = 2.0
     backend: Backend = "auto"
 
 
@@ -98,6 +117,11 @@ class SolveResult:
     trace: list[TracePoint] = field(default_factory=list)
     destroy_weights: dict[str, float] = field(default_factory=dict)
     repair_weights: dict[str, float] = field(default_factory=dict)
+    #: Set-partitioning solves, how many improved the best plan, and their time.
+    sp_calls: int = 0
+    sp_improved: int = 0
+    sp_seconds: float = 0.0
+    pool_size: int = 0
 
 
 def search_objective(inst: Instance, sol: Solution) -> float:
@@ -178,7 +202,7 @@ class _Destroy:
             cost = c.cost[route.vehicle_type]
             seq = [c.start[route.vehicle_type], *route.nodes, c.end[route.vehicle_type]]
             base = sum(cost[a][b] for a, b in pairwise(seq))
-            requests = {c.node_req[n] for n in route.nodes}
+            requests = c.requests_of(route.nodes)
             for r in requests:
                 drop = {c.pick[r], c.deliv[r]}
                 rest = [n for n in seq if n not in drop]
@@ -243,8 +267,7 @@ class _Destroy:
             length = int(self.rng.uniform(1.0, min(l_max, len(nodes)) + 1.0))
             at = nodes.index(node)
             begin = max(0, min(at - self.rng.randrange(length), len(nodes) - length))
-            for n in nodes[begin : begin + length]:
-                out.add(c.node_req[n])
+            out.update(c.requests_of(nodes[begin : begin + length]))
         return out or {self.rng.choice(served)}
 
     def route(self, sol: Solution, served: list[int], q: int) -> set[int]:
@@ -254,7 +277,7 @@ class _Destroy:
         if not routes:
             return set()
         pick = routes[int(len(routes) * self.rng.random() ** 3)]
-        return {self.c.node_req[n] for n in pick.nodes}
+        return self.c.requests_of(pick.nodes)
 
 
 def _roulette(weights: list[float], rng: random.Random) -> int:
@@ -279,6 +302,23 @@ class Alns:
         self.repair, self.backend = make_repair(self.c, self.cfg.backend)
         self.kernel = _kernel_for(self.c) if self.backend == "native" else None
         self.assigner = TypeAssigner(self.c, self._route_ok)
+        use_merge = (
+            self.cfg.merge
+            if self.cfg.merge is not None
+            else self.c.n_types > 1 or self.c.has_reload
+        )
+        self.merger = (
+            RouteMerger(self.c, self._insertion, self._route_ok, self.assigner)
+            if use_merge
+            else None
+        )
+        self.local = (
+            LocalSearch(self.c) if self.cfg.local_search and local_search_applies(self.c) else None
+        )
+        self.pool = RoutePool(self.c) if self.cfg.setpart else None
+        self._sp_every = self.cfg.sp_every or max(250, self.cfg.iterations // 8)
+        self.sp_calls = self.sp_improved = 0
+        self.sp_seconds = 0.0
         self.destroy = _Destroy(self.c, self.rng)
         self.d_weights = [1.0] * len(DESTROY_OPERATORS)
         self.r_weights = [1.0] * len(REPAIR_OPERATORS)
@@ -308,7 +348,7 @@ class Alns:
         )
 
     def _served(self, sol: Solution) -> list[int]:
-        return sorted({self.c.node_req[n] for r in sol.routes for n in r.nodes})
+        return sorted(self.c.requests_of(n for r in sol.routes for n in r.nodes))
 
     def _removal_count(self, n_served: int) -> int:
         cfg = self.cfg
@@ -341,8 +381,37 @@ class Alns:
         n_op = _roulette(self.n_weights, self.rng)
         partial = self._destroy(d_op, cur)
         noise = self.cfg.noise if n_op == 1 else 0.0
-        cand = self.repair(partial, r_op + 1, noise, self.rng.getrandbits(63), cap)
-        return self.assigner.improve(cand), d_op, r_op, n_op
+        cand = self.assigner.improve(
+            self.repair(partial, r_op + 1, noise, self.rng.getrandbits(63), cap)
+        )
+        if self.merger is not None and self.iteration % max(1, self.cfg.merge_every) == 0:
+            cand = self.merger.improve(cand)
+        return cand, d_op, r_op, n_op
+
+    def _polish(self, sol: Solution) -> Solution:
+        """Merge scan and local search on a plan about to become the best one."""
+        if self.merger is not None:
+            sol = self.merger.improve(sol)
+        if self.local is not None:
+            sol = self.local.improve(sol)
+        return sol
+
+    def _setpart(self, best: Solution) -> tuple[Solution, float] | None:
+        """Best recombination of pool routes, if it beats ``best``."""
+        assert self.pool is not None
+        res = solve_set_partitioning(self.pool, best, time_limit=self.cfg.sp_time)
+        self.sp_calls += 1
+        self.sp_seconds += res.seconds
+        if res.solution is None:
+            return None
+        sol = self._polish(self.assigner.improve(res.solution))
+        obj = search_objective(self.inst, sol)
+        if obj >= search_objective(self.inst, best) - 1e-9:
+            return None
+        self.sp_improved += 1
+        self.pool.add(sol)
+        self._record(sol, obj)
+        return sol, obj
 
     def _money(self, sol: Solution) -> float:
         return evaluate(self.inst, sol).total
@@ -386,6 +455,9 @@ class Alns:
             obj = search_objective(self.inst, cand)
             score = 0.0
             if obj < best_obj - 1e-9:
+                polished = self._polish(cand)
+                if polished is not cand:
+                    cand, obj = polished, search_objective(self.inst, polished)
                 best, best_obj = cand, obj
                 cur, cur_obj = cand, obj
                 score = cfg.score_best
@@ -396,6 +468,13 @@ class Alns:
             elif obj > cur_obj + 1e-9 and self.rng.random() < math.exp(-(obj - cur_obj) / temp):
                 cur, cur_obj = cand, obj
                 score = cfg.score_accepted
+            if score > 0.0 and self.pool is not None:
+                self.pool.add(cand)
+            if self.pool is not None and self.iteration % self._sp_every == 0:
+                found = self._setpart(best)
+                if found is not None:
+                    best, best_obj = found
+                    cur, cur_obj = found
             scores_d[d_op] += score
             uses_d[d_op] += 1
             scores_r[r_op] += score
@@ -429,7 +508,7 @@ class Alns:
         if self.kernel is not None:
             ok: bool = self.kernel.exact_feasible_route(t, nodes)
             return ok
-        return exact_feasible(self.c, t, nodes)
+        return route_exact(self.c, t, nodes)
 
     def _eject_insert(self, sol: Solution, v: int, penalty: list[int]) -> Solution | None:
         """Guided ejection (Nagata & Braysy 2009): fit ``v`` by ejecting <= 2 orders.
@@ -457,7 +536,7 @@ class Alns:
         for ri, route in enumerate(sol.routes):
             if route.vehicle_type not in c.allowed[v]:
                 continue
-            on = sorted({c.node_req[n] for n in route.nodes})
+            on = sorted(c.requests_of(route.nodes))
             options.append((0, ri, ()))
             options += [(penalty[a], ri, (a,)) for a in on]
             options += [
@@ -510,7 +589,7 @@ class Alns:
             # Try the smallest route first, then the next ones after a failure.
             ranked = sorted(used, key=lambda r: (len(r.nodes), r.nodes[0]))
             victim = ranked[min(failures, len(ranked) - 1)]
-            drop = {self.c.node_req[n] for n in victim.nodes}
+            drop = self.c.requests_of(victim.nodes)
             cur = self.assigner.improve(
                 self.repair(
                     remove_requests(self.c, best, drop), 2, 0.0, self.rng.getrandbits(63), target
@@ -546,6 +625,8 @@ class Alns:
                 continue
             failures = 0
             best = cur
+            if self.pool is not None:
+                self.pool.add(best)
             self._record(best, search_objective(self.inst, best))
         return best, budget - iterations
 
@@ -558,8 +639,10 @@ class Alns:
         )
         if start.unassigned:
             start = self.repair(start, 2, 0.0, cfg.seed, None)
-        start = self.assigner.improve(start)
+        start = self._polish(self.assigner.improve(start))
         self._record(start, search_objective(self.inst, start))
+        if self.pool is not None:
+            self.pool.add(start)
         best = start
         total = cfg.iterations
         limit = cfg.time_limit
@@ -581,6 +664,10 @@ class Alns:
         best = self._anneal(
             best, iterations=max(0, total), limit=limit, cap=None, stop_when_complete=False
         )
+        if self.pool is not None:
+            found = self._setpart(best)
+            if found is not None:
+                best = found[0]
         objective = search_objective(self.inst, best)
         return SolveResult(
             instance=self.inst.name,
@@ -598,6 +685,10 @@ class Alns:
             repair_weights={
                 n: round(w, 3) for n, w in zip(REPAIR_OPERATORS, self.r_weights, strict=True)
             },
+            sp_calls=self.sp_calls,
+            sp_improved=self.sp_improved,
+            sp_seconds=round(self.sp_seconds, 3),
+            pool_size=0 if self.pool is None else len(self.pool),
         )
 
 

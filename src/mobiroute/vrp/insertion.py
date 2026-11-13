@@ -30,6 +30,23 @@ that carry one are checked lazily: candidates that pass the fast tests are
 sorted by cost and the cheapest ones are timed exactly with Bellman-Ford
 (:mod:`mobiroute.vrp.schedule`).
 
+Driver rests
+------------
+A rest of ``b`` minutes taken between the services at positions ``k`` and
+``k+1`` changes one constraint: ``B[k+1] >= B[k] + s_k + t(k, k+1) + b``.
+For a fixed place of the rest the schedule is still a system of difference
+constraints, so a route is feasible iff some place admitted by the driving
+rule (neither side drives more than ``D``) gives a graph without a negative
+cycle. Rests only add time, so the fast tests above are necessary
+conditions; routes of a type with a rest rule are checked lazily, after a
+constant-time filter on the daily driving limit ``2 D``.
+
+Reloads
+-------
+A multi-trip route visits reload stops. Loads are kept per trip: deliveries
+from the depot ride from the start of their trip, collections until its end,
+pairs from pickup to delivery whatever reloads lie between.
+
 This module is the reference implementation. ``mobiroute_native`` mirrors it
 operation for operation, and the parity tests hold both to identical output.
 """
@@ -39,6 +56,7 @@ from __future__ import annotations
 import math
 from collections.abc import Iterable, Sequence
 
+from mobiroute.vrp import traffic
 from mobiroute.vrp.model import Instance
 from mobiroute.vrp.schedule import TIME_EPS
 from mobiroute.vrp.solution import MUST_SERVE_PENALTY, Route, Solution
@@ -131,6 +149,100 @@ class Compiled:
         ]
         self.node_req = [inst.request_of(k) for k in range(self.n)]
         self.max_cost = max(max(max(row) for row in m) for m in self.cost)
+        #: Vehicle type reloading at each node, ``-1`` for every other node.
+        self.reload_of = [inst.reload_type_of(k) for k in range(self.n)]
+        self.has_reload = any(vt.reload_nodes for vt in types)
+        self.max_reloads = [vt.max_trips - 1 for vt in types]
+        self.reload_nodes = [vt.reload_nodes for vt in types]
+        #: Rest rule per type: most driving between rests (inf: no rule), rest length.
+        self.brk_drive = [math.inf if vt.breaks is None else vt.breaks.max_driving for vt in types]
+        self.brk_len = [0.0 if vt.breaks is None else vt.breaks.duration for vt in types]
+        #: Speed by time of day per type (``None``: static travel times).
+        self.speed = [inst.profiles[vt.profile].speed for vt in types]
+        self.has_traffic = any(sp is not None for sp in self.speed)
+
+    def requests_of(self, nodes: Iterable[int]) -> set[int]:
+        """Requests served at ``nodes`` (reload stops belong to none)."""
+        req = self.node_req
+        return {req[n] for n in nodes if req[n] >= 0}
+
+
+def single_trip_loads(c: Compiled, nodes: Sequence[int]) -> list[list[float]]:
+    """Loads after positions ``0..m`` of a route without reloads.
+
+    Orders whose delivery is on the route but whose pickup is not (depot
+    deliveries, or orders already on board in dispatch) ride from the start.
+    """
+    dims = c.dims
+    initial = [0.0] * dims
+    present = set(nodes)
+    for node in nodes:
+        r = c.node_req[node]
+        if node == c.deliv[r] and c.pick[r] not in present:
+            q = c.demand[r]
+            for d in range(dims):
+                initial[d] += q[d]
+    load: list[list[float]] = [list(initial)]
+    cur = initial
+    for node in nodes:
+        r = c.node_req[node]
+        q = c.demand[r]
+        sign = 1.0 if node == c.pick[r] else -1.0
+        cur = [cur[d] + sign * q[d] for d in range(dims)]
+        load.append(cur)
+    return load
+
+
+def trip_loads(c: Compiled, nodes: Sequence[int]) -> tuple[list[list[float]], list[int]]:
+    """Loads after positions ``0..m`` and the start position of each one's trip.
+
+    A reload stop unloads what the trip collected and loads the deliveries
+    of the next trip; pairs stay on board across it.
+    """
+    dims = c.dims
+    present = set(nodes)
+    trip_of: list[int] = []
+    trip = 0
+    for node in nodes:
+        if c.reload_of[node] >= 0:
+            trip += 1
+        trip_of.append(trip)
+    start = [[0.0] * dims for _ in range(trip + 1)]
+    for idx, node in enumerate(nodes):
+        r = c.node_req[node]
+        if r >= 0 and node == c.deliv[r] and c.pick[r] not in present:
+            q = c.demand[r]
+            row = start[trip_of[idx]]
+            for d in range(dims):
+                row[d] += q[d]
+    cur = list(start[0])
+    collected = [0.0] * dims
+    load: list[list[float]] = [list(cur)]
+    trip_start = [0]
+    for idx, node in enumerate(nodes):
+        if c.reload_of[node] >= 0:
+            nxt = start[trip_of[idx]]
+            cur = [cur[d] - collected[d] + nxt[d] for d in range(dims)]
+            collected = [0.0] * dims
+            trip_start.append(idx + 1)
+        else:
+            r = c.node_req[node]
+            q = c.demand[r]
+            if node == c.pick[r]:
+                cur = [cur[d] + q[d] for d in range(dims)]
+                if c.deliv[r] < 0:
+                    collected = [collected[d] + q[d] for d in range(dims)]
+            else:
+                cur = [cur[d] - q[d] for d in range(dims)]
+            trip_start.append(trip_start[-1])
+        load.append(cur)
+    return load, trip_start
+
+
+def route_loads(c: Compiled, nodes: Sequence[int]) -> list[list[float]]:
+    if c.has_reload and any(c.reload_of[n] >= 0 for n in nodes):
+        return trip_loads(c, nodes)[0]
+    return single_trip_loads(c, nodes)
 
 
 class RouteState:
@@ -141,6 +253,7 @@ class RouteState:
         "a_pre",
         "a_suf",
         "begin",
+        "drive",
         "dynamic",
         "fits_cache",
         "fresh",
@@ -154,6 +267,7 @@ class RouteState:
         "nodes",
         "seq",
         "t",
+        "trip_start",
     )
 
     def __init__(
@@ -190,40 +304,36 @@ class RouteState:
         e, lat, s = c.e, c.l, c.s
         begin = [0.0] * m2
         begin[0] = c.t_min[t] if ready is None else ready
-        for k in range(1, m2):
-            a, b = seq[k - 1], seq[k]
-            arr = begin[k - 1] + s[a] + time[a][b]
-            eb = e[b]
-            begin[k] = arr if arr > eb else eb
         lim = [lat[node] for node in seq]
         lim[0] = c.start_lim[t] if origin is None else math.inf
         lim[-1] = c.end_lim[t] if end_by is None else min(c.end_lim[t], end_by)
-        late = [0.0] * m2
-        late[-1] = lim[-1]
-        for k in range(m2 - 2, -1, -1):
-            a, b = seq[k], seq[k + 1]
-            back = late[k + 1] - s[a] - time[a][b]
-            late[k] = lim[k] if lim[k] < back else back
+        speed = c.speed[t]
+        if speed is not None:
+            begin = traffic.forward(speed, seq, begin[0], e, s, time)
+            late = traffic.backward(speed, seq, lim, s, time)
+        else:
+            for k in range(1, m2):
+                a, b = seq[k - 1], seq[k]
+                arr = begin[k - 1] + s[a] + time[a][b]
+                eb = e[b]
+                begin[k] = arr if arr > eb else eb
+            late = [0.0] * m2
+            late[-1] = lim[-1]
+            for k in range(m2 - 2, -1, -1):
+                a, b = seq[k], seq[k + 1]
+                back = late[k + 1] - s[a] - time[a][b]
+                late[k] = lim[k] if lim[k] < back else back
         self.begin = begin
         self.late = late
-        dims = c.dims
-        initial = [0.0] * dims
-        present = set(nodes)
-        for node in nodes:
-            r = c.node_req[node]
-            if node == c.deliv[r] and c.pick[r] not in present:
-                q = c.demand[r]
-                for d in range(dims):
-                    initial[d] += q[d]
-        load: list[list[float]] = [list(initial)]
-        cur = initial
-        for node in nodes:
-            r = c.node_req[node]
-            q = c.demand[r]
-            sign = 1.0 if node == c.pick[r] else -1.0
-            cur = [cur[d] + sign * q[d] for d in range(dims)]
-            load.append(cur)
-        self.load = load  # positions 0..m (the end depot adds nothing)
+        drive = 0.0
+        for k in range(1, m2):
+            drive += time[seq[k - 1]][seq[k]]
+        self.drive = drive
+        self.trip_start: list[int] | None = None
+        if c.has_reload and any(c.reload_of[node] >= 0 for node in nodes):
+            self.load, self.trip_start = trip_loads(c, self.nodes)
+        else:
+            self.load = single_trip_loads(c, self.nodes)  # positions 0..m
         self.fits_cache: dict[int, list[bool]] = {}
         # Shift-length data (module docstring): H, G0, extrema of l - H and e + G.
         h = [0.0] * m2
@@ -262,11 +372,33 @@ class RouteState:
         self.a_pre = a_pre
         self.a_suf = a_suf
         self.a_max = a_pre[-1]
-        self.has_ride = c.has_ride and any(c.max_ride[c.node_req[n]] < math.inf for n in nodes)
+        self.has_ride = c.has_ride and any(
+            c.node_req[n] >= 0 and c.max_ride[c.node_req[n]] < math.inf for n in nodes
+        )
 
     @property
     def feasible(self) -> bool:
         return all(b <= lt + EPS for b, lt in zip(self.begin, self.late, strict=True))
+
+    def single_positions(self, fits: list[bool], *, prefix: bool) -> list[int]:
+        """Positions after which a single-node order fits on board, trip by trip.
+
+        A delivery from the depot rides from the start of its trip to its
+        stop, so every load from the trip start to the position must have
+        room; a collection rides from its stop to the end of its trip.
+        """
+        trip_start = self.trip_start
+        assert trip_start is not None
+        m = len(self.seq) - 2
+        ok = [False] * (m + 1)
+        if prefix:
+            for i in range(m + 1):
+                ok[i] = fits[i] and (trip_start[i] == i or ok[i - 1])
+        else:
+            for i in range(m, -1, -1):
+                ends_here = i == m or trip_start[i + 1] == i + 1
+                ok[i] = fits[i] and (ends_here or ok[i + 1])
+        return [i for i in range(m + 1) if ok[i]]
 
     def fits(self, c: Compiled, r: int) -> list[bool]:
         """Whether request ``r`` fits on board after each position 0..m."""
@@ -339,14 +471,17 @@ def _min_duration_ok(
     return duration <= c.max_dur[t] + EPS
 
 
-def exact_feasible(c: Compiled, t: int, nodes: Sequence[int]) -> bool:
+def exact_feasible(
+    c: Compiled, t: int, nodes: Sequence[int], *, rest_arc: int = -1, rest: float = 0.0
+) -> bool:
     """Exact timing test of a fixed sequence, ride and shift limits included.
 
     Same constraint graph as :func:`mobiroute.vrp.schedule.route_arcs`, kept
     in three flat lists instead of labelled objects: Bellman-Ford from the
     zero clock over arcs relaxed head to tail, so travel arcs in route order
     settle the earliest schedule in one pass and the loop usually stops after
-    two or three. A negative cycle means no schedule exists.
+    two or three. A negative cycle means no schedule exists. ``rest_arc``
+    lengthens one travel constraint by ``rest`` minutes (a driver's rest).
     """
     seq = [c.start[t], *nodes, c.end[t]]
     m = len(seq)
@@ -376,12 +511,12 @@ def exact_feasible(c: Compiled, t: int, nodes: Sequence[int]) -> bool:
         a, b = seq[k], seq[k + 1]
         tails.append(k + 1)
         heads.append(k)
-        weights.append(-(s[a] + time[a][b]))
+        weights.append(-(s[a] + time[a][b] + rest) if k == rest_arc else -(s[a] + time[a][b]))
     where = {node: k for k, node in enumerate(seq) if 0 < k < last}
     for k in range(1, last):
         node = seq[k]
         r = c.node_req[node]
-        if c.pick[r] == node and c.max_ride[r] < math.inf:
+        if r >= 0 and c.pick[r] == node and c.max_ride[r] < math.inf:
             kd = where.get(c.deliv[r])
             if kd is not None:
                 tails.append(k)
@@ -429,14 +564,19 @@ def best_insertion(c: Compiled, st: RouteState, r: int) -> Candidate | None:
     if t not in c.allowed[r]:
         return None
     p, d = c.pick[r], c.deliv[r]
-    lazy = c.has_ride and (st.has_ride or c.max_ride[r] < math.inf)
+    rests = c.brk_drive[t] < math.inf
+    timed = c.speed[t] is not None
+    lazy = (c.has_ride and (st.has_ride or c.max_ride[r] < math.inf)) or rests or timed
     check_dur = not lazy and not st.dynamic and c.max_dur[t] < math.inf
     fits = st.fits(c, r)
     m = len(st.seq) - 2
     extra = c.svc_rate[t] * ((c.s[p] if p >= 0 else 0.0) + (c.s[d] if d >= 0 else 0.0))
     if m == 0 and st.fresh:
         extra += c.open_cost[t]
-    if p >= 0 and d >= 0:
+    if timed:
+        positions = [] if p >= 0 and d >= 0 else list(_single_positions(st, fits, prefix=d >= 0))
+        found = traffic.candidates(c, st, r, fits, extra, positions)
+    elif p >= 0 and d >= 0:
         found = _pair_candidates(c, st, p, d, fits, extra, check_dur, lazy)
     elif d >= 0:
         found = _single_candidates(c, st, d, fits, extra, check_dur, lazy, prefix=True)
@@ -444,6 +584,9 @@ def best_insertion(c: Compiled, st: RouteState, r: int) -> Candidate | None:
         found = _single_candidates(c, st, p, fits, extra, check_dur, lazy, prefix=False)
     if not lazy:
         return found[0] if found else None
+    if rests:
+        room = 2.0 * c.brk_drive[t] - st.drive + EPS
+        found = [cand for cand in found if _drive_delta(c, st, p, d, cand[1], cand[2]) <= room]
     found.sort()
     for cand in found[:LAZY_CHECKS]:
         _, i, j = cand
@@ -451,9 +594,77 @@ def best_insertion(c: Compiled, st: RouteState, r: int) -> Candidate | None:
             nodes = _splice(st.nodes, i, j, p, d)
         else:
             nodes = _splice(st.nodes, i, -1, p if p >= 0 else d, -1)
-        if exact_feasible(c, t, nodes):
+        if route_exact(c, t, nodes):
             return cand
     return None
+
+
+def _drive_delta(c: Compiled, st: RouteState, p: int, d: int, i: int, j: int) -> float:
+    """Extra driving time of inserting ``p``/``d`` at positions ``i``/``j``."""
+    time = c.time[st.t]
+    seq = st.seq
+    a, b = seq[i], seq[i + 1]
+    if p < 0 or d < 0:
+        u = p if p >= 0 else d
+        return time[a][u] + time[u][b] - time[a][b]
+    if j == i:
+        return time[a][p] + time[p][d] + time[d][b] - time[a][b]
+    cj, nx = seq[j], seq[j + 1]
+    return (time[a][p] + time[p][b] - time[a][b]) + (time[cj][d] + time[d][nx] - time[cj][nx])
+
+
+def route_exact(c: Compiled, t: int, nodes: Sequence[int]) -> bool:
+    """Exact feasibility of a fixed sequence, the rest rule included.
+
+    Without a rule (or with at most ``D`` minutes of driving) this is
+    :func:`exact_feasible`. Otherwise the route needs one rest: in the gap
+    after position ``k`` the driver may rest before or after driving leg
+    ``k``, so the gap is admissible iff the driving done before the rest,
+    ``P_k`` or ``P_{k+1}``, lies in ``[total - D, D]``. Each admissible gap
+    is timed with its travel constraint lengthened by the rest.
+    """
+    if c.speed[t] is not None:
+        return traffic.route_ok(c, t, nodes)
+    limit = c.brk_drive[t]
+    if limit == math.inf:
+        return exact_feasible(c, t, nodes)
+    time = c.time[t]
+    seq = [c.start[t], *nodes, c.end[t]]
+    legs = [time[seq[k]][seq[k + 1]] for k in range(len(seq) - 1)]
+    total = 0.0
+    for leg in legs:
+        total += leg
+    if total <= limit + EPS:
+        return exact_feasible(c, t, nodes)
+    if total > 2.0 * limit + EPS:
+        return False
+    low = total - limit - EPS
+    high = limit + EPS
+    done = 0.0
+    for k, leg in enumerate(legs):
+        after = done + leg
+        if (low <= done <= high or low <= after <= high) and exact_feasible(
+            c, t, nodes, rest_arc=k, rest=c.brk_len[t]
+        ):
+            return True
+        done = after
+    return False
+
+
+def _single_positions(st: RouteState, fits: list[bool], *, prefix: bool) -> Iterable[int]:
+    """Positions after which a single-node order fits on board."""
+    m = len(st.seq) - 2
+    if st.trip_start is not None:
+        return st.single_positions(fits, prefix=prefix)
+    if prefix:
+        last = 0
+        while last <= m and fits[last]:
+            last += 1
+        return range(last)
+    first = m + 1
+    while first > 0 and fits[first - 1]:
+        first -= 1
+    return range(first, m + 1)
 
 
 def _single_candidates(
@@ -473,20 +684,12 @@ def _single_candidates(
     s = c.s
     eu, lu, su = c.e[u], c.l[u], c.s[u]
     tu, cu = time[u], cost[u]
-    m = len(seq) - 2
     best: Candidate | None = None
     out: list[Candidate] = []
     # A delivery loaded at the depot rides every leg before its stop; a
     # collection rides every leg after it. ``first`` is the first position
     # from which every later load still has room for a collection.
-    first = 0
-    if not prefix:
-        first = m + 1
-        while first > 0 and fits[first - 1]:
-            first -= 1
-    for i in range(first, m + 1):
-        if prefix and not fits[i]:
-            break
+    for i in _single_positions(st, fits, prefix=prefix):
         a, b = seq[i], seq[i + 1]
         arr = begin[i] + s[a] + time[a][u]
         bu = arr if arr > eu else eu
@@ -595,9 +798,23 @@ def remove_requests(c: Compiled, solution: Solution, requests: Iterable[int]) ->
     routes = []
     for route in solution.routes:
         kept = [n for n in route.nodes if n not in nodes_out]
+        if c.has_reload:
+            kept = tidy_reloads(c, kept)
         if kept:
             routes.append(Route(route.vehicle_type, kept))
     return Solution(routes, set(solution.unassigned) | drop)
+
+
+def tidy_reloads(c: Compiled, nodes: list[int]) -> list[int]:
+    """Drop reload stops that end an empty trip: first, last or repeated ones."""
+    out: list[int] = []
+    for node in nodes:
+        if c.reload_of[node] >= 0 and (not out or c.reload_of[out[-1]] >= 0):
+            continue
+        out.append(node)
+    while out and c.reload_of[out[-1]] >= 0:
+        out.pop()
+    return out
 
 
 class _Slot:

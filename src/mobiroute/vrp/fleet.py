@@ -23,7 +23,7 @@ import math
 from collections.abc import Callable, Sequence
 from itertools import pairwise
 
-from mobiroute.vrp.insertion import EPS, Compiled
+from mobiroute.vrp.insertion import EPS, Compiled, route_loads
 from mobiroute.vrp.solution import Route, Solution
 
 RouteCheck = Callable[[int, list[int]], bool]
@@ -40,21 +40,9 @@ def route_money(c: Compiled, t: int, nodes: Sequence[int]) -> float:
 
 
 def _peak(c: Compiled, nodes: Sequence[int]) -> list[float]:
-    present = set(nodes)
-    load = [0.0] * c.dims
-    for n in nodes:
-        r = c.node_req[n]
-        if n == c.deliv[r] and c.pick[r] not in present:
-            for d in range(c.dims):
-                load[d] += c.demand[r][d]
-    peak = list(load)
-    for n in nodes:
-        r = c.node_req[n]
-        sign = 1.0 if n == c.pick[r] else -1.0
-        for d in range(c.dims):
-            load[d] += sign * c.demand[r][d]
-            peak[d] = max(peak[d], load[d])
-    return peak
+    """Highest load per dimension along a route (per trip if it reloads)."""
+    rows = route_loads(c, nodes)
+    return [max(row[d] for row in rows) for d in range(c.dims)]
 
 
 def min_cost_assignment(
@@ -134,10 +122,12 @@ class TypeAssigner:
         if cached is not None and route.vehicle_type in cached:
             return cached
         c = self.c
-        requests = {c.node_req[n] for n in route.nodes}
         allowed = set(range(c.n_types))
-        for r in requests:
+        for r in c.requests_of(route.nodes):
             allowed &= set(c.allowed[r])
+        if c.has_reload and any(c.reload_of[n] >= 0 for n in route.nodes):
+            # Reload stops belong to one vehicle type.
+            allowed = {route.vehicle_type}
         peak = _peak(c, route.nodes)
         found: dict[int, float] = {}
         for t in sorted(allowed | {route.vehicle_type}):

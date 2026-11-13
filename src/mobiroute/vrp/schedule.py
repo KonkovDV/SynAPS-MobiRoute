@@ -6,7 +6,9 @@ of the form ``B[head] - B[tail] <= weight`` on service-start times ``B``:
 * window ``e <= B[k] <= l`` (through a zero clock ``z``),
 * travel ``B[k+1] >= B[k] + service[k] + travel(k, k+1)``,
 * ride limit ``B[delivery] - (B[pickup] + service[pickup]) <= L``,
-* shift length ``B[end] - B[start] <= T``.
+* shift length ``B[end] - B[start] <= T``,
+* a driver's rest of ``b`` minutes in the gap after stop ``k``:
+  ``B[k+1] >= B[k] + service[k] + travel(k, k+1) + b``.
 
 Such a system is feasible iff its constraint graph has no negative cycle
 (CLRS 24.4). Bellman-Ford then gives, from one source, the earliest schedule,
@@ -21,6 +23,7 @@ from __future__ import annotations
 import math
 from collections.abc import Sequence
 from dataclasses import dataclass
+from itertools import pairwise
 
 from mobiroute.vrp.model import Instance
 
@@ -111,16 +114,26 @@ class RouteTiming:
     latest: tuple[float, ...]
     min_duration: float
     infeasibility: Infeasibility | None
+    #: Gap holding the driver's rest (between stops ``k`` and ``k+1`` of
+    #: ``start + nodes + end``), ``None`` when the route needs no rest.
+    rest_gap: int | None = None
+    driving: float = 0.0
 
 
 def route_arcs(
-    inst: Instance, vehicle_type: int, nodes: Sequence[int], *, slack: float = 0.0
+    inst: Instance,
+    vehicle_type: int,
+    nodes: Sequence[int],
+    *,
+    slack: float = 0.0,
+    rest_gap: int | None = None,
 ) -> tuple[int, list[Arc]]:
     """Constraint graph of ``start depot + nodes + end depot``.
 
     Vertices ``0..m+1`` are stops in order and ``m+2`` is the zero clock.
     ``slack`` widens every upper window bound; :mod:`mobiroute.vrp.lateness`
-    uses it to price a late schedule.
+    uses it to price a late schedule. ``rest_gap`` puts the type's driver
+    rest between stops ``rest_gap`` and ``rest_gap + 1``.
     """
     vt = inst.vehicle_types[vehicle_type]
     profile = inst.profiles[vt.profile]
@@ -141,10 +154,13 @@ def route_arcs(
     for k in range(m - 1):
         a, b = seq[k], seq[k + 1]
         gap = inst.nodes[a].service + profile.time[a][b]
-        arcs.append(Arc(k + 1, k, -gap, f"TRAVEL:{a}->{b}"))
+        if k == rest_gap and vt.breaks is not None:
+            arcs.append(Arc(k + 1, k, -(gap + vt.breaks.duration), f"TRAVEL+REST:{a}->{b}"))
+        else:
+            arcs.append(Arc(k + 1, k, -gap, f"TRAVEL:{a}->{b}"))
     position = {node: k for k, node in enumerate(seq) if 0 < k < m - 1}
     for k, node in enumerate(seq):
-        if not 0 < k < m - 1:
+        if not 0 < k < m - 1 or inst.request_of(node) < 0:
             continue
         req = inst.requests[inst.request_of(node)]
         if req.max_ride is None or req.pickup != node or req.delivery not in position:
@@ -156,20 +172,112 @@ def route_arcs(
     return z, arcs
 
 
-def route_timing(inst: Instance, vehicle_type: int, nodes: Sequence[int]) -> RouteTiming:
-    """Earliest and latest schedules and the shortest feasible duration."""
-    z, arcs = route_arcs(inst, vehicle_type, nodes)
+def _timing_with(
+    inst: Instance, vehicle_type: int, nodes: Sequence[int], rest_gap: int | None, driving: float
+) -> RouteTiming:
+    z, arcs = route_arcs(inst, vehicle_type, nodes, rest_gap=rest_gap)
     m = z
     n_vertices = m + 1
     to_zero, cycle = shortest_paths(n_vertices, arcs, z, to_root=True)
     if to_zero is None:
-        return RouteTiming(False, (), (), math.inf, certificate(cycle))
+        return RouteTiming(False, (), (), math.inf, certificate(cycle), rest_gap, driving)
     from_zero, _ = shortest_paths(n_vertices, arcs, z, to_root=False)
     from_end, _ = shortest_paths(n_vertices, arcs, m - 1, to_root=False)
     assert from_zero is not None and from_end is not None
     earliest = tuple(-to_zero[k] for k in range(m))
     latest = tuple(from_zero[k] for k in range(m))
-    return RouteTiming(True, earliest, latest, -from_end[0], None)
+    return RouteTiming(True, earliest, latest, -from_end[0], None, rest_gap, driving)
+
+
+def _timing_traffic(inst: Instance, vehicle_type: int, nodes: Sequence[int]) -> RouteTiming:
+    """Exact timing under time-dependent travel (FIFO).
+
+    The earliest schedule decides the windows; the first stop it reaches
+    too late is the certificate. The shortest duration is the minimum over
+    the departures at which the duration function can bend
+    (:func:`mobiroute.vrp.traffic.duration_candidates`).
+    """
+    from mobiroute.vrp.traffic import arrive, backward, duration_candidates, forward
+
+    vt = inst.vehicle_types[vehicle_type]
+    profile = inst.profiles[vt.profile]
+    speed = profile.speed
+    assert speed is not None
+    seq = [vt.start_depot, *nodes, vt.end_depot]
+    e_all = [nd.earliest for nd in inst.nodes]
+    s_all = [nd.service for nd in inst.nodes]
+    start = inst.nodes[vt.start_depot]
+    lo0 = max(start.earliest, vt.shift_start)
+    lim = [inst.nodes[node].latest for node in seq]
+    lim[0] = min(start.latest, vt.shift_end)
+    lim[-1] = min(lim[-1], vt.shift_end)
+    begin = forward(speed, seq, lo0, e_all, s_all, profile.time)
+    driving = math.fsum(
+        arrive(speed, begin[k] + s_all[a], profile.time[a][b]) - (begin[k] + s_all[a])
+        for k, (a, b) in enumerate(pairwise(seq))
+    )
+    for k, (start_k, hi) in enumerate(zip(begin, lim, strict=True)):
+        if start_k > hi + TIME_EPS:
+            late_by = Infeasibility(round(start_k - hi, 6), (f"LATEST:{seq[k]}", "TRAFFIC"))
+            return RouteTiming(False, (), (), math.inf, late_by, None, driving)
+    latest = backward(speed, seq, lim, s_all, profile.time)
+    options = [lo0, latest[0]] + [
+        x
+        for x in duration_candidates(speed, seq, e_all, s_all, profile.time)
+        if lo0 <= x <= latest[0]
+    ]
+    shortest = min(forward(speed, seq, x, e_all, s_all, profile.time)[-1] - x for x in options)
+    if vt.max_duration is not None and shortest > vt.max_duration + TIME_EPS:
+        over = Infeasibility(round(shortest - vt.max_duration, 6), ("DURATION", "TRAFFIC"))
+        return RouteTiming(False, (), (), math.inf, over, None, driving)
+    return RouteTiming(True, tuple(begin), tuple(latest), shortest, None, None, driving)
+
+
+def route_timing(inst: Instance, vehicle_type: int, nodes: Sequence[int]) -> RouteTiming:
+    """Earliest and latest schedules and the shortest feasible duration.
+
+    With a rest rule and more driving than it allows without a rest, every
+    gap whose driving split is admissible is tried in order and the first
+    one that admits a schedule is reported. If none does, the certificate is
+    the one of the gap that misses by the fewest minutes; a route that
+    drives more than twice the limit gets a ``DRIVING`` certificate.
+    """
+    vt = inst.vehicle_types[vehicle_type]
+    if inst.profiles[vt.profile].speed is not None:
+        return _timing_traffic(inst, vehicle_type, nodes)
+    time = inst.profiles[vt.profile].time
+    seq = [vt.start_depot, *nodes, vt.end_depot]
+    legs = [time[a][b] for a, b in pairwise(seq)]
+    driving = math.fsum(legs)
+    rule = vt.breaks
+    if rule is None or driving <= rule.max_driving + TIME_EPS:
+        return _timing_with(inst, vehicle_type, nodes, None, driving)
+    if driving > 2 * rule.max_driving + TIME_EPS:
+        short = Infeasibility(round(driving - 2 * rule.max_driving, 6), ("DRIVING",))
+        return RouteTiming(False, (), (), math.inf, short, None, driving)
+    best: RouteTiming | None = None
+    done = 0.0
+    for k, leg in enumerate(legs):
+        before, after = done, done + leg
+        done = after
+        if not any(
+            driving - rule.max_driving - TIME_EPS <= x <= rule.max_driving + TIME_EPS
+            for x in (before, after)
+        ):
+            continue
+        timing = _timing_with(inst, vehicle_type, nodes, k, driving)
+        if timing.feasible:
+            return timing
+        assert timing.infeasibility is not None
+        if best is None or (
+            best.infeasibility is not None
+            and timing.infeasibility.short_by < best.infeasibility.short_by
+        ):
+            best = timing
+    if best is None:  # no gap splits the driving (a single leg longer than the limit)
+        short = Infeasibility(round(max(legs) - rule.max_driving, 6), ("DRIVING",))
+        return RouteTiming(False, (), (), math.inf, short, None, driving)
+    return best
 
 
 def describe(inst: Instance, labels: Sequence[str], *, lang: str = "en") -> list[str]:

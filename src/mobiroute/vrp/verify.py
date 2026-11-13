@@ -28,6 +28,11 @@ class VerifiedRoute:
     peak_load: tuple[float, ...]
     #: Shortest feasible time from leaving the start depot to reaching the end.
     min_duration: float
+    #: Trips of the day (reload stops plus one).
+    trips: int = 1
+    #: Driving minutes, and the stop after which the driver rests (``None``: no rest).
+    driving: float = 0.0
+    rest_after: int | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -60,13 +65,21 @@ def verify(inst: Instance, solution: Solution) -> Verdict:
         vt.end_depot for vt in inst.vehicle_types
     }
     used_by_type = [0] * len(inst.vehicle_types)
+    reload_seen: set[int] = set()
     for r_idx, route in enumerate(solution.routes):
         if not 0 <= route.vehicle_type < len(inst.vehicle_types):
             violations.append(f"UNKNOWN_VEHICLE_TYPE:{r_idx}")
             continue
         if route.nodes:
             used_by_type[route.vehicle_type] += 1
+        reloads = 0
         for k, node in enumerate(route.nodes):
+            if 0 <= node < inst.n_nodes and inst.reload_type_of(node) == route.vehicle_type:
+                reloads += 1
+                if node in reload_seen:
+                    violations.append(f"DUPLICATE_VISIT:{node}")
+                reload_seen.add(node)
+                continue
             if not 0 <= node < inst.n_nodes or node in depots or inst.request_of(node) < 0:
                 violations.append(f"NOT_A_SERVICE_NODE:{node}")
                 continue
@@ -75,6 +88,9 @@ def verify(inst: Instance, solution: Solution) -> Verdict:
                 continue
             owner_route[node] = r_idx
             position[node] = k
+        vt_route = inst.vehicle_types[route.vehicle_type]
+        if reloads > vt_route.max_trips - 1:
+            violations.append(f"TOO_MANY_TRIPS:{r_idx}:{reloads + 1}>{vt_route.max_trips}")
     for t, used in enumerate(used_by_type):
         vt = inst.vehicle_types[t]
         if used > vt.count:
@@ -118,24 +134,43 @@ def verify(inst: Instance, solution: Solution) -> Verdict:
     for r_idx, route in enumerate(solution.routes):
         if not route.nodes or not 0 <= route.vehicle_type < len(inst.vehicle_types):
             continue
-        if any(owner_route.get(node) != r_idx for node in route.nodes):
+        if any(
+            owner_route.get(node) != r_idx
+            for node in route.nodes
+            if inst.reload_type_of(node) != route.vehicle_type
+        ):
             continue  # malformed route already reported; no load or clock for it
         vt = inst.vehicle_types[route.vehicle_type]
-        load = [0.0] * dims
+        # Split the day into trips at reload stops; each trip loads its own
+        # depot deliveries and unloads its collections at its end.
+        trips: list[list[int]] = [[]]
         for node in route.nodes:
-            req = inst.requests[inst.request_of(node)]
-            if req.pickup is None:  # delivery from the depot: on board from the start
-                load = [a + b for a, b in zip(load, req.demand, strict=True)]
-        peak = list(load)
-        for node in route.nodes:
-            req = inst.requests[inst.request_of(node)]
-            if node == req.pickup:
-                load = [a + b for a, b in zip(load, req.demand, strict=True)]
+            if inst.reload_type_of(node) == route.vehicle_type:
+                trips.append([])
             else:
-                load = [a - b for a, b in zip(load, req.demand, strict=True)]
+                trips[-1].append(node)
+        on_board = [0.0] * dims  # pairs picked up and not yet delivered
+        peak = [0.0] * dims
+        for trip in trips:
+            load = list(on_board)
+            for node in trip:
+                req = inst.requests[inst.request_of(node)]
+                if req.pickup is None:  # delivery from the depot: loaded at trip start
+                    load = [a + b for a, b in zip(load, req.demand, strict=True)]
             peak = [max(a, b) for a, b in zip(peak, load, strict=True)]
-            if any(value < -LOAD_EPS for value in load):
-                violations.append(f"NEGATIVE_LOAD:{r_idx}:{node}")
+            for node in trip:
+                req = inst.requests[inst.request_of(node)]
+                if node == req.pickup:
+                    load = [a + b for a, b in zip(load, req.demand, strict=True)]
+                    if req.is_pair:
+                        on_board = [a + b for a, b in zip(on_board, req.demand, strict=True)]
+                else:
+                    load = [a - b for a, b in zip(load, req.demand, strict=True)]
+                    if req.is_pair:
+                        on_board = [a - b for a, b in zip(on_board, req.demand, strict=True)]
+                peak = [max(a, b) for a, b in zip(peak, load, strict=True)]
+                if any(value < -LOAD_EPS for value in load):
+                    violations.append(f"NEGATIVE_LOAD:{r_idx}:{node}")
         for d, (value, cap) in enumerate(zip(peak, vt.capacity, strict=True)):
             if value > cap + LOAD_EPS:
                 violations.append(f"CAPACITY:{r_idx}:{inst.dimensions[d]}:{value:g}>{cap:g}")
@@ -148,6 +183,10 @@ def verify(inst: Instance, solution: Solution) -> Verdict:
                 + "|".join(sorted(timing.infeasibility.labels))
             )
             continue
+        rest_after = None
+        if timing.rest_gap is not None:
+            seq = [vt.start_depot, *route.nodes, vt.end_depot]
+            rest_after = seq[timing.rest_gap]
         routes.append(
             VerifiedRoute(
                 vehicle_type=vt.id,
@@ -155,6 +194,9 @@ def verify(inst: Instance, solution: Solution) -> Verdict:
                 start_times=timing.earliest,
                 peak_load=tuple(peak),
                 min_duration=timing.min_duration,
+                trips=len(trips),
+                driving=timing.driving,
+                rest_after=rest_after,
             )
         )
     return Verdict(

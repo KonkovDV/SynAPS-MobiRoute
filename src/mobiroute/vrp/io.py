@@ -16,10 +16,12 @@ from typing import Any
 
 from mobiroute.vrp.model import (
     INF,
+    BreakRule,
     Instance,
     Node,
     Profile,
     Request,
+    SpeedProfile,
     VehicleType,
     euclidean_matrix,
     single_profile,
@@ -314,11 +316,22 @@ def instance_to_dict(inst: Instance) -> dict[str, Any]:
                 "skills": sorted(vt.skills),
                 "profile": vt.profile,
                 "hired": vt.hired,
+                "breaks": None
+                if vt.breaks is None
+                else {"max_driving": vt.breaks.max_driving, "duration": vt.breaks.duration},
+                "reload_nodes": list(vt.reload_nodes),
+                "max_trips": vt.max_trips,
             }
             for vt in inst.vehicle_types
         ],
         "profiles": {
-            name: {"time": [list(r) for r in p.time], "distance": [list(r) for r in p.distance]}
+            name: {
+                "time": [list(r) for r in p.time],
+                "distance": [list(r) for r in p.distance],
+                "speed": None
+                if p.speed is None
+                else {"starts": list(p.speed.starts), "factors": list(p.speed.factors)},
+            }
             for name, p in inst.profiles.items()
         },
     }
@@ -336,6 +349,12 @@ def instance_from_dict(data: Mapping[str, Any]) -> Instance:
             name,
             tuple(tuple(float(v) for v in row) for row in p["time"]),
             tuple(tuple(float(v) for v in row) for row in p["distance"]),
+            None
+            if p.get("speed") is None
+            else SpeedProfile(
+                tuple(float(x) for x in p["speed"]["starts"]),
+                tuple(float(x) for x in p["speed"]["factors"]),
+            ),
         )
         for name, p in data["profiles"].items()
     }
@@ -385,6 +404,11 @@ def instance_from_dict(data: Mapping[str, Any]) -> Instance:
                 skills=frozenset(vt.get("skills", ())),
                 profile=str(vt.get("profile", "default")),
                 hired=bool(vt.get("hired", False)),
+                breaks=None
+                if vt.get("breaks") is None
+                else BreakRule(float(vt["breaks"]["max_driving"]), float(vt["breaks"]["duration"])),
+                reload_nodes=tuple(int(x) for x in vt.get("reload_nodes", ())),
+                max_trips=int(vt.get("max_trips", 1)),
             )
             for vt in data["vehicle_types"]
         ),

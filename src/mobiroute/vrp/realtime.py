@@ -101,6 +101,7 @@ class Dispatcher:
     ) -> None:
         if any(r.max_ride is not None for r in inst.requests):
             raise ValueError("REALTIME_RIDE_LIMITS_AS_DEADLINES")
+        inst.require_core_model("REALTIME")
         self.inst = inst
         self.c = Compiled(inst)
         self.policy = policy

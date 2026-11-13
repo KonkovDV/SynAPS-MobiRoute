@@ -49,6 +49,7 @@ def solve_exact(
 ) -> ExactRun:
     from ortools.sat.python import cp_model
 
+    inst.require_core_model("EXACT")
     n_req = inst.n_requests
     dims = len(inst.dimensions)
     units: list[int] = []

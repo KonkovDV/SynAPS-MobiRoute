@@ -59,6 +59,8 @@ def routes_svg(inst: Instance, solution: Solution, *, title: str, size: int = 52
             f"{len(route.nodes)} stops</title></polyline>"
         )
         for n in route.nodes:
+            if inst.request_of(n) < 0:
+                continue  # a reload stop is drawn as its depot
             req = inst.requests[inst.request_of(n)]
             cx, cy = px(inst.nodes[n].x), py(inst.nodes[n].y)
             label = escape(f"{req.id} {'pickup' if n == req.pickup else 'delivery'}")
