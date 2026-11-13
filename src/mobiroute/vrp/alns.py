@@ -32,6 +32,7 @@ from dataclasses import dataclass, field
 from itertools import pairwise
 from typing import Any, Literal
 
+from mobiroute.vrp.fleet import TypeAssigner
 from mobiroute.vrp.insertion import (
     Compiled,
     RouteState,
@@ -277,6 +278,7 @@ class Alns:
         self.rng = random.Random(self.cfg.seed)
         self.repair, self.backend = make_repair(self.c, self.cfg.backend)
         self.kernel = _kernel_for(self.c) if self.backend == "native" else None
+        self.assigner = TypeAssigner(self.c, self._route_ok)
         self.destroy = _Destroy(self.c, self.rng)
         self.d_weights = [1.0] * len(DESTROY_OPERATORS)
         self.r_weights = [1.0] * len(REPAIR_OPERATORS)
@@ -340,7 +342,7 @@ class Alns:
         partial = self._destroy(d_op, cur)
         noise = self.cfg.noise if n_op == 1 else 0.0
         cand = self.repair(partial, r_op + 1, noise, self.rng.getrandbits(63), cap)
-        return cand, d_op, r_op, n_op
+        return self.assigner.improve(cand), d_op, r_op, n_op
 
     def _money(self, sol: Solution) -> float:
         return evaluate(self.inst, sol).total
@@ -509,8 +511,10 @@ class Alns:
             ranked = sorted(used, key=lambda r: (len(r.nodes), r.nodes[0]))
             victim = ranked[min(failures, len(ranked) - 1)]
             drop = {self.c.node_req[n] for n in victim.nodes}
-            cur = self.repair(
-                remove_requests(self.c, best, drop), 2, 0.0, self.rng.getrandbits(63), target
+            cur = self.assigner.improve(
+                self.repair(
+                    remove_requests(self.c, best, drop), 2, 0.0, self.rng.getrandbits(63), target
+                )
             )
             penalty = [1] * self.inst.n_requests
             steps = since_better = 0
@@ -554,6 +558,7 @@ class Alns:
         )
         if start.unassigned:
             start = self.repair(start, 2, 0.0, cfg.seed, None)
+        start = self.assigner.improve(start)
         self._record(start, search_objective(self.inst, start))
         best = start
         total = cfg.iterations
