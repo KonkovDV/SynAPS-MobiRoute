@@ -279,3 +279,43 @@ def test_python_and_route_cost_bookkeeping_agree() -> None:
     assert isinstance(res.solution, Solution)
     assert all(isinstance(r, Route) for r in res.solution.routes)
     assert res.objective == pytest.approx(search_objective(inst, res.solution))
+
+
+def test_min_cost_assignment_matches_brute_force() -> None:
+    import itertools
+    import random as _random
+
+    from mobiroute.vrp.fleet import min_cost_assignment
+
+    rng = _random.Random(4)
+    for _ in range(200):
+        rows, cols = rng.randint(1, 5), rng.randint(1, 4)
+        capacity = [rng.randint(0, 3) for _ in range(cols)]
+        options = []
+        for _r in range(rows):
+            allowed = [k for k in range(cols) if rng.random() < 0.7]
+            options.append({k: float(rng.randint(1, 50)) for k in allowed})
+        best = None
+        for combo in itertools.product(range(cols), repeat=rows):
+            if any(k not in options[r] for r, k in enumerate(combo)):
+                continue
+            if any(combo.count(k) > capacity[k] for k in range(cols)):
+                continue
+            cost = sum(options[r][k] for r, k in enumerate(combo))
+            best = cost if best is None else min(best, cost)
+        got = min_cost_assignment(options, capacity)
+        if best is None:
+            assert got is None
+        else:
+            assert got is not None
+            assert sum(options[r][k] for r, k in enumerate(got)) == pytest.approx(best)
+            assert all(got.count(k) <= capacity[k] for k in range(cols))
+
+
+def test_route_retyping_fixes_the_fleet_mix_trap() -> None:
+    # Seed 1025: the optimum runs its longest route on the type with a fixed
+    # fee and no time cost; insertion alone never opens that vehicle.
+    inst = random_instance(1025, n_requests=8, n_types=3, ride_share=0.4, penalty=1000.0)
+    res = solve(inst, AlnsConfig(iterations=2000, seed=1))
+    assert res.verdict.feasible
+    assert search_objective(inst, res.solution) == pytest.approx(756.3367, abs=1e-3)
