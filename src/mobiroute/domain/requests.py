@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Mapping, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from typing import Any, Self
 
 from pydantic import ConfigDict, Field, PrivateAttr, StrictInt, model_validator
@@ -298,6 +298,8 @@ class TravelMatrix(StrictModel):
     minutes: Sequence[Sequence[StrictInt]]
     _hop: list[list[int]] | None = PrivateAttr(default=None)
     _nxt: list[list[int]] | None = PrivateAttr(default=None)
+    _index: dict[str, int] | None = PrivateAttr(default=None)
+    _minutes_fn: Callable[[ZoneId, ZoneId], TimeMin] | None = PrivateAttr(default=None)
 
     @model_validator(mode="after")
     def _validate_matrix(self) -> Self:
@@ -327,13 +329,35 @@ class TravelMatrix(StrictModel):
         return self._hop, self._nxt
 
     def travel(self, a: ZoneId, b: ZoneId) -> TimeMin:
-        try:
-            i = self.zones.index(a)
-            j = self.zones.index(b)
-        except ValueError as exc:
-            raise KeyError(f"UNKNOWN_ZONE:{a}->{b}") from exc
+        # Read the cached closure through the private-values slot: a plain
+        # private-attribute read costs ~0.5 us via BaseModel.__getattr__.
+        private = self.__pydantic_private__
+        fn = private.get("_minutes_fn") if private else None
+        if fn is None:
+            fn = self.lookup()
+        return fn(a, b)
+
+    def lookup(self) -> Callable[[ZoneId, ZoneId], TimeMin]:
+        """Closure over the shortest-path table: one cache read, then dict lookups.
+
+        Hot loops (route simulation, notary) take it once per route. Unknown zones
+        raise ``KeyError("UNKNOWN_ZONE:a->b")`` exactly like :meth:`travel`.
+        """
         hop, _nxt = self._ensure_graph()
-        return hop[i][j]
+        index = self._index
+        if index is None:
+            index = {zone: k for k, zone in enumerate(self.zones)}
+            self._index = index
+
+        def minutes(a: ZoneId, b: ZoneId) -> TimeMin:
+            i = index.get(a)
+            j = index.get(b)
+            if i is None or j is None:
+                raise KeyError(f"UNKNOWN_ZONE:{a}->{b}")
+            return hop[i][j]
+
+        self._minutes_fn = minutes
+        return minutes
 
     def shortest_path(self, a: ZoneId, b: ZoneId) -> list[ZoneId]:
         try:

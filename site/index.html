@@ -1,0 +1,384 @@
+<!doctype html>
+<html lang="ru" data-lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SynAPS-MobiRoute — маршруты, которым можно верить</title>
+<meta name="description" content="DARP/PDPTW routing kernel: Rust speed, exact CP-SAT and MIP solvers, independent verification and why-not certificates.">
+<meta property="og:title" content="SynAPS-MobiRoute — routes you can verify">
+<meta property="og:description" content="Pickup and delivery with time windows, heterogeneous fleet, exact and heuristic solvers, independent proof of every plan.">
+<meta name="color-scheme" content="light dark">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%232a78d6'/%3E%3Cpath d='M7 22 L14 11 L19 18 L25 9' stroke='white' stroke-width='3' fill='none' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E">
+<style>
+:root{
+  --bg:#f9f9f7;--surface:#fcfcfb;--card:#ffffff;--ink:#0b0b0b;--ink2:#52514e;--muted:#898781;
+  --grid:#e1e0d9;--line:#c3c2b7;--ring:rgba(11,11,11,.10);
+  --s1:#2a78d6;--s2:#eb6834;--good:#006300;--bad:#c2410c;
+  --hero-a:#eaf2fd;--hero-b:#fdf0ea;--code:#f2f1ec;
+  --radius:16px;--maxw:1120px;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme=light]){
+  --bg:#0d0d0d;--surface:#1a1a19;--card:#151514;--ink:#f0efec;--ink2:#c3c2b7;--muted:#898781;
+  --grid:#2c2c2a;--line:#383835;--ring:rgba(255,255,255,.10);--s1:#3987e5;--s2:#d95926;--good:#0ca30c;--bad:#f97316;
+  --hero-a:#0f1a2b;--hero-b:#2a160d;--code:#20201e}}
+:root[data-theme=dark]{
+  --bg:#0d0d0d;--surface:#1a1a19;--card:#151514;--ink:#f0efec;--ink2:#c3c2b7;--muted:#898781;
+  --grid:#2c2c2a;--line:#383835;--ring:rgba(255,255,255,.10);--s1:#3987e5;--s2:#d95926;--good:#0ca30c;--bad:#f97316;
+  --hero-a:#0f1a2b;--hero-b:#2a160d;--code:#20201e}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.6 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;-webkit-font-smoothing:antialiased}
+html[data-lang=ru] [lang=en],html[data-lang=en] [lang=ru]{display:none!important}
+a{color:var(--s1)}
+.wrap{max-width:var(--maxw);margin:0 auto;padding:0 24px}
+nav{position:sticky;top:0;z-index:10;backdrop-filter:saturate(1.4) blur(10px);background:color-mix(in srgb,var(--bg) 82%,transparent);border-bottom:1px solid var(--ring)}
+nav .wrap{display:flex;align-items:center;gap:20px;height:60px}
+.brand{display:flex;align-items:center;gap:10px;font-weight:700;color:var(--ink);text-decoration:none}
+.brand svg{width:28px;height:28px}
+.links{display:flex;gap:18px;margin-left:auto;font-size:14px}
+.links a{color:var(--ink2);text-decoration:none}.links a:hover{color:var(--ink)}
+.tog{border:1px solid var(--ring);background:var(--card);color:var(--ink);border-radius:999px;padding:6px 12px;font:600 13px system-ui;cursor:pointer}
+@media (max-width:860px){.links{display:none}}
+header.hero{background:radial-gradient(1200px 500px at 15% -10%,var(--hero-a),transparent 60%),radial-gradient(900px 500px at 95% 10%,var(--hero-b),transparent 60%)}
+.hero .wrap{display:grid;grid-template-columns:1.05fr .95fr;gap:40px;align-items:center;padding-top:72px;padding-bottom:64px}
+@media (max-width:920px){.hero .wrap{grid-template-columns:1fr;padding-top:40px}}
+.eyebrow{display:inline-flex;gap:8px;align-items:center;font:600 13px system-ui;color:var(--ink2);background:var(--card);border:1px solid var(--ring);padding:6px 12px;border-radius:999px}
+.dot{width:8px;height:8px;border-radius:50%;background:var(--good);box-shadow:0 0 0 4px color-mix(in srgb,var(--good) 18%,transparent)}
+h1{font-size:clamp(34px,5vw,56px);line-height:1.08;letter-spacing:-.02em;margin:18px 0 14px}
+h1 em{font-style:normal;background:linear-gradient(90deg,var(--s1),var(--s2));-webkit-background-clip:text;background-clip:text;color:transparent}
+.lead{font-size:clamp(17px,1.6vw,20px);color:var(--ink2);max-width:36em}
+.cta{display:flex;gap:12px;flex-wrap:wrap;margin-top:26px}
+.btn{display:inline-flex;align-items:center;gap:8px;padding:12px 18px;border-radius:12px;font-weight:650;text-decoration:none;border:1px solid var(--ring)}
+.btn.primary{background:var(--ink);color:var(--bg);border-color:var(--ink)}
+.btn.ghost{background:var(--card);color:var(--ink)}
+.stage{background:var(--surface);border:1px solid var(--ring);border-radius:20px;padding:14px;box-shadow:0 20px 60px -30px rgba(0,0,0,.35)}
+#hero-map{width:100%;height:auto;display:block}
+.stage .cap{display:flex;justify-content:space-between;font-size:13px;color:var(--ink2);padding:8px 6px 2px}
+.stats{display:grid;grid-template-columns:repeat(4,1fr);gap:16px;margin-top:-28px;position:relative}
+@media (max-width:820px){.stats{grid-template-columns:repeat(2,1fr)}}
+.stat{background:var(--card);border:1px solid var(--ring);border-radius:var(--radius);padding:18px 20px}
+.stat b{display:block;font-size:30px;letter-spacing:-.02em}
+.stat span{color:var(--ink2);font-size:14px}
+section{padding:84px 0}
+section h2{font-size:clamp(26px,3.2vw,38px);letter-spacing:-.015em;line-height:1.15;margin:0 0 12px}
+.kicker{font:700 12px system-ui;letter-spacing:.12em;text-transform:uppercase;color:var(--s2)}
+.sub{color:var(--ink2);max-width:46em;font-size:18px}
+.grid4{display:grid;grid-template-columns:repeat(4,1fr);gap:18px;margin-top:34px}
+.grid3{display:grid;grid-template-columns:repeat(3,1fr);gap:18px;margin-top:34px}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:24px;margin-top:34px;align-items:start}
+@media (max-width:980px){.grid4{grid-template-columns:repeat(2,1fr)}.grid3,.grid2{grid-template-columns:1fr}}
+@media (max-width:560px){.grid4{grid-template-columns:1fr}}
+.grid2>*,.grid3>*,.grid4>*,.demo>*,.hero .wrap>*{min-width:0}
+.card{background:var(--card);border:1px solid var(--ring);border-radius:var(--radius);padding:22px}
+.card h3{margin:10px 0 6px;font-size:18px}
+.card p{margin:0;color:var(--ink2);font-size:15px}
+.ico{width:40px;height:40px;border-radius:12px;display:grid;place-items:center;background:color-mix(in srgb,var(--s1) 12%,transparent);color:var(--s1)}
+.ico.warn{background:color-mix(in srgb,var(--s2) 14%,transparent);color:var(--s2)}
+.big{font-size:34px;font-weight:750;letter-spacing:-.02em}
+.pipe{display:grid;grid-template-columns:repeat(5,1fr);gap:0;margin-top:34px;position:relative}
+@media (max-width:900px){.pipe{grid-template-columns:1fr}}
+.step{position:relative;padding:18px;margin:6px;background:var(--card);border:1px solid var(--ring);border-radius:14px}
+.step small{color:var(--muted);font-weight:700}
+.step h4{margin:4px 0 6px}
+.step p{margin:0;color:var(--ink2);font-size:14px}
+.flow{position:absolute;left:0;right:0;top:50%;height:2px;background:linear-gradient(90deg,transparent,var(--s1),transparent);background-size:40% 100%;background-repeat:no-repeat;animation:flow 3.2s linear infinite;opacity:.55;z-index:-1}
+@keyframes flow{from{background-position:-40% 0}to{background-position:140% 0}}
+table{width:100%;border-collapse:collapse;font-size:14.5px}
+th,td{padding:10px 12px;border-bottom:1px solid var(--grid);text-align:left;vertical-align:top}
+th{color:var(--muted);font-weight:600;font-size:12.5px;text-transform:uppercase;letter-spacing:.06em}
+td.num{text-align:right;font-variant-numeric:tabular-nums}
+.pill{display:inline-block;padding:2px 9px;border-radius:999px;font-size:12px;font-weight:700}
+.pill.ok{background:color-mix(in srgb,var(--good) 14%,transparent);color:var(--good)}
+.pill.mid{background:color-mix(in srgb,var(--s2) 15%,transparent);color:var(--s2)}
+.bars{display:grid;gap:12px;margin-top:8px}
+.bar{display:grid;grid-template-columns:150px 1fr 82px;gap:12px;align-items:center;font-size:14px}
+.bar .track{height:12px;background:var(--grid);border-radius:6px;overflow:hidden}
+.bar .fill{height:100%;width:0;border-radius:6px;background:var(--s1);transition:width 1.2s cubic-bezier(.2,.8,.2,1)}
+.bar .fill.alt{background:var(--s2)}
+.bar .v{text-align:right;font-variant-numeric:tabular-nums;color:var(--ink2)}
+.demo{display:grid;grid-template-columns:.9fr 1.1fr;gap:24px;margin-top:30px}
+@media (max-width:920px){.demo{grid-template-columns:1fr}}
+.seg{display:inline-flex;background:var(--card);border:1px solid var(--ring);border-radius:12px;padding:4px;gap:4px;flex-wrap:wrap}
+.seg button{border:0;background:transparent;color:var(--ink2);padding:9px 14px;border-radius:9px;font:600 14px system-ui;cursor:pointer}
+.seg button[aria-pressed=true]{background:var(--ink);color:var(--bg)}
+.verdict{margin-top:16px;border-radius:14px;padding:18px;border:1px solid var(--ring);background:var(--card);min-height:220px}
+.verdict.ok{border-color:color-mix(in srgb,var(--good) 45%,transparent)}
+.verdict.bad{border-color:color-mix(in srgb,var(--bad) 55%,transparent)}
+.verdict h4{margin:0 0 8px;display:flex;gap:8px;align-items:center}
+.eq{font:600 15px ui-monospace,SFMono-Regular,Menlo,monospace;background:var(--code);padding:12px;border-radius:10px;margin-top:12px;overflow-x:auto}
+.eq .hl{color:var(--bad)}
+ul.cons{margin:10px 0 0;padding-left:18px;color:var(--ink2)}
+ul.cons li{margin:4px 0;opacity:0;transform:translateY(6px);transition:all .45s}
+ul.cons li.on{opacity:1;transform:none}
+figure{margin:0}
+figure img{width:100%;height:auto;border-radius:14px;border:1px solid var(--ring);background:var(--surface)}
+figcaption{color:var(--muted);font-size:13px;margin-top:8px}
+pre{background:var(--code);border-radius:12px;padding:16px;overflow-x:auto;font:13.5px/1.6 ui-monospace,SFMono-Regular,Menlo,monospace;position:relative}
+.copy{position:absolute;top:10px;right:10px}
+.map td:first-child{font-weight:650}
+.limits li{margin:8px 0;color:var(--ink2)}
+footer{padding:40px 0 60px;color:var(--muted);font-size:14px;border-top:1px solid var(--ring)}
+.reveal{opacity:0;transform:translateY(18px);transition:opacity .7s ease,transform .7s ease}
+.reveal.in{opacity:1;transform:none}
+@media (max-width:560px){th,td{padding:8px;font-size:13px}.bar{grid-template-columns:92px 1fr 62px;font-size:13px;gap:8px}.stage{padding:8px}.wrap{padding:0 16px}.stat b{font-size:26px}}
+@media (prefers-reduced-motion:reduce){html{scroll-behavior:auto}.reveal{opacity:1;transform:none;transition:none}.flow{animation:none}.bar .fill{transition:none}ul.cons li{opacity:1;transform:none;transition:none}}
+</style>
+</head>
+<body>
+<nav aria-label="main"><div class="wrap">
+  <a class="brand" href="#top"><svg viewBox="0 0 32 32" aria-hidden="true"><rect width="32" height="32" rx="8" fill="var(--s1)"/><path d="M7 22 L14 11 L19 18 L25 9" stroke="#fff" stroke-width="3" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>MobiRoute</a>
+  <div class="links">
+    <a href="#pain"><span lang="ru">Проблема</span><span lang="en">Problem</span></a>
+    <a href="#solution"><span lang="ru">Решение</span><span lang="en">Solution</span></a>
+    <a href="#proof"><span lang="ru">Доказательства</span><span lang="en">Proof</span></a>
+    <a href="#whynot"><span lang="ru">«Почему нельзя?»</span><span lang="en">Why not?</span></a>
+    <a href="#cargo"><span lang="ru">Грузы</span><span lang="en">Cargo</span></a>
+    <a href="https://github.com/KonkovDV/SynAPS-MobiRoute">GitHub</a>
+  </div>
+  <button class="tog" id="lang" aria-label="Language">EN</button>
+  <button class="tog" id="theme" aria-label="Theme">◐</button>
+</div></nav>
+
+<header class="hero" id="top"><div class="wrap">
+  <div>
+    <span class="eyebrow"><span class="dot"></span><span lang="ru">Открытый код · MIT · Python + Rust</span><span lang="en">Open source · MIT · Python + Rust</span></span>
+    <h1><span lang="ru">Маршруты, которым <em>можно верить</em></span><span lang="en">Routes you can <em>actually verify</em></span></h1>
+    <p class="lead"><span lang="ru">Ядро планирования «подача → доставка» с окнами, лимитом времени в пути и смешанным парком. Скорость Rust, точные решатели CP-SAT и MIP, независимая проверка каждого плана — и объяснение, почему маршрут невозможен.</span><span lang="en">A pickup-and-delivery routing kernel with time windows, ride limits and a mixed fleet. Rust speed, exact CP-SAT and MIP solvers, independent verification of every plan, and an explanation when a route is impossible.</span></p>
+    <div class="cta">
+      <a class="btn primary" href="#proof"><span lang="ru">Смотреть доказательства</span><span lang="en">See the proof</span> →</a>
+      <a class="btn ghost" href="https://github.com/KonkovDV/SynAPS-MobiRoute"><svg width="18" height="18" viewBox="0 0 16 16" aria-hidden="true"><path fill="currentColor" d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27s1.36.09 2 .27c1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8z"/></svg>GitHub</a>
+    </div>
+  </div>
+  <div class="stage reveal">
+    <svg id="hero-map" viewBox="0 0 420 420" role="img" aria-label="Animated optimal plan for Cordeau a2-16"></svg>
+    <div class="cap"><span lang="ru">Cordeau a2-16 · 2 машины · 16 заказов</span><span lang="en">Cordeau a2-16 · 2 vehicles · 16 requests</span><span id="hero-cost">cost 294.25 ✓</span></div>
+  </div>
+</div></header>
+
+<div class="wrap"><div class="stats">
+  <div class="stat reveal"><b data-count="294.25" data-dec="2">294.25</b><span lang="ru">опубликованный оптимум воспроизведён и проверен</span><span lang="en">published optimum reproduced and verified</span></div>
+  <div class="stat reveal"><b data-count="0.5" data-dec="1" data-suf=" s">0.5 s</b><span lang="ru">до доказанного оптимума (CP-SAT)</span><span lang="en">to a proven optimum (CP-SAT)</span></div>
+  <div class="stat reveal"><b data-count="17" data-pre="×">×17</b><span lang="ru">быстрее на 3200 заказах после профилирования</span><span lang="en">faster on 3,200 requests after profiling</span></div>
+  <div class="stat reveal"><b data-count="460" data-suf="+">460+</b><span lang="ru">тестов: нотариус, паритет Rust ↔ Python, красная команда</span><span lang="en">tests: notary, Rust ↔ Python parity, red team</span></div>
+</div></div>
+
+<section id="pain"><div class="wrap">
+  <div class="kicker reveal"><span lang="ru">Проблема</span><span lang="en">The problem</span></div>
+  <h2 class="reveal"><span lang="ru">План ломается там, где его никто не проверяет</span><span lang="en">Plans fail where nobody checks them</span></h2>
+  <p class="sub reveal"><span lang="ru">Сотни заказов, у каждого — окно, лимит времени в пути, требования к машине и водителю. Ошибки в таком плане не видны глазу и дорого стоят.</span><span lang="en">Hundreds of requests, each with a window, a ride limit, vehicle and driver requirements. Errors in such a plan are invisible and expensive.</span></p>
+  <div class="grid4">
+    <div class="card reveal"><div class="ico warn">⦸</div><div class="big">7 / 16</div><h3><span lang="ru">Молчаливые отказы</span><span lang="en">Silent refusals</span></h3><p><span lang="ru">Наш аудит нашёл: расписание «как можно раньше» отклоняло выполнимые заказы — даже поодиночке.</span><span lang="en">Our audit found an as-early-as-possible schedule refusing feasible requests, even alone.</span></p></div>
+    <div class="card reveal"><div class="ico warn">?</div><div class="big">OPTIMAL</div><h3><span lang="ru">Без доказательства</span><span lang="en">Without proof</span></h3><p><span lang="ru">Статус ставится, но план никто не перепроверяет независимо от решателя.</span><span lang="en">The label is set, but nobody re-checks the plan apart from the solver.</span></p></div>
+    <div class="card reveal"><div class="ico warn">✕</div><div class="big">INFEASIBLE</div><h3><span lang="ru">Без причины</span><span lang="en">Without a reason</span></h3><p><span lang="ru">Неясно, что менять: окно, машину или обещание клиенту.</span><span lang="en">Nobody knows what to change: a window, a vehicle, or a promise.</span></p></div>
+    <div class="card reveal"><div class="ico warn">⏱</div><div class="big">47.9 s</div><h3><span lang="ru">Медленно</span><span lang="en">Slow</span></h3><p><span lang="ru">Перепланирование дня на 3200 заказов до профилирования. После — 2.8 с.</span><span lang="en">Re-planning a 3,200-request day before profiling. After: 2.8 s.</span></p></div>
+  </div>
+</div></section>
+
+<section style="padding-top:0"><div class="wrap">
+  <div class="kicker reveal"><span lang="ru">Почему это сложно</span><span lang="en">Why it is hard</span></div>
+  <h2 class="reveal"><span lang="ru">Больше 10³⁰ порядков объезда — для 16 заказов и одной машины</span><span lang="en">More than 10³⁰ visit orders — for 16 requests and one vehicle</span></h2>
+  <p class="sub reveal"><span lang="ru">32 остановки, у каждого заказа подача раньше доставки: 32! / 2¹⁶ ≈ 4·10³⁰. Задача NP-трудная, и окна, лимит поездки, вместимость и совместимость машин сужают допустимое пространство до узкой щели. Поэтому нужны и быстрые эвристики, и точные модели, и проверка, которая не доверяет ни тем, ни другим.</span><span lang="en">32 stops, each pickup before its delivery: 32! / 2¹⁶ ≈ 4·10³⁰. The problem is NP-hard, and windows, ride limits, capacity and vehicle compatibility squeeze the feasible space into a thin slit. So you need fast heuristics, exact models, and a check that trusts neither.</span></p>
+</div></section>
+
+<section id="solution" style="background:var(--surface)"><div class="wrap">
+  <div class="kicker reveal"><span lang="ru">Решение</span><span lang="en">The solution</span></div>
+  <h2 class="reveal"><span lang="ru">Четыре опоры: скорость, точность, доказательство, объяснение</span><span lang="en">Four pillars: speed, exactness, proof, explanation</span></h2>
+  <div class="grid4">
+    <div class="card reveal"><div class="ico">⚡</div><h3><span lang="ru">Скорость</span><span lang="en">Speed</span></h3><p><span lang="ru">Вставка с префиксным состоянием на Rust (PyO3, rayon) и профилирование Python-оркестрации: 3200 заказов за 2.8 с.</span><span lang="en">Prefix-state insertion in Rust (PyO3, rayon) plus profiled Python orchestration: 3,200 requests in 2.8 s.</span></p></div>
+    <div class="card reveal"><div class="ico">∑</div><h3><span lang="ru">Точность</span><span lang="en">Exactness</span></h3><p><span lang="ru">CP-SAT и MIP (SCIP, HiGHS, CBC) на одной алгебре; LP-граница; оптимум эталона воспроизведён до сотых.</span><span lang="en">CP-SAT and MIP (SCIP, HiGHS, CBC) on one algebra; LP bound; the benchmark optimum reproduced to 0.01.</span></p></div>
+    <div class="card reveal"><div class="ico">✓</div><h3><span lang="ru">Доказательство</span><span lang="en">Proof</span></h3><p><span lang="ru">Независимый нотариус: разностные ограничения и Беллман–Форд. Ни одно число не публикуется без проверки и отпечатка входа.</span><span lang="en">An independent notary: difference constraints and Bellman–Ford. No number is published without a check and an input fingerprint.</span></p></div>
+    <div class="card reveal"><div class="ico">¶</div><h3><span lang="ru">Объяснение</span><span lang="en">Explanation</span></h3><p><span lang="ru">Если маршрут невозможен — сертификат: какие ограничения конфликтуют и сколько минут не хватает. На русском и английском.</span><span lang="en">When a route is impossible: a certificate naming the conflicting constraints and the missing minutes. In Russian and English.</span></p></div>
+  </div>
+  <div class="pipe reveal" aria-label="pipeline">
+    <div class="flow"></div>
+    <div class="step"><small>01</small><h4><span lang="ru">Вход</span><span lang="en">Input</span></h4><p><span lang="ru">Заказы, парк, водители, матрица времени; строгая валидация.</span><span lang="en">Requests, fleet, drivers, travel matrix; strict validation.</span></p></div>
+    <div class="step"><small>02</small><h4><span lang="ru">Эвристики</span><span lang="en">Heuristics</span></h4><p><span lang="ru">Жадная вставка на Rust, beam, ALNS, rolling horizon.</span><span lang="en">Rust greedy insertion, beam, ALNS, rolling horizon.</span></p></div>
+    <div class="step"><small>03</small><h4><span lang="ru">Точные модели</span><span lang="en">Exact models</span></h4><p><span lang="ru">CP-SAT, MIP на SCIP / HiGHS / CBC, LP-релаксация.</span><span lang="en">CP-SAT, MIP on SCIP / HiGHS / CBC, LP relaxation.</span></p></div>
+    <div class="step"><small>04</small><h4><span lang="ru">Нотариус</span><span lang="en">Notary</span></h4><p><span lang="ru">Независимая проверка каждого маршрута.</span><span lang="en">Independent check of every route.</span></p></div>
+    <div class="step"><small>05</small><h4><span lang="ru">Отчёт</span><span lang="en">Report</span></h4><p><span lang="ru">План, SVG, отпечатки — или сертификат «почему нельзя».</span><span lang="en">Plan, SVG, fingerprints — or a why-not certificate.</span></p></div>
+  </div>
+</div></section>
+
+<section id="proof"><div class="wrap">
+  <div class="kicker reveal"><span lang="ru">Доказательства</span><span lang="en">Proof</span></div>
+  <h2 class="reveal"><span lang="ru">Одна задача — все решатели — один независимый судья</span><span lang="en">One instance, every solver, one independent judge</span></h2>
+  <p class="sub reveal"><span lang="ru">Эталон Cordeau (2006) a2-16 с доказанным оптимумом 294.25. Время до доказанного оптимума (меньше — лучше):</span><span lang="en">Cordeau (2006) a2-16 with a proven optimum of 294.25. Time to a proven optimum (lower is better):</span></p>
+  <div class="grid2">
+    <div class="card reveal"><div class="bars" id="race"></div><p style="margin-top:14px;font-size:13px;color:var(--muted)"><span lang="ru">Шкала логарифмическая. CBC не доказал оптимум за 60 с (разрыв 20%). LP-релаксация компактной MIP-модели — 85.27: слабость big-M объясняет разницу.</span><span lang="en">Log scale. CBC did not prove optimality in 60 s (20% gap). The LP relaxation of the compact MIP is 85.27: big-M weakness explains the difference.</span></p></div>
+    <div class="card reveal" style="padding:0;overflow-x:auto"><table id="lab"><thead><tr><th><span lang="ru">Решатель</span><span lang="en">Solver</span></th><th><span lang="ru">Статус</span><span lang="en">Status</span></th><th class="num"><span lang="ru">Стоимость</span><span lang="en">Cost</span></th><th class="num"><span lang="ru">Время, с</span><span lang="en">Time, s</span></th></tr></thead><tbody></tbody></table></div>
+  </div>
+  <div class="grid2">
+    <figure class="reveal"><img src="assets/a2-16-routes.svg" alt="Route map of the verified optimal a2-16 plan"><figcaption><span lang="ru">Карта маршрутов: заполненный круг — подача, кольцо — высадка, квадрат — депо. Наведите на точку — увидите окно и время.</span><span lang="en">Route map: filled = pickup, ring = dropoff, square = depot. Hover a mark for its window and time.</span></figcaption></figure>
+    <figure class="reveal"><img src="assets/a2-16-timeline.svg" alt="Timeline of service starts against time windows"><figcaption><span lang="ru">Когда обслуживается каждый заказ: серое — узкое окно, линия — поездка, пунктир — лимит 30 мин.</span><span lang="en">When each request is served: grey = tight window, line = ride, dashes = 30-minute limit.</span></figcaption></figure>
+  </div>
+</div></section>
+
+<section id="whynot" style="background:var(--surface)"><div class="wrap">
+  <div class="kicker reveal"><span lang="ru">Интерактив</span><span lang="en">Interactive</span></div>
+  <h2 class="reveal"><span lang="ru">«Почему нельзя?» — ответ в минутах, а не «infeasible»</span><span lang="en">"Why not?" — an answer in minutes, not "infeasible"</span></h2>
+  <p class="sub reveal"><span lang="ru">Возьмём оптимальный план и сделаем то, о чём часто просит диспетчер: перенесём одну высадку в конец маршрута.</span><span lang="en">Take the optimal plan and do what a dispatcher often asks for: move one dropoff to the end of the route.</span></p>
+  <div class="demo">
+    <div class="reveal">
+      <div class="seg" role="group" aria-label="scenario">
+        <button id="sc-ok" aria-pressed="true"><span lang="ru">Оптимальный план</span><span lang="en">Optimal plan</span></button>
+        <button id="sc-bad" aria-pressed="false"><span lang="ru">Перенести высадку 12</span><span lang="en">Move dropoff 12</span></button>
+      </div>
+      <p style="color:var(--ink2);font-size:15px;margin-top:16px"><span lang="ru">Нотариус строит граф разностных ограничений маршрута. Нет отрицательного цикла — есть расписание. Есть цикл — он и есть доказательство невозможности, а его вес — дефицит в минутах.</span><span lang="en">The notary builds the route's difference-constraint graph. No negative cycle: a schedule exists. A cycle: that is the proof of impossibility, and its weight is the deficit in minutes.</span></p>
+    </div>
+    <div class="verdict ok reveal" id="verdict" aria-live="polite"></div>
+  </div>
+</div></section>
+
+<section id="cargo"><div class="wrap">
+  <div class="kicker reveal"><span lang="ru">Дальше</span><span lang="en">Next</span></div>
+  <h2 class="reveal"><span lang="ru">От пассажиров к грузам: та же алгебра, другие единицы</span><span lang="en">From passengers to cargo: same algebra, other units</span></h2>
+  <p class="sub reveal"><span lang="ru">Пассажирский DARP — частный случай PDPTW. Перенос на грузовую логистику меняет единицы ёмкости и стоимость, а не логику расписания.</span><span lang="en">Passenger DARP is a special case of PDPTW. Moving to cargo changes capacity units and costs, not the scheduling logic.</span></p>
+  <div class="card reveal" style="margin-top:28px;padding:0;overflow-x:auto"><table class="map">
+    <thead><tr><th><span lang="ru">Сейчас в ядре</span><span lang="en">In the kernel today</span></th><th><span lang="ru">В грузовой логистике</span><span lang="en">In cargo routing</span></th></tr></thead>
+    <tbody>
+      <tr><td><span lang="ru">Пара «подача → высадка» на одной машине</span><span lang="en">Paired pickup → dropoff on one vehicle</span></td><td><span lang="ru">Забор и доставка груза одним рейсом</span><span lang="en">Pickup and delivery in one trip</span></td></tr>
+      <tr><td><span lang="ru">Места и колясочные места</span><span lang="en">Seats and wheelchair spaces</span></td><td><span lang="ru">Вектор ёмкости: кг, м³, паллеты</span><span lang="en">Capacity vector: kg, m³, pallets</span></td></tr>
+      <tr><td><span lang="ru">Подъёмник, рампа, тип коляски</span><span lang="en">Lift, ramp, wheelchair type</span></td><td><span lang="ru">Гидроборт, тип кузова, рефрижератор</span><span lang="en">Tail lift, body type, refrigeration</span></td></tr>
+      <tr><td><span lang="ru">Обученный водитель, смена, перерыв</span><span lang="en">Trained driver, shift, break</span></td><td><span lang="ru">Допуск ДОПОГ, категория прав, режим труда и отдыха</span><span lang="en">ADR permit, licence class, driving-time rules</span></td></tr>
+      <tr><td><span lang="ru">Зона обслуживания</span><span lang="en">Service area</span></td><td><span lang="ru">Зоны въезда и ограничения для грузовиков</span><span lang="en">Truck access zones and restrictions</span></td></tr>
+      <tr><td><span lang="ru">Окно записи к врачу</span><span lang="en">Appointment window</span></td><td><span lang="ru">Слот разгрузки у клиента</span><span lang="en">Customer unloading slot</span></td></tr>
+    </tbody></table></div>
+  <p class="reveal" style="margin-top:16px"><a href="https://github.com/KonkovDV/SynAPS-MobiRoute/blob/main/docs/cargo-vrp-porting-plan.md"><span lang="ru">План переноса с этапами и критериями приёмки →</span><span lang="en">Porting plan with stages and acceptance criteria →</span></a></p>
+</div></section>
+
+<section style="background:var(--surface)"><div class="wrap grid2" style="margin-top:0">
+  <div class="reveal">
+    <div class="kicker"><span lang="ru">Честные границы</span><span lang="en">Honest limits</span></div>
+    <h2><span lang="ru">Что это ещё не доказывает</span><span lang="en">What this does not prove yet</span></h2>
+    <ul class="limits">
+      <li><span lang="ru">Данные синтетические (зоны Москвы) и открытый эталон; данных оператора и пилота нет.</span><span lang="en">Data is synthetic (Moscow zones) plus an open benchmark; no operator data, no pilot.</span></li>
+      <li><span lang="ru">Уровень готовности — 4: лабораторная проверка. Обещаний экономии нет.</span><span lang="en">Readiness level 4: lab validation. No savings claims.</span></li>
+      <li><span lang="ru">Разрыв к литературе публикуется только при совпадении алгебры и байт файла эталона.</span><span lang="en">A gap to the literature is published only when the algebra and the instance bytes match.</span></li>
+      <li><span lang="ru">Замеры скорости — с машины автора, не SLA.</span><span lang="en">Speed numbers come from the author's machine, not an SLA.</span></li>
+    </ul>
+  </div>
+  <div class="reveal">
+    <div class="kicker"><span lang="ru">Начать</span><span lang="en">Get started</span></div>
+    <h2><span lang="ru">Три команды до проверенного оптимума</span><span lang="en">Three commands to a verified optimum</span></h2>
+<pre><button class="tog copy" data-copy="cmds">copy</button><code id="cmds">pip install -e ".[dev]" maturin
+maturin develop --release -m native/mobiroute_native/Cargo.toml
+mobiroute literature-benchmark \
+  --instance benchmark/instances/cordeau/a2-16.txt \
+  --out-dir out --svg</code></pre>
+    <a class="btn primary" href="https://github.com/KonkovDV/SynAPS-MobiRoute">GitHub →</a>
+  </div>
+</div></section>
+
+<footer><div class="wrap">SynAPS-MobiRoute · MIT · <a href="https://github.com/KonkovDV">KonkovDV</a> · <span lang="ru">Все числа на странице воспроизводятся командами из README.</span><span lang="en">Every number on this page is reproducible with the README commands.</span></div></footer>
+
+<script>
+(() => {
+  const root = document.documentElement;
+  const reduce = matchMedia("(prefers-reduced-motion: reduce)").matches;
+  const params = new URLSearchParams(location.search);
+  const setLang = (l) => { root.dataset.lang = l; root.lang = l; document.getElementById("lang").textContent = l === "ru" ? "EN" : "RU"; localStorage.setItem("mr-lang", l); render(); };
+  document.getElementById("lang").onclick = () => setLang(root.dataset.lang === "ru" ? "en" : "ru");
+  document.getElementById("theme").onclick = () => { const dark = root.dataset.theme ? root.dataset.theme === "dark" : matchMedia("(prefers-color-scheme: dark)").matches; root.dataset.theme = dark ? "light" : "dark"; localStorage.setItem("mr-theme", root.dataset.theme); };
+  if (localStorage.getItem("mr-theme")) root.dataset.theme = localStorage.getItem("mr-theme");
+
+  const io = new IntersectionObserver((es) => es.forEach((e) => { if (e.isIntersecting) { e.target.classList.add("in"); io.unobserve(e.target); count(e.target); } }), { threshold: 0.15 });
+  document.querySelectorAll(".reveal").forEach((el) => io.observe(el));
+  function count(el) {
+    el.querySelectorAll("[data-count]").forEach((b) => {
+      const end = +b.dataset.count, dec = +(b.dataset.dec || 0), pre = b.dataset.pre || "", suf = b.dataset.suf || "";
+      if (reduce) return;
+      const t0 = performance.now();
+      const step = (t) => { const k = Math.min(1, (t - t0) / 1300); const v = end * (1 - Math.pow(1 - k, 3)); b.textContent = pre + v.toFixed(dec) + suf; if (k < 1) requestAnimationFrame(step); };
+      requestAnimationFrame(step);
+    });
+  }
+
+  // Animated hero: draw the verified optimal routes, then run a vehicle along each.
+  fetch("data/a2-16-plan.json").then((r) => r.json()).then((plan) => {
+    const svg = document.getElementById("hero-map"), NS = "http://www.w3.org/2000/svg";
+    const P = (k) => plan.points[k], S = 380, pad = 20;
+    const sx = (x) => pad + (x + 10) / 20 * S, sy = (y) => pad + S - (y + 10) / 20 * S;
+    const colors = ["var(--s1)", "var(--s2)"];
+    for (let g = -10; g <= 10; g += 5) {
+      for (const [x1, y1, x2, y2] of [[sx(g), pad, sx(g), pad + S], [pad, sy(g), pad + S, sy(g)]]) {
+        const l = document.createElementNS(NS, "line"); Object.entries({ x1, y1, x2, y2, stroke: "var(--grid)", "stroke-width": 1 }).forEach(([k, v]) => l.setAttribute(k, v)); svg.appendChild(l);
+      }
+    }
+    plan.routes.forEach((seq, r) => {
+      const d = seq.map((k, i) => (i ? "L" : "M") + sx(P(k)[0]).toFixed(1) + " " + sy(P(k)[1]).toFixed(1)).join(" ");
+      const path = document.createElementNS(NS, "path");
+      Object.entries({ d, fill: "none", stroke: colors[r], "stroke-width": 2.2, "stroke-linejoin": "round", "stroke-linecap": "round" }).forEach(([k, v]) => path.setAttribute(k, v));
+      svg.appendChild(path);
+      const len = path.getTotalLength();
+      if (!reduce) { path.style.strokeDasharray = len; path.style.strokeDashoffset = len; path.animate([{ strokeDashoffset: len }, { strokeDashoffset: 0 }], { duration: 2600 + r * 500, delay: 300 + r * 400, easing: "ease-in-out", fill: "forwards" }); }
+      seq.slice(1, -1).forEach((k) => {
+        const c = document.createElementNS(NS, "circle"), pickup = k <= plan.n;
+        Object.entries({ cx: sx(P(k)[0]), cy: sy(P(k)[1]), r: 4.5, fill: pickup ? colors[r] : "var(--surface)", stroke: colors[r], "stroke-width": 2 }).forEach(([a, v]) => c.setAttribute(a, v));
+        const t = document.createElementNS(NS, "title"); t.textContent = (pickup ? "pickup " + k : "dropoff " + (k - plan.n)) + " · window [" + plan.windows[k] + "]"; c.appendChild(t);
+        svg.appendChild(c);
+      });
+      if (!reduce) {
+        const car = document.createElementNS(NS, "circle"); car.setAttribute("r", 6.5); car.setAttribute("fill", colors[r]); car.setAttribute("stroke", "var(--surface)"); car.setAttribute("stroke-width", 2.5); svg.appendChild(car);
+        const t0 = performance.now() + 3400 + r * 700, dur = 9000 + r * 2500;
+        const move = (t) => { const k = ((t - t0) % dur + dur) % dur / dur; const p = path.getPointAtLength(k * len); car.setAttribute("cx", p.x); car.setAttribute("cy", p.y); requestAnimationFrame(move); };
+        requestAnimationFrame(move);
+      }
+    });
+    const dep = document.createElementNS(NS, "rect"); Object.entries({ x: sx(0) - 6, y: sy(0) - 6, width: 12, height: 12, fill: "var(--ink)", rx: 2 }).forEach(([k, v]) => dep.setAttribute(k, v)); svg.appendChild(dep);
+  });
+
+  // Solver race and table from the committed solver-lab run.
+  let lab = null;
+  fetch("data/solver-lab.json").then((r) => r.json()).then((d) => { lab = d; render(); });
+  function render() {
+    if (!lab) { verdict(current); return; }
+    const rows = lab.literature.filter((x) => x.status !== "BOUND");
+    const race = document.getElementById("race"); race.innerHTML = "";
+    const max = Math.log10(120), min = Math.log10(0.1);
+    rows.forEach((x) => {
+      const w = (Math.log10(Math.max(x.seconds, 0.1)) - min) / (max - min) * 100;
+      const proven = x.status === "OPTIMAL";
+      const row = document.createElement("div"); row.className = "bar";
+      row.innerHTML = `<span>${x.solver.replace("MIP · ", "MIP ")}</span><div class="track" title="${x.status}"><div class="fill ${proven ? "" : "alt"}"></div></div><span class="v">${x.seconds.toFixed(1)} s${proven ? "" : " *"}</span>`;
+      race.appendChild(row);
+      requestAnimationFrame(() => setTimeout(() => (row.querySelector(".fill").style.width = w + "%"), 150));
+    });
+    const tb = document.querySelector("#lab tbody"); tb.innerHTML = "";
+    lab.literature.forEach((x) => {
+      const ok = x.status === "OPTIMAL";
+      const tr = document.createElement("tr");
+      tr.innerHTML = `<td>${x.solver}</td><td><span class="pill ${ok ? "ok" : "mid"}">${x.status}</span></td><td class="num">${x.cost == null ? (x.bound == null ? "—" : "≥ " + x.bound.toFixed(2)) : x.cost.toFixed(2)}</td><td class="num">${x.seconds.toFixed(1)}</td>`;
+      tb.appendChild(tr);
+    });
+    verdict(current);
+  }
+
+  // "Why not?" demo: the certificate the notary returns for the edited route.
+  let current = "ok";
+  const T = {
+    ru: { ok: ["✓ План выполним", "Отрицательного цикла нет: расписание существует. Стоимость 294.25, все 16 заказов обслужены, максимальная поездка — ровно 30 мин (лимит)."],
+          bad: ["✕ Маршрут 2 невыполним при любом расписании", "Отрицательный цикл в графе ограничений. Его вес — дефицит:"],
+          cons: ["подача 12 — начало не позже 29", "заявка 12 в пути не дольше 30 мин", "высадка 1 — начало не раньше 402", "высадка 1 → высадка 12: обслуживание 3 + переезд 15.68 мин"] },
+    en: { ok: ["✓ The plan is feasible", "No negative cycle: a schedule exists. Cost 294.25, all 16 requests served, the longest ride is exactly 30 min (the limit)."],
+          bad: ["✕ Route 2 cannot be timed by any schedule", "A negative cycle in the constraint graph. Its weight is the deficit:"],
+          cons: ["pickup 12 must start by 29", "request 12 may ride at most 30 min", "dropoff 1 cannot start before 402", "dropoff 1 → dropoff 12 takes 3 + 15.68 min (service + travel)"] },
+  };
+  function verdict(kind) {
+    current = kind;
+    const L = T[root.dataset.lang] || T.ru, box = document.getElementById("verdict");
+    document.getElementById("sc-ok").setAttribute("aria-pressed", kind === "ok");
+    document.getElementById("sc-bad").setAttribute("aria-pressed", kind === "bad");
+    box.className = "verdict " + kind + " in";
+    if (kind === "ok") { box.innerHTML = `<h4 style="color:var(--good)">${L.ok[0]}</h4><p style="color:var(--ink2);margin:0">${L.ok[1]}</p><div class="eq">notary: SCHEDULE_OK · cost 294.24795 · rides ≤ 30.0</div>`; return; }
+    box.innerHTML = `<h4 style="color:var(--bad)">${L.bad[0]}</h4><p style="color:var(--ink2);margin:0">${L.bad[1]}</p><ul class="cons">${L.cons.map((c) => `<li>${c}</li>`).join("")}</ul><div class="eq">(402 + 3 + 15.68) − (29 + 3 + 30) = <span class="hl">358.68 min</span></div>`;
+    box.querySelectorAll("li").forEach((li, i) => setTimeout(() => li.classList.add("on"), reduce ? 0 : 140 * (i + 1)));
+  }
+  document.getElementById("sc-ok").onclick = () => verdict("ok");
+  document.getElementById("sc-bad").onclick = () => verdict("bad");
+  document.querySelectorAll("[data-copy]").forEach((b) => b.onclick = () => { navigator.clipboard?.writeText(document.getElementById(b.dataset.copy).textContent); b.textContent = "✓"; setTimeout(() => (b.textContent = "copy"), 1200); });
+
+  setLang(params.get("lang") || localStorage.getItem("mr-lang") || "ru");
+})();
+</script>
+</body>
+</html>

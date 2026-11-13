@@ -153,7 +153,7 @@ Statuses for transfer: transferable pattern vs data-locked.
 | Wheelchair dwell longer than ambulatory | STM Montréal dwell (TRR 2020) | wheelchair 8; ambulatory \(\max(3,5)=5\) | Copy STM as MAST |
 | Productivity / OTP reporting | TCRP Synthesis 168 | Served, P95, coverage | Copy published % to Moscow |
 
-Ops encoding and measured numbers: [`docs/ops-cases-and-benchmark-2026-08-12.md`](../ops-cases-and-benchmark-2026-08-12.md).
+Ops encoding and measured numbers: [`docs/ops-cases-and-benchmark-2026-08-12.md`](../archive/ops-cases-and-benchmark-2026-08-12.md).
 
 ## Synthesis for MobiRoute portfolio (v0.2.1)
 

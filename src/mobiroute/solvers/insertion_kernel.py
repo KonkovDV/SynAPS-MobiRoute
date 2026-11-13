@@ -15,6 +15,7 @@ from mobiroute.domain.constraints import (
     combine_unavail,
     detour_limit,
     occupancy_overlaps,
+    pickup_service_floor,
     push_past_unavail,
 )
 from mobiroute.domain.models import StopType, WheelchairType
@@ -327,6 +328,28 @@ def _compat(k: ProblemKernel, vk: VehicleKernel, idx: int) -> bool:
     return vk.shift_end > vk.shift_start
 
 
+def _direct_minutes(k: ProblemKernel, idx: int) -> int:
+    nz = k.n_zones
+    if k.via[idx] >= 0:
+        return (
+            k.travel[k.pu[idx] * nz + k.via[idx]]
+            + k.via_svc[idx]
+            + k.travel[k.via[idx] * nz + k.do[idx]]
+        )
+    return k.travel[k.pu[idx] * nz + k.do[idx]]
+
+
+def pickup_floor_soa(k: ProblemKernel, idx: int) -> int:
+    """Oracle mirror of the native pickup floor (time-window tightening)."""
+    appt = k.appt_s[idx]
+    if appt < 0 or k.pu[idx] < 0 or k.do[idx] < 0:
+        # Unknown zones are refused by the compatibility gate, not here.
+        return k.earliest[idx]
+    direct = _direct_minutes(k, idx)
+    cap = detour_limit(direct, k.detour[idx]) if direct > 0 else None
+    return pickup_service_floor(k.earliest[idx], appt, k.max_ride[idx], k.board[idx], cap)
+
+
 def simulate_score(
     k: ProblemKernel,
     vk: VehicleKernel,
@@ -399,12 +422,13 @@ def simulate_score(
         arrive = tnow + travel[loc * nz + dest]
         if kind == 0:
             hold = 0
-            pwait = 0
-            if arrive < earliest[idx]:
-                hold = earliest[idx] - arrive
-                arrive = earliest[idx]
-            else:
-                pwait = arrive - earliest[idx]
+            # Service cannot start before the tightened floor; the passenger's
+            # delay is still measured from the earliest pickup they asked for.
+            floor = pickup_floor_soa(k, idx)
+            if arrive < floor:
+                hold = floor - arrive
+                arrive = floor
+            pwait = arrive - earliest[idx]
             if hold > max_wait[idx] and load > 0:
                 return None
             if pwait > max_wait[idx]:

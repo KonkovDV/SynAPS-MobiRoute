@@ -63,8 +63,8 @@ feasibility-checked. It is not a proven optimal shareability network.
 Insertion scoring for greedy / beam / ALNS / RHC / online is Rust `mobiroute_native`.
 Python SoA is an oracle for lockstep tests, not a solver backend, and not a
 license to claim OPTIMAL or an unmeasured ×N speedup. Generator `medium` is
-60 vehicles / 1000 requests. The `stress_200` ~8.1 s full pipeline (day-ahead
-plus disruptions and 8 inserts) is a sample on one machine, not a SLA.
+60 vehicles / 1000 requests. The `stress_200` full pipeline (day-ahead plus disruptions and 8 inserts,
+13.1 s; day-ahead 2.8 s) is a sample on one machine, not a SLA.
 
 Per-vehicle refusal evidence (`NO_COMPATIBLE_VEHICLE`, `NO_QUALIFIED_DRIVER`,
 `NO_DRIVER`, `INSERT_INFEASIBLE`, `POOLING_BLOCKED`, `SIMULATION_FAILED`) is
@@ -72,5 +72,4 @@ search-side, deduplicated and truncated to eight vehicles. It records why the
 search refused this request, not that the request is infeasible.
 
 See `docs/claims-review-2026-08-12.md`.
-Never mix MobiRoute with GridPlan / AeroBIM / SynAPS Energy in one Academy application.
 Ops-suite service rates are synthetic policy scripts (seed 42), not Moscow social-taxi KPIs.

@@ -85,6 +85,26 @@ fn trip_at(table: &[i32], detour: &[f64], idx: usize) -> TripView {
     }
 }
 
+/// Earliest pickup service start any feasible schedule can use (time-window
+/// tightening, Dumas/Desrosiers/Soumis 1991; Cordeau 2006). The passenger may
+/// not alight before `appt_s - EARLY_DROPOFF_SLACK` and the ride clock is capped
+/// by `min(max_ride, detour_cap)`, so service cannot start before
+/// `alight - ride_cap - curb`. Mirrors `pickup_floor_soa` in the Python oracle.
+#[inline(always)]
+fn pickup_floor(t: &TripView, detour_cap: i32) -> i32 {
+    if t.appt_s < 0 || t.pu < 0 || t.do_ < 0 {
+        return t.earliest;
+    }
+    let alight = (i64::from(t.appt_s) - i64::from(EARLY_DROPOFF_SLACK)).max(0);
+    let mut ride_cap = i64::from(t.max_ride);
+    if detour_cap >= 0 && i64::from(detour_cap) < ride_cap {
+        ride_cap = i64::from(detour_cap);
+    }
+    let svc = i64::from(t.board.max(CURB_WAIT));
+    let floor = (alight - ride_cap - svc).max(i64::from(t.earliest));
+    floor.min(i64::from(i32::MAX)) as i32
+}
+
 #[inline(always)]
 fn detour_limit(direct: i32, ratio: f64) -> i32 {
     let milli = (ratio * 1000.0).round_ties_even() as i64;
@@ -385,13 +405,19 @@ fn apply_stop(
     let svc;
     if kind == 0 {
         let mut hold = 0;
-        let mut pwait = 0;
-        if arrive < t.earliest {
-            hold = t.earliest - arrive;
-            arrive = t.earliest;
+        let cap = if idx < w.detour_cap.len() {
+            w.detour_cap[idx]
         } else {
-            pwait = arrive - t.earliest;
+            -1
+        };
+        // Service waits for the tightened floor; the passenger's delay is
+        // still measured from the earliest pickup they asked for.
+        let floor = pickup_floor(&t, cap);
+        if arrive < floor {
+            hold = floor - arrive;
+            arrive = floor;
         }
+        let pwait = arrive - t.earliest;
         if (hold > t.max_wait && cur.load > 0) || pwait > t.max_wait || arrive > t.latest {
             return false;
         }
@@ -683,7 +709,7 @@ fn eval_stored(
     if fv.stop_trip.is_empty() {
         return Some((0, 0, RouteTrace::default()));
     }
-    if table.len() % STRIDE != 0 || n_zones == 0 || travel.len() != n_zones * n_zones {
+    if !table.len().is_multiple_of(STRIDE) || n_zones == 0 || travel.len() != n_zones * n_zones {
         return None;
     }
     let n_trips = table.len() / STRIDE;
@@ -800,7 +826,7 @@ fn best_insert_inner(
     max_dur: i32,
     pickup_dep: &mut [i32],
 ) -> Option<(i32, i32, i32, i32, i32, i32)> {
-    if table.len() % STRIDE != 0 || n_zones == 0 {
+    if !table.len().is_multiple_of(STRIDE) || n_zones == 0 {
         return None;
     }
     if travel.len() != n_zones * n_zones {
@@ -1094,7 +1120,7 @@ fn score_fleet_inner(
     if n == 0 || n != stop_kinds.len() || n != vehs.len() || n != unavails.len() {
         return Vec::new();
     }
-    if table.len() % STRIDE != 0 {
+    if !table.len().is_multiple_of(STRIDE) {
         return Vec::new();
     }
     let n_trips = table.len() / STRIDE;
@@ -1187,7 +1213,7 @@ impl InsertionEngine {
         if n_zones == 0 || travel.len() != n_zones * n_zones {
             return Err(PyValueError::new_err("travel/n_zones mismatch"));
         }
-        if trip_table.len() % STRIDE != 0 || detour.len() != trip_table.len() / STRIDE {
+        if !trip_table.len().is_multiple_of(STRIDE) || detour.len() != trip_table.len() / STRIDE {
             return Err(PyValueError::new_err("trip table/detour mismatch"));
         }
         if detour.iter().any(|&ratio| !valid_detour(ratio)) {
@@ -1213,7 +1239,7 @@ impl InsertionEngine {
         veh: Vec<i32>,
         unavail: Vec<i32>,
     ) -> Option<(i32, i32, i32, i32, i32, i32)> {
-        py.allow_threads(|| {
+        py.detach(|| {
             let n_trips = self.table.len() / STRIDE;
             with_pickup_dep(n_trips, |pickup_dep| {
                 best_insert_inner(
@@ -1245,7 +1271,7 @@ impl InsertionEngine {
         unavails: Vec<Vec<i32>>,
         new_idx: i32,
     ) -> Vec<(i32, i32, i32, i32, i32, i32, i32)> {
-        py.allow_threads(|| {
+        py.detach(|| {
             score_fleet_inner(
                 &self.travel,
                 self.n_zones,
@@ -1300,7 +1326,7 @@ impl InsertionEngine {
         fleet_idx: Option<Vec<i32>>,
         max_dur: Option<i32>,
     ) -> Vec<(i32, i32, i32, i32, i32, i32, i32)> {
-        py.allow_threads(|| {
+        py.detach(|| {
             let n_trips = self.table.len() / STRIDE;
             let n = self.fleet.len();
             let cap = max_dur.unwrap_or(i32::MAX);
@@ -1371,7 +1397,7 @@ impl InsertionEngine {
         j: i32,
         new_idx: i32,
     ) -> Option<Vec<(i32, i32)>> {
-        py.allow_threads(|| {
+        py.detach(|| {
             let fv = self.fleet.get(fleet_i)?;
             trial_insert_trace(
                 &self.travel,
@@ -1404,7 +1430,7 @@ impl InsertionEngine {
         Vec<(i32, i32)>,
         Vec<(i32, i32, i32, i32)>,
     )> {
-        py.allow_threads(|| {
+        py.detach(|| {
             let fv = self.fleet.get(fleet_i)?;
             trial_insert_trace(
                 &self.travel,
@@ -1476,7 +1502,7 @@ impl InsertionEngine {
         Vec<(i32, i32)>,
         Vec<(i32, i32, i32, i32)>,
     )> {
-        py.allow_threads(|| {
+        py.detach(|| {
             let fv = self.fleet.get(fleet_i)?;
             eval_stored(
                 &self.travel,
@@ -1502,7 +1528,7 @@ impl InsertionEngine {
             Vec<(i32, i32, i32, i32)>,
         )>,
     > {
-        py.allow_threads(|| {
+        py.detach(|| {
             (0..self.fleet.len())
                 .into_par_iter()
                 .map(|v| {
@@ -1539,7 +1565,7 @@ fn best_insert(
     if detour.iter().any(|&ratio| !valid_detour(ratio)) {
         return None;
     }
-    py.allow_threads(|| {
+    py.detach(|| {
         let n_trips = trip_table.len() / STRIDE;
         let detour_cap = compute_detour_caps(&travel, n_zones, &trip_table, &detour);
         with_pickup_dep(n_trips, |pickup_dep| {
@@ -1565,6 +1591,6 @@ fn best_insert(
 fn mobiroute_native(_py: Python<'_>, module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_function(wrap_pyfunction!(best_insert, module)?)?;
     module.add_class::<InsertionEngine>()?;
-    module.add("__version__", "0.2.0")?;
+    module.add("__version__", env!("CARGO_PKG_VERSION"))?;
     Ok(())
 }

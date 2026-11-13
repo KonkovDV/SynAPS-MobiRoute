@@ -11,7 +11,7 @@ from pathlib import Path
 from mobiroute.adapters.synthetic_data import MODES, generate_day
 from mobiroute.dispatch.online_insertion import online_insert, recover_disruption
 from mobiroute.domain.models import ServicePriority, WheelchairType
-from mobiroute.domain.requests import TripRequest
+from mobiroute.domain.requests import DayProblem, PlanningResult, TripRequest
 from mobiroute.reporting.json_report import write_csv_metrics, write_json, write_markdown
 from mobiroute.solvers.alns import solve_alns
 from mobiroute.solvers.beam import solve_beam
@@ -54,24 +54,56 @@ def main(argv: list[str] | None = None) -> int:
 
     a = sub.add_parser(
         "academic-benchmark",
-        help="Open-data instance run with claim gating and a reproducibility stamp",
+        help="Open-data instance through the operator kernel, with claim gating and a stamp",
     )
     a.add_argument("--instance", type=Path, required=True)
     a.add_argument(
         "--solver",
-        choices=["greedy", "nearest", "beam", "alns"],
+        choices=["fifo", "greedy", "nearest", "beam", "alns", "rhc", "cpsat"],
         default="greedy",
     )
     a.add_argument(
         "--profile",
         choices=["literature", "operator"],
         default="literature",
-        help="literature = comparable-intent run; operator = operator policy applied",
+        help=(
+            "declared intent label only: the operator-kernel adapter always applies its "
+            "own algebra (integer minutes, 5-min curb wait, 30-min lobby slack), so no "
+            "kernel run publishes a literature gap; use literature-benchmark for that"
+        ),
     )
+    a.add_argument("--time-limit", type=float, default=10.0, help="CP-SAT only")
     a.add_argument("--out-dir", type=Path, required=True)
+
+    lit = sub.add_parser(
+        "literature-benchmark",
+        help="Exact CP-SAT or MIP on the published Cordeau (2006) algebra, independently verified",
+    )
+    lit.add_argument("--instance", type=Path, required=True)
+    lit.add_argument("--solver", choices=["cpsat", "mip"], default="cpsat")
+    lit.add_argument(
+        "--backend",
+        choices=["SCIP", "HIGHS", "CBC"],
+        default="SCIP",
+        help="MIP backend (only with --solver mip)",
+    )
+    lit.add_argument("--time-limit", type=float, default=60.0)
+    lit.add_argument("--workers", type=int, default=1, help="CP-SAT workers; 1 is deterministic")
+    lit.add_argument("--out-dir", type=Path, required=True)
+    lit.add_argument("--svg", action="store_true", help="also write routes.svg and timeline.svg")
 
     args = p.parse_args(argv)
 
+    try:
+        return _dispatch(args)
+    except (ValueError, OSError) as exc:
+        # Validation codes (UNKNOWN_DEPOT_ZONE, ...), schema errors and unreadable
+        # files are input problems: report the code and exit 2, never a traceback.
+        print(log_safe(f"error: {type(exc).__name__}: {str(exc)[:500]}"))
+        return 2
+
+
+def _dispatch(args: argparse.Namespace) -> int:
     if args.cmd == "generate":
         if args.mode not in MODES:
             print(log_safe(f"unknown mode {args.mode}; allowed: {', '.join(MODES)}"))
@@ -86,23 +118,8 @@ def main(argv: list[str] | None = None) -> int:
         return 0
 
     if args.cmd == "solve":
-        from mobiroute.domain.requests import DayProblem
-
         problem = DayProblem.model_validate_json(args.problem.read_text(encoding="utf-8"))
-        if args.solver == "fifo":
-            result = solve_fifo(problem)
-        elif args.solver == "cpsat":
-            result = solve_cpsat(problem, time_limit_s=args.time_limit)
-        elif args.solver == "nearest":
-            result = solve_nearest(problem)
-        elif args.solver == "beam":
-            result = solve_beam(problem)
-        elif args.solver == "alns":
-            result = solve_alns(problem)
-        elif args.solver == "rhc":
-            result = solve_rolling_horizon(problem)
-        else:
-            result = solve_greedy(problem)
+        result = _run_kernel_solver(problem, args.solver, time_limit_s=args.time_limit)
         args.out_dir.mkdir(parents=True, exist_ok=True)
         write_json(result, args.out_dir / "result.json")
         write_markdown(result, args.out_dir / "result.md")
@@ -176,11 +193,18 @@ def main(argv: list[str] | None = None) -> int:
         return 0
 
     if args.cmd == "academic-benchmark":
-        from mobiroute.adapters.cordeau import load_cordeau_a2_16
+        from mobiroute.adapters.cordeau import cordeau_node_routes, parse_cordeau_darp
         from mobiroute.benchmarks.academic import (
+            CORDEAU_A2_16_REFERENCE,
+            CORDEAU_A2_16_REFERENCE_SOURCE,
             BenchmarkProfile,
-            build_cordeau_a2_16_report,
+            build_academic_report,
             build_evidence,
+        )
+        from mobiroute.benchmarks.cordeau_exact import (
+            CORDEAU_A2_16_SHA256,
+            parse_cordeau_instance,
+            verify_routes,
         )
         from mobiroute.validation.feasibility import check_plan
 
@@ -188,23 +212,29 @@ def main(argv: list[str] | None = None) -> int:
             "literature": BenchmarkProfile.LITERATURE,
             "operator": BenchmarkProfile.OPERATOR,
         }
-        problem = load_cordeau_a2_16(args.instance)
+        # One read: the parsed bytes are the hashed bytes.
+        raw = args.instance.read_bytes()
+        digest = hashlib.sha256(raw).hexdigest()
+        is_a2_16 = digest == CORDEAU_A2_16_SHA256
+        # The a2-16 reference attaches to the vendored bytes, never to a file name.
+        instance_id = "cordeau-a2-16" if is_a2_16 else f"cordeau-{args.instance.stem}"
+        text = raw.decode("utf-8")
+        problem = parse_cordeau_darp(text, instance_id=instance_id)
         started = time.perf_counter()
-        if args.solver == "nearest":
-            result = solve_nearest(problem)
-        elif args.solver == "beam":
-            result = solve_beam(problem)
-        elif args.solver == "alns":
-            result = solve_alns(problem)
-        else:
-            result = solve_greedy(problem)
+        result = _run_kernel_solver(problem, args.solver, time_limit_s=args.time_limit)
         elapsed = time.perf_counter() - started
         notary = check_plan(problem, result)
-        report = build_cordeau_a2_16_report(problem, result, profile=profiles[args.profile])
+        report = build_academic_report(
+            problem,
+            result,
+            profile=profiles[args.profile],
+            reference_objective=CORDEAU_A2_16_REFERENCE if is_a2_16 else None,
+            reference_source=CORDEAU_A2_16_REFERENCE_SOURCE if is_a2_16 else None,
+        )
         evidence = build_evidence(
             result,
             instance_path=str(args.instance),
-            instance_sha256=hashlib.sha256(args.instance.read_bytes()).hexdigest(),
+            instance_sha256=digest,
             solver=args.solver,
             seed=problem.seed,
             wall_clock_seconds=elapsed,
@@ -212,12 +242,26 @@ def main(argv: list[str] | None = None) -> int:
             notary_violations=[str(item) for item in notary.violations],
             exit_code=0 if notary.feasible else 2,
         )
+        # Re-time the kernel's sequences under the published algebra: this is the
+        # machine-checked reason behind ALGEBRA_NOT_COMPARABLE, not a literature run.
+        literature = parse_cordeau_instance(text, instance_id=instance_id)
+        node_routes = cordeau_node_routes(result)
+        strict = verify_routes(literature, node_routes)
+        lobby = verify_routes(literature, node_routes, alight_slack=30)
+        crosscheck = {
+            "kernel_routes_literature_feasible": strict.feasible,
+            "kernel_routes_literature_violations": strict.violations[:8],
+            "kernel_routes_literature_cost": strict.cost,
+            "feasible_with_operator_lobby_slack_30": lobby.feasible,
+            "note": "diagnostic re-timing of operator-algebra sequences; never a gap",
+        }
         args.out_dir.mkdir(parents=True, exist_ok=True)
         (args.out_dir / "academic_benchmark.json").write_text(
             json.dumps(
                 {
                     "report": report.model_dump(mode="json"),
                     "evidence": evidence.model_dump(mode="json"),
+                    "literature_crosscheck": crosscheck,
                 },
                 indent=2,
                 sort_keys=True,
@@ -228,7 +272,93 @@ def main(argv: list[str] | None = None) -> int:
         print(log_safe(report.allowed_claim))
         return 0 if notary.feasible else 2
 
+    if args.cmd == "literature-benchmark":
+        import platform
+
+        from mobiroute import SYNAPS_COMMIT, __version__
+        from mobiroute.benchmarks.cordeau_exact import (
+            build_literature_report,
+            load_cordeau_bytes,
+            solve_exact_cpsat,
+            solve_exact_mip,
+            verify_routes,
+        )
+
+        raw = args.instance.read_bytes()
+        instance, digest = load_cordeau_bytes(raw, instance_id=args.instance.stem)
+        if args.solver == "mip":
+            run = solve_exact_mip(instance, backend=args.backend, time_limit_s=args.time_limit)
+        else:
+            run = solve_exact_cpsat(instance, time_limit_s=args.time_limit, workers=args.workers)
+        verdict = verify_routes(instance, run.routes)
+        lit_report = build_literature_report(instance, digest, run, verdict)
+        code = 0 if verdict.feasible and verdict.full_service else 2
+        lit_evidence: dict[str, object] = {
+            "mobiroute_version": __version__,
+            "synaps_commit": SYNAPS_COMMIT,
+            "python_version": platform.python_version(),
+            "platform": platform.platform(),
+            "ortools_version": run.ortools_version,
+            "instance_path": str(args.instance),
+            "instance_sha256": digest,
+            "time_limit_s": run.time_limit_s,
+            "solver": run.solver,
+            "backend": run.backend,
+            "workers": run.workers,
+            "scale": run.scale,
+            "wall_clock_seconds": run.wall_clock_seconds,
+            "exit_code": code,
+        }
+        args.out_dir.mkdir(parents=True, exist_ok=True)
+        (args.out_dir / "literature_benchmark.json").write_text(
+            json.dumps(
+                {
+                    "report": lit_report.model_dump(mode="json"),
+                    "run": run.model_dump(mode="json"),
+                    "verdict": verdict.model_dump(mode="json"),
+                    "evidence": lit_evidence,
+                },
+                indent=2,
+                sort_keys=True,
+            ),
+            encoding="utf-8",
+        )
+        if args.svg and verdict.routes:
+            from mobiroute.reporting.svg import route_map_svg, timeline_svg
+
+            name = instance.instance_id
+            (args.out_dir / "routes.svg").write_text(
+                route_map_svg(
+                    instance, verdict, title=f"{name}: verified plan, cost {verdict.cost:.2f}"
+                ),
+                encoding="utf-8",
+            )
+            (args.out_dir / "timeline.svg").write_text(
+                timeline_svg(instance, verdict, title=f"{name}: when each request is served"),
+                encoding="utf-8",
+            )
+        for cert in verdict.certificates:
+            print(log_safe(cert.explanation_en))
+        print(log_safe(lit_report.allowed_claim))
+        return code
+
     return 1
+
+
+def _run_kernel_solver(problem: DayProblem, solver: str, *, time_limit_s: float) -> PlanningResult:
+    if solver == "fifo":
+        return solve_fifo(problem)
+    if solver == "nearest":
+        return solve_nearest(problem)
+    if solver == "beam":
+        return solve_beam(problem)
+    if solver == "alns":
+        return solve_alns(problem)
+    if solver == "rhc":
+        return solve_rolling_horizon(problem)
+    if solver == "cpsat":
+        return solve_cpsat(problem, time_limit_s=time_limit_s)
+    return solve_greedy(problem)
 
 
 if __name__ == "__main__":

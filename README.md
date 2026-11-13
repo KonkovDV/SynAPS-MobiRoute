@@ -1,136 +1,150 @@
 # SynAPS-MobiRoute
 
+Ядро планирования маршрутов **DARP / PDPTW** с доказуемыми результатами: заказы
+«подача → высадка» с временными окнами, лимитом времени в пути, гетерогенным
+парком и совместимостью «заказ — машина — водитель».
+
+Язык: **RU** | [EN](README.en.md) · Сайт: [konkovdv.github.io/SynAPS-MobiRoute](https://konkovdv.github.io/SynAPS-MobiRoute/)
+
 [![CI](https://github.com/KonkovDV/SynAPS-MobiRoute/actions/workflows/ci.yml/badge.svg)](https://github.com/KonkovDV/SynAPS-MobiRoute/actions/workflows/ci.yml)
 [![Python 3.12+](https://img.shields.io/badge/python-3.12%2B-blue.svg)](https://www.python.org/)
+[![Rust](https://img.shields.io/badge/kernel-Rust%20%2B%20PyO3-orange.svg)](native/mobiroute_native)
+[![OR-Tools](https://img.shields.io/badge/solvers-CP--SAT%20%C2%B7%20SCIP%20%C2%B7%20HiGHS%20%C2%B7%20CBC-4285F4.svg)](docs/benchmarks/solver-lab-a2-16.md)
+[![mypy strict](https://img.shields.io/badge/types-mypy%20strict-1D9BF0.svg)](https://mypy-lang.org/)
+[![Ruff](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/ruff/main/assets/badge/v2.json)](https://github.com/astral-sh/ruff)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
-[![Status: Alpha](https://img.shields.io/badge/status-alpha%20prototype-orange.svg)](docs/claims-review-2026-08-12.md)
+[![CITATION.cff](https://img.shields.io/badge/cite-CITATION.cff-orange.svg)](CITATION.cff)
 
-**Experimental, explainable optimization kernel** for accessible demand-responsive
-transport (Dial-a-Ride / PDPTW with wheelchair, companion, medical priority,
-fairness, and disruption recovery).
+Любой опубликованный план проходит **независимую проверку**: временные
+ограничения маршрута сводятся к системе разностных неравенств и проверяются
+алгоритмом Беллмана–Форда, отдельно от решателя. Если маршрут невыполним, вы
+получаете не «infeasible», а **сертификат**: какие ограничения конфликтуют и
+**сколько минут не хватает**.
 
-Language: **EN** | [RU](README_RU.md)
+![Оптимальный план Cordeau a2-16, независимо проверенный](docs/img/a2-16-routes.svg)
 
-| | |
-| --- | --- |
-| Version | **0.2.7** |
-| Default branch | `main` |
-| SynAPS pin | [`07f11ebb`](https://github.com/KonkovDV/SynAPS/commit/07f11ebb31357ff65c8c078f94207c965a255cc1) (engineering reference / adapter; SynAPS `main` as of 2026-09-09). ADR-0004 regressions: fail-closed coverage, calendar encode, kernel claims-lint. KI-N12 stays closed. |
-| Maturity | ISO 16290 TRL 4 (synthetic lab). Not an operator pilot. |
-| Rust | **Required** for greedy / beam / ALNS / online insertion (`mobiroute_native`). Python SoA is an oracle, not a solver backend. |
-| Status words | `heuristic_feasible` / `verified` / `optimal` only if CP-SAT proved OPTIMAL **and** the independent notary is empty |
+## Результаты, которые можно воспроизвести
 
-> MobiRoute is an **open, explainable and integrable optimization kernel** for
-> accessible demand-responsive transport — **not** a passenger app, CRM, CAD/AVL,
-> or billing suite.
+| Что проверяем | Результат | Команда |
+| --- | --- | --- |
+| Точная модель на эталоне Cordeau (2006) a2-16 | стоимость **294.25** = опубликованный доказанный оптимум; CP-SAT **0.5 с** | `mobiroute literature-benchmark --instance benchmark/instances/cordeau/a2-16.txt --out-dir out` |
+| Выбор MIP/CP-решателя на той же задаче | SCIP 24.5 с и HiGHS 37.3 с — тот же оптимум; CBC за 60 с — разрыв 20%; LP-релаксация 85.27 (слабость big-M: разрыв 71%) | `python benchmark/solver_lab.py` → [таблица](docs/benchmarks/solver-lab-a2-16.md) |
+| Скорость на большом синтетическом дне | 200 машин / 3200 заявок: жадная вставка **2.8 с** (было 47.9 с до профилирования); 180 / 2000: **1.6 с** | `python benchmark/run_stress_day.py` |
+| Независимый нотариус и красная команда | план со «спрятанным» ожиданием пассажира, подделанные часы, перегруз — отклоняются | `pytest` |
+| Качество кода | более 460 тестов, `mypy --strict`, `ruff`, `clippy`, паритет Rust ↔ Python-оракул | `pytest && ruff check . && mypy` |
 
-**TRL honesty (2026-08-12):** engineering prototype. SynAPS scheduling patterns
-are reused; the DARP domain is new and validated on **synthetic** Moscow-zone
-instances only. No customer operational validation yet.
+Замеры — на машине автора (Linux x86_64, Python 3.13, один поток); это не SLA.
+Метод и сырые данные — в [docs/benchmarks](docs/benchmarks/solver-lab-a2-16.md).
 
-Pinned SynAPS reference commit: [`07f11ebb`](https://github.com/KonkovDV/SynAPS/commit/07f11ebb31357ff65c8c078f94207c965a255cc1)
-([upstream SynAPS](https://github.com/KonkovDV/SynAPS)). This matches kernel `main`
-as of 2026-09-09; further kernel commits still require an explicit bump with
-regressions. See `SYNAPS_COMMIT` in `src/mobiroute/__init__.py`.
+## Какую задачу решает
 
-## Allowed claim
+Диспетчер или логист планирует сотни заказов, у каждого — жёсткие окна, лимит
+времени в пути, требования к машине (подъёмник, тип кузова, вместимость) и к
+водителю (допуск, смена, перерыв). Типичные проблемы:
 
-> MobiRoute — experimental, explainable optimization contour for accessible
-> on-demand transport planning. On synthetic scenarios it checks passenger–
-> vehicle–driver compatibility, time windows, capacity, accessibility, and
-> dynamic replan. Real operational data, industrial integration, and user
-> impact require a separate pilot.
+- **решатель молча отказывает** в выполнимых заказах. Здесь такой дефект нашёл
+  аудит: расписание «как можно раньше» отклоняло 7 из 16 заявок эталона a2-16,
+  каждую даже поодиночке; после исправления — 16 из 16;
+- **«оптимально» без доказательства**: статус ставится, но план никто не
+  перепроверяет;
+- **«невыполнимо» без объяснения**: непонятно, что менять — окно, машину или
+  обещание клиенту;
+- **медленное перепланирование** при отменах, пробках и поломках.
 
-### What a green CI badge does not prove
+## Как решает
 
-CI proves lint, types and asserted invariants. It does not prove benchmark
-comparability. A gap against a published objective is emitted **only** when
-every comparability gate passes (literature profile, reference cost algebra,
-notary-verified plan, full service, complete accounting); otherwise the report
-publishes the blockers instead of a number. Contract and tests:
-[`src/mobiroute/benchmarks/academic.py`](src/mobiroute/benchmarks/academic.py),
-[`tests/test_academic_benchmark_gate.py`](tests/test_academic_benchmark_gate.py).
-Rules: [`docs/evidence-bundle.md`](docs/evidence-bundle.md),
-[`docs/benchmark-protocol.md`](docs/benchmark-protocol.md).
+```mermaid
+flowchart LR
+  A[Заказы, парк, водители, матрица времени] --> B[Валидация входа]
+  B --> C{Портфель решателей}
+  C --> D[Жадная вставка на Rust · beam · ALNS · RHC]
+  C --> E[Точные модели: CP-SAT и MIP SCIP · HiGHS · CBC]
+  D --> F[Независимый нотариус]
+  E --> F
+  F -->|выполнимо| G[План, отчёт, SVG, отпечатки входа и конфигурации]
+  F -->|невыполнимо| H[Сертификат: конфликт ограничений и дефицит в минутах]
+```
 
-## Quick start
+| Решатель | Когда | Может заявить OPTIMAL |
+| --- | --- | --- |
+| Жадная вставка (ядро на Rust, PyO3) | основной режим, тысячи заказов | нет |
+| Beam search | ограниченный перебор вставок | нет |
+| ALNS (Shaw / worst / route / random, имитация отжига) | улучшение плана | нет |
+| Rolling horizon | день окнами по времени | нет |
+| CP-SAT tiny (операторская алгебра) | до 40 заказов | только если OR-Tools доказал **и** нотариус пуст |
+| Точная CP-SAT (литературная алгебра) | эталоны Cordeau | да — для своей целочисленной модели; стоимость пересчитывается в вещественных числах |
+| MIP SCIP / HiGHS / CBC (двухиндексная формулировка Furtado–Munari–Morabito 2017) | сравнение решателей, нижние границы | да — по доказательству решателя |
+| Онлайн-вставка и восстановление | срочный заказ, отмена, неявка, пробка, поломка | нет |
+
+## «Почему нельзя?» — пример сертификата
+
+Переносим одну высадку в конец маршрута оптимального плана a2-16:
+
+```text
+Маршрут 2 невыполним при любом расписании: не хватает 358.68 мин.
+заявка 12 в пути не дольше 30 мин; подача 12 — начало не позже 29;
+высадка 1 — начало не раньше 402; высадка 1 -> высадка 12: обслуживание 3 + переезд 15.68 мин.
+```
+
+Проверка вручную: 402 + 3 + 15.68 − (29 + 3 + 30) = 358.68. Сертификат — это
+отрицательный цикл в графе ограничений: никакое изменение времени в этой
+последовательности остановок его не закроет.
+
+![Когда обслуживается каждая заявка: окна, начала обслуживания, лимит поездки](docs/img/a2-16-timeline.svg)
+
+## Быстрый старт
 
 ```bash
 python -m pip install -e ".[dev]"
 python -m pip install maturin
 python -m maturin develop --release --manifest-path native/mobiroute_native/Cargo.toml
-mobiroute generate --mode tiny --seed 42 --out examples/tiny_day.json
-mobiroute solve --problem examples/tiny_day.json --solver greedy --out-dir benchmark/results/tiny_greedy
-mobiroute demo --out-dir benchmark/results/demo
-mobiroute ops-benchmark --seed 42 --out-dir benchmark/results/ops-2026-08-12
-mobiroute academic-benchmark --instance benchmark/instances/cordeau/a2-16.txt --solver greedy --out-dir benchmark/results/a2-16
-pytest -q
-ruff check src tests benchmark
 ```
 
-Greedy / beam / ALNS / online insertion **require** the Rust kernel
-(`mobiroute_native`). Python SoA is an algebra oracle, not a solver backend.
-See [`docs/native-acceleration.md`](docs/native-acceleration.md).
-Do not quote an unverified ×N speedup.
+```bash
+mobiroute literature-benchmark --instance benchmark/instances/cordeau/a2-16.txt --out-dir out --svg
+mobiroute literature-benchmark --instance benchmark/instances/cordeau/a2-16.txt --out-dir out-mip --solver mip --backend SCIP
+mobiroute academic-benchmark --instance benchmark/instances/cordeau/a2-16.txt --solver alns --out-dir out-kernel
+mobiroute generate --mode medium --seed 42 --out day.json
+mobiroute solve --problem day.json --solver greedy --out-dir out-day
+pytest            # быстрый набор; точные MIP-доказательства: pytest -m slow
+```
 
-Measured on this machine, synthetic `stress_200` (200 vehicles / 3200 requests,
-seed 42): day-ahead greedy about **4.0–4.1 s**; the same run including breakdowns,
-cancellations, traffic replan, and 8 urgent inserts about **8.1 s**.
-Sample, not a SLA. Not real MAST trips. Details:
-[`docs/native-acceleration.md`](docs/native-acceleration.md).
+## Две алгебры — и почему их нельзя смешивать
 
-## Solvers (portfolio)
+- **Литературная** (Cordeau 2006): вещественные расстояния, опубликованные
+  времена обслуживания, жёсткие окна. Только здесь публикуется разрыв к
+  опубликованному оптимуму — и только для байт-в-байт того же файла (SHA-256).
+- **Операторская**: целые минуты, ожидание у подъезда 5 мин, высадка за 30 мин
+  до записи. Её планы с литературой не сравниваются, и это проверено машинно:
+  маршруты ядра становятся допустимыми в литературной алгебре ровно при
+  открытии окон высадки на 30 мин раньше.
 
-| Solver | When | May claim OPTIMAL? |
-| --- | --- | --- |
-| FIFO | baseline, no pooling | No |
-| Nearest feasible | baseline | No |
-| Greedy insertion | small/medium; **pooling insertion** (Rust `mobiroute_native`) | No |
-| Beam (width 3) | limited branching over insertions | No |
-| CP-SAT tiny | ≤40 trips / ≤12 vehicles; **sequential pairs, not pooling** | Yes, only if OR-Tools proves OPTIMAL **and** independent feasibility+completeness pass; otherwise `NOT_VERIFIED` |
-| CP-SAT fallback | larger instances → greedy | **Never** OPTIMAL (`HEURISTIC_FEASIBLE` / `PARTIAL`) |
-| Online insertion / disruption | insert into existing routes | No |
-| Incremental repair | named disruption replan | No |
-| ALNS | adaptive LNS on greedy; Shaw/worst/route | **Never** OPTIMAL |
-| Rolling horizon | day-ahead windows over greedy insertion | **Never** OPTIMAL |
-| LBBD / Benders | medium decomposition | **PLANNED** (stub only) |
+## Перенос на грузовую логистику
 
-## Repository layout
+Алгебра расписания та же (пары «забор — доставка», окна, перерывы водителя,
+вставка, нотариус); меняются единицы: вектор ёмкости (кг, м³, паллеты),
+стоимость по типу ТС, правила смены водителя. Этапы и критерии приёмки:
+[docs/cargo-vrp-porting-plan.md](docs/cargo-vrp-porting-plan.md).
 
-See [`docs/architecture.md`](docs/architecture.md). Domain code lives under
-`src/mobiroute/` and does **not** mix manufacturing FJSP models from SynAPS.
+## Границы применимости
 
-## Documentation
+Синтетические сценарии зон Москвы и открытый эталон Cordeau. Нет данных
+оператора, нет пилота, нет утверждений об экономии (уровень готовности
+технологии 4 — лабораторная проверка). Подробно: [docs/limitations.md](docs/limitations.md).
 
-| Doc | Purpose |
+## Документация
+
+| Документ | О чём |
 | --- | --- |
-| [`docs/implementation-audit-2026-08-12.md`](docs/implementation-audit-2026-08-12.md) | Code vs claims audit (0.1.1 baseline) |
-| [`docs/native-acceleration.md`](docs/native-acceleration.md) | Optional PyO3 insertion kernel |
-| [`docs/moscow-paratransit-problem-2026.md`](docs/moscow-paratransit-problem-2026.md) | Moscow social taxi problem map |
-| [`docs/ops-cases-and-benchmark-2026-08-12.md`](docs/ops-cases-and-benchmark-2026-08-12.md) | Ops cases, world analogues, Academy 10th cohort, measured suite |
-| [`docs/edge-cases-algebra-synaps-2026-08-12.md`](docs/edge-cases-algebra-synaps-2026-08-12.md) | Edge cases, DARP algebra, SynAPS pin mapping |
-| [`docs/redteam-algebra-2026-08-12.md`](docs/redteam-algebra-2026-08-12.md) | Red Team: notary holes, sort-order traps, pipeline |
-| [`docs/benchmark-protocol.md`](docs/benchmark-protocol.md) | Instances, comparability profiles, gap gate |
-| [`docs/evidence-bundle.md`](docs/evidence-bundle.md) | What ships with every published number |
-| [`docs/research/paratransit-research-2024-2026.md`](docs/research/paratransit-research-2024-2026.md) | Academic review |
-| [`docs/research/darp-sota-2025-2026.md`](docs/research/darp-sota-2025-2026.md) | DARP state of the art 2025–2026 and what we may not claim from it |
-| [`docs/market/competitors-2026.md`](docs/market/competitors-2026.md) | Market positioning |
-| [`docs/mathematical-formulation.md`](docs/mathematical-formulation.md) | Formal DARP formulation |
-| [`docs/privacy-and-security.md`](docs/privacy-and-security.md) | Privacy rules |
-| [`docs/limitations.md`](docs/limitations.md) | Non-claims |
-| [`docs/claims-review-2026-08-12.md`](docs/claims-review-2026-08-12.md) | Stage-15 honesty gate |
-| [`docs/business-model.md`](docs/business-model.md) | Bottom-up TAM/SAM/SOM |
-| [`docs/academy-innovators-application-ru.md`](docs/academy-innovators-application-ru.md) | Academy application (RU) |
-| [`docs/mik-submission-2026-09-14.md`](docs/mik-submission-2026-09-14.md) | Academy of Innovators flow 10: submission pack and claim ladder (RU) |
+| [docs/mathematical-formulation.md](docs/mathematical-formulation.md) | формальная постановка, ограничения, целевые функции |
+| [docs/architecture.md](docs/architecture.md) | модули, потоки данных, контракты |
+| [docs/benchmark-protocol.md](docs/benchmark-protocol.md) | правила публикации чисел и разрыва к литературе |
+| [docs/benchmarks/solver-lab-a2-16.md](docs/benchmarks/solver-lab-a2-16.md) | сравнение решателей на a2-16 |
+| [docs/native-acceleration.md](docs/native-acceleration.md) | ядро на Rust, профилирование |
+| [docs/cargo-vrp-porting-plan.md](docs/cargo-vrp-porting-plan.md) | перенос на грузовой VRP |
+| [docs/research/darp-sota-2025-2026.md](docs/research/darp-sota-2025-2026.md) | обзор литературы по DARP |
+| [CHANGELOG.md](CHANGELOG.md) | история изменений |
 
-## Contributing / security
+## Лицензия
 
-- [`CONTRIBUTING.md`](CONTRIBUTING.md)
-- [`CODE_OF_CONDUCT.md`](CODE_OF_CONDUCT.md)
-- [`SECURITY.md`](SECURITY.md)
-- [`SUPPORT.md`](SUPPORT.md)
-- [`CITATION.cff`](CITATION.cff)
-
-## License
-
-MIT — see [`LICENSE`](LICENSE).
+MIT — см. [LICENSE](LICENSE). Цитирование — [CITATION.cff](CITATION.cff).
