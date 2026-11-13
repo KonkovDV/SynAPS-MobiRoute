@@ -338,9 +338,10 @@ def _certificate(
         route=route,
         short_by=short_by,
         constraints=unique,
-        explanation_en=f"Route {route} cannot be timed: short by {short_by:.2f} min. {en}.",
+        explanation_en=f"Route {route + 1} cannot be timed: short by {short_by:.2f} min. {en}.",
         explanation_ru=(
-            f"Маршрут {route} невыполним при любом расписании: не хватает {short_by:.2f} мин. {ru}."
+            f"Маршрут {route + 1} невыполним при любом расписании: "
+            f"не хватает {short_by:.2f} мин. {ru}."
         ),
     )
 

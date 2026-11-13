@@ -5,20 +5,25 @@ title: SynAPS-MobiRoute
 message: If you use this software, please cite it using these metadata.
 type: software
 authors:
-  - name: SynAPS-MobiRoute contributors
+  - family-names: Konkov
+    given-names: Dmitrij
+    alias: KonkovDV
 repository-code: https://github.com/KonkovDV/SynAPS-MobiRoute
 url: https://github.com/KonkovDV/SynAPS-MobiRoute
 abstract: >-
-  Experimental explainable optimization kernel for accessible demand-responsive
-  transport planning (Dial-a-Ride / PDPTW) with accessibility constraints,
-  fairness metrics, disruption recovery, and synthetic benchmarks.
-  Validated on synthetic instances only; not a production CAD/AVL platform.
+  Verifiable routing kernel for pickup-and-delivery problems with time windows
+  (DARP / PDPTW): Rust insertion heuristics, ALNS, exact CP-SAT and MIP models,
+  and an independent difference-constraint notary that returns quantified
+  why-not certificates. Reproduces the published optimum of Cordeau (2006)
+  a2-16; operator scenarios are synthetic.
 keywords:
   - dial-a-ride
   - paratransit
   - accessible transport
   - optimization
   - constraint programming
+  - mixed-integer programming
+  - vehicle routing
 license: MIT
-version: 0.2.7
-date-released: "2026-09-10"
+version: 0.3.0
+date-released: "2026-11-13"

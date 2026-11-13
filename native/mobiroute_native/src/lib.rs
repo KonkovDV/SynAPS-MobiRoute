@@ -709,7 +709,7 @@ fn eval_stored(
     if fv.stop_trip.is_empty() {
         return Some((0, 0, RouteTrace::default()));
     }
-    if table.len() % STRIDE != 0 || n_zones == 0 || travel.len() != n_zones * n_zones {
+    if !table.len().is_multiple_of(STRIDE) || n_zones == 0 || travel.len() != n_zones * n_zones {
         return None;
     }
     let n_trips = table.len() / STRIDE;
@@ -826,7 +826,7 @@ fn best_insert_inner(
     max_dur: i32,
     pickup_dep: &mut [i32],
 ) -> Option<(i32, i32, i32, i32, i32, i32)> {
-    if table.len() % STRIDE != 0 || n_zones == 0 {
+    if !table.len().is_multiple_of(STRIDE) || n_zones == 0 {
         return None;
     }
     if travel.len() != n_zones * n_zones {
@@ -1120,7 +1120,7 @@ fn score_fleet_inner(
     if n == 0 || n != stop_kinds.len() || n != vehs.len() || n != unavails.len() {
         return Vec::new();
     }
-    if table.len() % STRIDE != 0 {
+    if !table.len().is_multiple_of(STRIDE) {
         return Vec::new();
     }
     let n_trips = table.len() / STRIDE;
@@ -1213,7 +1213,7 @@ impl InsertionEngine {
         if n_zones == 0 || travel.len() != n_zones * n_zones {
             return Err(PyValueError::new_err("travel/n_zones mismatch"));
         }
-        if trip_table.len() % STRIDE != 0 || detour.len() != trip_table.len() / STRIDE {
+        if !trip_table.len().is_multiple_of(STRIDE) || detour.len() != trip_table.len() / STRIDE {
             return Err(PyValueError::new_err("trip table/detour mismatch"));
         }
         if detour.iter().any(|&ratio| !valid_detour(ratio)) {
@@ -1591,6 +1591,6 @@ fn best_insert(
 fn mobiroute_native(_py: Python<'_>, module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_function(wrap_pyfunction!(best_insert, module)?)?;
     module.add_class::<InsertionEngine>()?;
-    module.add("__version__", "0.2.0")?;
+    module.add("__version__", env!("CARGO_PKG_VERSION"))?;
     Ok(())
 }
