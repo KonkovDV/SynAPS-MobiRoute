@@ -473,8 +473,13 @@ def check_route(
                 violations.append(f"VEHICLE_UNAVAILABLE:{tid}")
             elif occupancy_overlaps(prev_dep, dep, drv_unavail):
                 violations.append(f"DRIVER_REST:{tid}")
-            if dep - arr < pickup_service_minutes(trip.boarding_duration):
+            curb = pickup_service_minutes(trip.boarding_duration)
+            if dep - arr < curb:
                 violations.append(f"CURB_WAIT:{tid}")
+            elif dep - arr > curb:
+                # The ride clock starts at pickup departure: extra dwell after the
+                # curb wait would hold the passenger onboard off every clock and quota.
+                violations.append(f"UNEXPLAINED_DWELL:{tid}")
             onboard.add(tid)
         elif stop.stop_type == StopType.VIA and stop.trip_id:
             tid = stop.trip_id
