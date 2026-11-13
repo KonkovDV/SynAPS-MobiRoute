@@ -12,8 +12,11 @@ VEHICLE = [0, 0, 100, 2, 0, 0, 0, 0, 100, 0, 1, 0]
 
 
 def trip_row(ride):
-    # Pickup leaves at 5. Appointment lobby snap forces arrival at 5 + ride.
-    return [0, 1, 0, 100, 100, 100, 5, 0, 35 + ride, -1, 1, 0, 0, 0, -1, 0]
+    # Pickup window [0, 0] pins service at 0, so the pickup leaves at 5 and the
+    # appointment lobby snap forces arrival at 5 + ride. The tightened pickup
+    # floor (alight - min(max_ride, detour cap) - curb) may not move the pinned
+    # pickup, so feasibility is decided by the same detour boundary: ride <= cap.
+    return [0, 1, 0, 0, 100, 100, 5, 0, 35 + ride, -1, 1, 0, 0, 0, -1, 0]
 
 
 class NativeNumericContractTests(unittest.TestCase):
