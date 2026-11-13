@@ -1,11 +1,11 @@
 name: Bug report
-description: Report a correctness, determinism, or privacy issue
+description: Report a wrong plan, a crash or a determinism problem
 labels: ["bug"]
 body:
   - type: markdown
     attributes:
       value: |
-        Do **not** include real passenger names, phones, addresses, medical details, or GPS tracks.
+        Please attach a public or synthetic instance and the seed. Do not include personal data.
   - type: textarea
     id: what
     attributes:
@@ -15,7 +15,7 @@ body:
   - type: textarea
     id: repro
     attributes:
-      label: Reproduction (synthetic instance / seed)
+      label: Reproduction (instance, solver, seed, command)
     validations:
       required: true
   - type: input

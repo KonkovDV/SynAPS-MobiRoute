@@ -1,46 +1,36 @@
 # Contributing
 
-Thanks for interest in SynAPS-MobiRoute.
-
-## Scope
-
-This repository is an **optimization kernel**, not a passenger app or eligibility CRM.
-Prefer changes that strengthen:
-
-- correctness and feasibility checking
-- determinism / reproducibility
-- explainability (reason codes, plan diffs)
-- privacy (no PII in open artifacts)
-- honest claims (synthetic vs customer evidence)
-
-## Development
+## Setup
 
 ```bash
 python -m pip install -e ".[dev]"
 python -m pip install maturin
 python -m maturin develop --release --manifest-path native/mobiroute_native/Cargo.toml
-ruff check src tests benchmark
-ruff format src tests benchmark
-pytest
-mypy
 ```
 
-Greedy / beam / ALNS require `mobiroute_native`. See `docs/native-acceleration.md`.
+## Before a pull request
 
-## Claims hygiene
+```bash
+ruff check . && ruff format --check .
+mypy && mypy --strict benchmark/*.py
+pytest                       # fast suite; exact MIP proofs: pytest -m slow
+cargo fmt --manifest-path native/mobiroute_native/Cargo.toml -- --check
+cargo clippy --manifest-path native/mobiroute_native/Cargo.toml --release -- -D warnings
+```
 
-- Do not claim Moscow operational improvement without a documented pilot.
-- Do not mark GREEDY / NEAREST / ALNS / RHC as `OPTIMAL`.
-- Do not commit real passenger addresses, phones, medical data, or GPS tracks.
-- Mark new capabilities with IMPLEMENTED / PARTIAL / PLANNED status in docs.
+## Conventions
 
-## Pull requests
-
-1. Keep diffs focused.
-2. Add or update tests for constraint / adversarial cases.
-3. Update `CHANGELOG.md` for user-visible changes.
-4. Fill the PR template.
-
-## Security
-
-See `SECURITY.md`. Never open public issues containing personal or medical data.
+* **Every plan goes through the verifier.** A new solver or operator is tested
+  by checking its output with `mobiroute.vrp.verify.verify` (or `check_plan` in
+  the paratransit kernel), not by inspecting its own bookkeeping.
+* **Python reference and Rust kernel change together.** `VrpKernel` mirrors
+  `vrp/insertion.py` operation for operation. A change to one needs the same
+  change in the other in the same commit, and `tests/test_vrp_native.py` must
+  stay green: identical plans, identical ALNS trajectories.
+* **Numbers come from scripts.** Tables in `docs/benchmarks/` are written by
+  the scripts in `benchmark/`; re-run the script instead of editing a table.
+  Heuristics never publish `OPTIMAL`.
+* **No personal data.** Only public benchmark instances and synthetic days.
+* **Commits** use a short prefix: `feat`, `fix`, `perf`, `test`, `docs`,
+  `bench`, `data`, `build`, `chore`. Keep diffs focused and update
+  `CHANGELOG.md` for user-visible changes.

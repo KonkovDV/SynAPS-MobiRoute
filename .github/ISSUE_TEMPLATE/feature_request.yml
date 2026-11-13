@@ -1,28 +1,23 @@
 name: Feature request
-description: Propose a kernel capability (not a full ops platform)
+description: Propose a modelling feature, solver or benchmark
 labels: ["enhancement"]
 body:
   - type: textarea
     id: problem
     attributes:
       label: Problem
+      description: Which routing situation is not covered today?
     validations:
       required: true
   - type: textarea
     id: proposal
     attributes:
-      label: Proposed kernel capability
+      label: Proposal
+      description: Model change, algorithm or data; how would the verifier check it?
     validations:
       required: true
-  - type: dropdown
-    id: layer
+  - type: textarea
+    id: evidence
     attributes:
-      label: Evidence layer this would unlock
-      options:
-        - algorithmic_capability
-        - synthetic_benchmark
-        - open_data_benchmark
-        - customer_evidence
-        - production_evidence
-    validations:
-      required: true
+      label: How to measure it
+      description: Instance, benchmark or test that shows the change works.
