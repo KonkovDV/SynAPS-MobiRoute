@@ -22,7 +22,7 @@ These are **operator-published** rules, encoded in synthetic ops scenarios as po
 | Child restraint | Asked at booking | Not a hard field yet |
 
 Edge-case algebra, SynAPS mapping, and six extra scripts (`ops_stretcher` … `ops_agency_missed`):
-[`docs/edge-cases-algebra-synaps-2026-08-12.md`](edge-cases-algebra-synaps-2026-08-12.md).
+[`docs/edge-cases-algebra-synaps-2026-08-12.md`](archive/edge-cases-algebra-synaps-2026-08-12.md).
 
 ## Verified operational context (Aug 2026)
 
