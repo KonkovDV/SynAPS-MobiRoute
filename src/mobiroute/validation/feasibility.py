@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass, field
 
 from mobiroute.domain.constraints import (
@@ -170,6 +171,7 @@ def pooling_mix_violation(
     problem: DayProblem,
     onboard_ids: set[str],
     new_trip: TripRequest,
+    trips: Mapping[str, TripRequest] | None = None,
 ) -> str | None:
     others = {tid for tid in onboard_ids if tid and tid != new_trip.id}
     if not others:
@@ -178,7 +180,8 @@ def pooling_mix_violation(
     if mode == PoolingMode.FORBIDDEN:
         return f"POOLING_FORBIDDEN:{new_trip.id}"
     if mode == PoolingMode.OPT_IN:
-        trips = {t.id: t for t in problem.requests}
+        if trips is None:
+            trips = {t.id: t for t in problem.requests}
         if not new_trip.pooling_opt_in:
             return f"POOLING_NOT_OPTED_IN:{new_trip.id}"
         for oid in others:
@@ -188,15 +191,26 @@ def pooling_mix_violation(
     return None
 
 
-def pooling_stops_violate(problem: DayProblem, stops: list[Stop]) -> str | None:
-    """Simultaneous onboard mix on a complete itinerary, not a route suffix."""
-    trips = {t.id: t for t in problem.requests}
+def pooling_stops_violate(
+    problem: DayProblem,
+    stops: list[Stop],
+    trips: Mapping[str, TripRequest] | None = None,
+) -> str | None:
+    """Simultaneous onboard mix on a complete itinerary, not a route suffix.
+
+    ``trips`` lets hot loops pass the id map they already hold; rebuilding it
+    on every call was the dominant cost of greedy on large days.
+    """
     service = service_stops(list(stops))
     picked = {s.trip_id for s in service if s.stop_type == StopType.PICKUP and s.trip_id}
     dropped = {s.trip_id for s in service if s.stop_type == StopType.DROPOFF and s.trip_id}
     if picked != dropped:
         missing = sorted(tid for tid in picked.symmetric_difference(dropped) if tid is not None)
         return f"POOLING_INCOMPLETE_SEQUENCE:{missing[0]}"
+    if problem.operator_policy.pooling_mode == PoolingMode.ALLOWED:
+        return None  # any simultaneous mix is permitted; only completeness matters
+    if trips is None:
+        trips = {t.id: t for t in problem.requests}
     onboard: set[str] = set()
     for stop in service:
         tid = stop.trip_id
@@ -205,7 +219,7 @@ def pooling_stops_violate(problem: DayProblem, stops: list[Stop]) -> str | None:
         if stop.stop_type == StopType.PICKUP:
             trip = trips.get(tid)
             if trip is not None:
-                issue = pooling_mix_violation(problem, onboard, trip)
+                issue = pooling_mix_violation(problem, onboard, trip, trips)
                 if issue:
                     return issue
             onboard.add(tid)
@@ -216,8 +230,9 @@ def pooling_stops_violate(problem: DayProblem, stops: list[Stop]) -> str | None:
 
 def pooling_route_violations(problem: DayProblem, result: PlanningResult) -> list[str]:
     found: list[str] = []
+    trips = {t.id: t for t in problem.requests}
     for route in result.route_plans:
-        issue = pooling_stops_violate(problem, list(route.ordered_stops))
+        issue = pooling_stops_violate(problem, list(route.ordered_stops), trips)
         if issue:
             found.append(issue)
     return found
@@ -351,6 +366,7 @@ def check_route(
     trips: dict[str, TripRequest],
 ) -> list[str]:
     vmap = {v.id: v for v in problem.vehicles}
+    travel = problem.travel.lookup()
     dmap = {d.id: d for d in problem.drivers}
     vehicle = vmap.get(route.vehicle_id)
     if vehicle is None:
@@ -395,7 +411,7 @@ def check_route(
         if load == 0 and prev_loc == vehicle.depot_id and stop.stop_type != StopType.DEPOT_START:
             prev_dep = push_past_unavail(prev_dep, merged_unavail)
         try:
-            tt = problem.travel.travel(prev_loc, stop.location)
+            tt = travel(prev_loc, stop.location)
         except KeyError:
             violations.append(f"BLOCKED_LOCATION:{stop.id}:{stop.location}")
             prev_loc = stop.location
@@ -540,12 +556,12 @@ def check_route(
                 try:
                     if trip.via_zone:
                         direct = (
-                            problem.travel.travel(trip.pickup_zone, trip.via_zone)
+                            travel(trip.pickup_zone, trip.via_zone)
                             + trip.via_service_duration
-                            + problem.travel.travel(trip.via_zone, trip.dropoff_zone)
+                            + travel(trip.via_zone, trip.dropoff_zone)
                         )
                     else:
-                        direct = problem.travel.travel(trip.pickup_zone, trip.dropoff_zone)
+                        direct = travel(trip.pickup_zone, trip.dropoff_zone)
                 except KeyError:
                     violations.append(f"BLOCKED_LOCATION:{tid}")
                     direct = 0
@@ -595,7 +611,7 @@ def check_route(
     times = list(route.arrival_times.values()) + list(route.departure_times.values())
     if route.ordered_stops and route.ordered_stops[-1].stop_type != StopType.DEPOT_END:
         try:
-            returned = prev_dep + problem.travel.travel(prev_loc, vehicle.depot_id)
+            returned = prev_dep + travel(prev_loc, vehicle.depot_id)
         except KeyError:
             violations.append(f"BLOCKED_LOCATION:{vehicle.depot_id}")
         else:

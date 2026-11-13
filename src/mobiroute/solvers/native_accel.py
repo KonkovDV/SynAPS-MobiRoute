@@ -80,7 +80,14 @@ def _as_int(value: object) -> int:
     return value
 
 
+def _all_ints(raw: tuple[object, ...]) -> bool:
+    # bool is an int subclass; the native ABI never returns one.
+    return all(type(value) is int for value in raw)
+
+
 def _coerce6(raw: object) -> tuple[int, int, int, int, int, int] | None:
+    if type(raw) is tuple and len(raw) == 6 and _all_ints(raw):
+        return raw  # fast path: PyO3 already built it
     if raw is None or isinstance(raw, (str, bytes)) or not isinstance(raw, Sequence):
         return None
     if len(raw) != 6:
@@ -96,6 +103,8 @@ def _coerce6(raw: object) -> tuple[int, int, int, int, int, int] | None:
 
 
 def _coerce7(raw: object) -> tuple[int, int, int, int, int, int, int] | None:
+    if type(raw) is tuple and len(raw) == 7 and _all_ints(raw):
+        return raw  # fast path: PyO3 already built it
     if raw is None or isinstance(raw, (str, bytes)) or not isinstance(raw, Sequence):
         return None
     if len(raw) != 7:

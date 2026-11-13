@@ -23,6 +23,52 @@ def driver_compatible(
     return not (qualified and vehicle.vehicle_type not in qualified)
 
 
+class DriverIndex:
+    """Per-solve cache: driver compatibility is static input, so compute it once.
+
+    ``select_driver`` scanned and sorted every driver for every (trip, vehicle)
+    probe; on 2000 requests x 180 vehicles that was 11 million compatibility
+    checks. The index keeps the same answer: the preferred driver if free and
+    compatible, else the free compatible driver with the smallest id.
+    """
+
+    def __init__(self, problem: DayProblem) -> None:
+        self._by_id = {d.id: d for d in problem.drivers}
+        self._ordered = sorted(problem.drivers, key=lambda d: d.id)
+        self._compatible: dict[tuple[str, bool], tuple[str, ...]] = {}
+
+    def compatible_ids(self, vehicle: Vehicle, needs_accessibility: bool) -> tuple[str, ...]:
+        key = (vehicle.id, needs_accessibility)
+        found = self._compatible.get(key)
+        if found is None:
+            found = tuple(
+                d.id
+                for d in self._ordered
+                if driver_compatible(d, vehicle, needs_accessibility=needs_accessibility)
+            )
+            self._compatible[key] = found
+        return found
+
+    def pick(
+        self,
+        vehicle: Vehicle,
+        *,
+        needs_accessibility: bool,
+        occupied: set[str],
+        preferred_id: str | None,
+    ) -> str | None:
+        if preferred_id and preferred_id not in occupied:
+            pref = self._by_id.get(preferred_id)
+            if pref is not None and driver_compatible(
+                pref, vehicle, needs_accessibility=needs_accessibility
+            ):
+                return pref.id
+        for did in self.compatible_ids(vehicle, needs_accessibility):
+            if did not in occupied:
+                return did
+        return None
+
+
 def select_driver(
     problem: DayProblem,
     vehicle: Vehicle,
@@ -30,24 +76,15 @@ def select_driver(
     needs_accessibility: bool = False,
     occupied_driver_ids: set[str] | None = None,
     preferred_id: str | None = None,
+    index: DriverIndex | None = None,
 ) -> str | None:
     """Pick a free compatible driver. Returns None — never a random fallback."""
-    occupied = occupied_driver_ids or set()
-    dmap = {d.id: d for d in problem.drivers}
-    if preferred_id and preferred_id not in occupied:
-        pref = dmap.get(preferred_id)
-        if pref is not None and driver_compatible(
-            pref, vehicle, needs_accessibility=needs_accessibility
-        ):
-            return pref.id
-    candidates = [
-        d
-        for d in problem.drivers
-        if d.id not in occupied
-        and driver_compatible(d, vehicle, needs_accessibility=needs_accessibility)
-    ]
-    candidates.sort(key=lambda d: d.id)
-    return candidates[0].id if candidates else None
+    return (index or DriverIndex(problem)).pick(
+        vehicle,
+        needs_accessibility=needs_accessibility,
+        occupied=occupied_driver_ids or set(),
+        preferred_id=preferred_id,
+    )
 
 
 def assignment_record(

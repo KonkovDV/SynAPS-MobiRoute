@@ -34,8 +34,9 @@ def test_alns_shaw_prefers_related_trips() -> None:
         ],
     )
     trips = {t.id: t for t in p.requests}
-    near = _relatedness(p, trips["a"], trips["b"], True)
-    far = _relatedness(p, trips["a"], trips["c"], False)
+    tau = p.travel.lookup()
+    near = _relatedness(tau, trips["a"], trips["b"], True)
+    far = _relatedness(tau, trips["a"], trips["c"], False)
     assert near < far
 
 
