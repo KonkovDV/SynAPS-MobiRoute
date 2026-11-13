@@ -1,0 +1,122 @@
+{
+  "meta": {
+    "instance": "Cordeau (2006) a2-16",
+    "sha256": "d25ab2609ad09a3ccbd533dbe8418e1ca6b65140114389d31aa8d6c111c0aa79",
+    "published_optimum": 294.25,
+    "published_source": "Cordeau (2006), Operations Research 54(3):573-586, proven optimum; tabulated in Ho et al. (2018), Transp. Res. Part B 111:395-421"
+  },
+  "host": {
+    "platform": "Linux-6.18.44-fc-v445-x86_64-with-glibc2.39",
+    "python": "3.13.18",
+    "mobiroute": "0.2.7"
+  },
+  "literature": [
+    {
+      "lane": "literature",
+      "solver": "CP-SAT",
+      "status": "OPTIMAL",
+      "verified": true,
+      "cost": 294.248,
+      "bound": 294.249,
+      "gap_to_published_pct": -0.0007,
+      "seconds": 0.532
+    },
+    {
+      "lane": "literature",
+      "solver": "MIP \u00b7 SCIP",
+      "status": "OPTIMAL",
+      "verified": true,
+      "cost": 294.248,
+      "bound": 294.248,
+      "gap_to_published_pct": -0.0007,
+      "seconds": 24.461
+    },
+    {
+      "lane": "literature",
+      "solver": "MIP \u00b7 HIGHS",
+      "status": "OPTIMAL",
+      "verified": true,
+      "cost": 294.248,
+      "bound": 294.248,
+      "gap_to_published_pct": -0.0007,
+      "seconds": 37.306
+    },
+    {
+      "lane": "literature",
+      "solver": "MIP \u00b7 CBC",
+      "status": "FEASIBLE",
+      "verified": true,
+      "cost": 353.8365,
+      "bound": 225.8941,
+      "gap_to_published_pct": 20.2503,
+      "seconds": 59.295
+    },
+    {
+      "lane": "literature",
+      "solver": "LP relaxation \u00b7 GLOP",
+      "status": "BOUND",
+      "verified": null,
+      "cost": null,
+      "bound": 85.2731,
+      "gap_to_published_pct": null,
+      "seconds": 0.063
+    }
+  ],
+  "operator": [
+    {
+      "lane": "operator",
+      "solver": "Greedy insertion (Rust)",
+      "status": "HEURISTIC_FEASIBLE",
+      "verified": true,
+      "served": "16/16",
+      "kernel_distance": 386.0,
+      "literature_feasible": false,
+      "feasible_with_lobby_slack_30": true,
+      "seconds": 0.005
+    },
+    {
+      "lane": "operator",
+      "solver": "Beam search",
+      "status": "HEURISTIC_FEASIBLE",
+      "verified": true,
+      "served": "16/16",
+      "kernel_distance": 368.0,
+      "literature_feasible": false,
+      "feasible_with_lobby_slack_30": true,
+      "seconds": 0.015
+    },
+    {
+      "lane": "operator",
+      "solver": "ALNS",
+      "status": "HEURISTIC_FEASIBLE",
+      "verified": true,
+      "served": "16/16",
+      "kernel_distance": 386.0,
+      "literature_feasible": false,
+      "feasible_with_lobby_slack_30": true,
+      "seconds": 0.056
+    },
+    {
+      "lane": "operator",
+      "solver": "Rolling horizon",
+      "status": "HEURISTIC_FEASIBLE",
+      "verified": true,
+      "served": "16/16",
+      "kernel_distance": 386.0,
+      "literature_feasible": false,
+      "feasible_with_lobby_slack_30": true,
+      "seconds": 0.014
+    },
+    {
+      "lane": "operator",
+      "solver": "CP-SAT tiny (sequential)",
+      "status": "OPTIMAL",
+      "verified": true,
+      "served": "16/16",
+      "kernel_distance": 377.0,
+      "literature_feasible": false,
+      "feasible_with_lobby_slack_30": true,
+      "seconds": 0.076
+    }
+  ]
+}
