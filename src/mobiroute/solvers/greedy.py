@@ -12,7 +12,7 @@ from mobiroute.domain.constraints import (
     pickup_service_minutes,
     push_past_unavail,
 )
-from mobiroute.domain.driver_assignment import select_driver
+from mobiroute.domain.driver_assignment import DriverIndex, select_driver
 from mobiroute.domain.linked_trips import dependent_ids, linked_parents
 from mobiroute.domain.models import ReasonCode, SolutionStatus, StopType, WheelchairType
 from mobiroute.domain.policy import PoolingMode
@@ -54,6 +54,7 @@ from mobiroute.validation.feasibility import (
     quota_debit_minutes,
     trial_exceeds_quota,
     trial_exceeds_quota_rides,
+    trip_pickup_floor,
 )
 from mobiroute.validation.input import validate_problem
 from mobiroute.validation.reasons import diagnose_rejection, non_empty_reason
@@ -134,6 +135,7 @@ def simulate_stop_sequence(
         )
     loc = vehicle.depot_id
     tnow = vehicle.shift_start
+    travel = problem.travel.lookup()
     arr: dict[str, int] = {}
     dep: dict[str, int] = {}
     wait: dict[str, int] = {}
@@ -164,18 +166,17 @@ def simulate_stop_sequence(
             tnow = push_past_unavail(tnow, unavail)
         t_begin = tnow
         try:
-            tt = problem.travel.travel(loc, stop.location)
+            tt = travel(loc, stop.location)
         except KeyError:
             return None
         arrive = tnow + tt
         if stop.stop_type == StopType.PICKUP:
-            if arrive < trip.earliest_pickup:
-                hold = trip.earliest_pickup - arrive
-                arrive = trip.earliest_pickup
-                pwait = 0
-            else:
-                hold = 0
-                pwait = arrive - trip.earliest_pickup
+            floor = trip_pickup_floor(problem, trip)
+            hold = 0
+            if arrive < floor:
+                hold = floor - arrive
+                arrive = floor
+            pwait = arrive - trip.earliest_pickup
             if hold > trip.max_wait_time and load > 0:
                 return None
             if pwait > trip.max_wait_time:
@@ -231,12 +232,12 @@ def simulate_stop_sequence(
                 return None
             if trip.via_zone:
                 direct = (
-                    problem.travel.travel(trip.pickup_zone, trip.via_zone)
+                    travel(trip.pickup_zone, trip.via_zone)
                     + trip.via_service_duration
-                    + problem.travel.travel(trip.via_zone, trip.dropoff_zone)
+                    + travel(trip.via_zone, trip.dropoff_zone)
                 )
             else:
-                direct = problem.travel.travel(trip.pickup_zone, trip.dropoff_zone)
+                direct = travel(trip.pickup_zone, trip.dropoff_zone)
             ride_so_far = arrive - pickup_dep[trip.id]
             if direct > 0 and ride_so_far > detour_limit(direct, trip.max_detour_ratio):
                 return None
@@ -266,7 +267,7 @@ def simulate_stop_sequence(
         tnow = leave
     try:
         t_ret = tnow
-        tnow += problem.travel.travel(loc, vehicle.depot_id)
+        tnow += travel(loc, vehicle.depot_id)
     except KeyError:
         return None
     if occupancy_overlaps(t_ret, tnow, unavail):
@@ -360,11 +361,23 @@ def _simulate_route(
     vehicle: Vehicle,
     driver_id: str | None,
     trips: list[TripRequest],
+    stops_cache: dict[str, list[Stop]] | None = None,
 ) -> RoutePlan | None:
-    """Sequential serve without pooling: depot → PU → DO → … → depot."""
+    """Sequential serve without pooling: depot → PU → DO → … → depot.
+
+    ``stops_cache`` (per solve) reuses the immutable stop records of each trip
+    instead of re-validating them for every candidate vehicle.
+    """
     stops: list[Stop] = []
     for t in trips:
-        stops.extend(_trip_stops(t))
+        if stops_cache is None:
+            stops.extend(_trip_stops(t))
+            continue
+        cached = stops_cache.get(t.id)
+        if cached is None:
+            cached = _trip_stops(t)
+            stops_cache[t.id] = cached
+        stops.extend(cached)
     return simulate_stop_sequence(problem, vehicle, driver_id, stops, {t.id: t for t in trips})
 
 
@@ -417,7 +430,7 @@ def try_insert_trip(
         block = [pu, via, do] if via is not None else [pu, do]
         seq = [*core[:i], *block, *core[i:]]
         plan = simulate_stop_sequence(problem, vehicle, assigned, seq, merged)
-        if plan is None or pooling_stops_violate(problem, seq):
+        if plan is None or pooling_stops_violate(problem, seq, merged):
             return None
         return (plan.route_duration, sum(plan.waiting_times.values()), seq, assigned)
     vk = k.vehicles[vehicle.id]
@@ -432,11 +445,11 @@ def try_insert_trip(
     if found is not None:
         i, mid, j, dur, wait, _mx = found
         cand = _materialize_insert(core, pu, via, do, i, mid, j)
-        if pooling_stops_violate(problem, cand) is None:
+        if pooling_stops_violate(problem, cand, merged) is None:
             best = cand
     if best is None:
         best = [*core, pu, *([via] if via is not None else []), do]
-        if pooling_stops_violate(problem, best):
+        if pooling_stops_violate(problem, best, merged):
             return None
         plan = simulate_stop_sequence(problem, vehicle, assigned, best, merged)
         if plan is None:
@@ -532,6 +545,7 @@ def _assign_driver(
     occupied_driver_ids: set[str] | None = None,
     preferred_id: str | None = None,
     vehicle: Vehicle | None = None,
+    index: DriverIndex | None = None,
 ) -> str | None:
     v = vehicle if vehicle is not None else next(x for x in problem.vehicles if x.id == vehicle_id)
     return select_driver(
@@ -540,6 +554,7 @@ def _assign_driver(
         needs_accessibility=needs_accessibility,
         occupied_driver_ids=occupied_driver_ids or set(),
         preferred_id=preferred_id,
+        index=index,
     )
 
 
@@ -1037,6 +1052,8 @@ def _greedy_core(
                 quota_left[pid] = quota_cap[pid] - used_now[pid]
 
     fleet_ids = [v.id for v in problem.vehicles]
+    drivers_index = DriverIndex(problem)
+    stops_cache: dict[str, list[Stop]] = {}
     _sync_native_fleet(kernel, problem, route_stops, vehicle_driver)
     native_driver: dict[int, str | None] = {
         i: vehicle_driver[v.id] for i, v in enumerate(problem.vehicles)
@@ -1098,6 +1115,12 @@ def _greedy_core(
                 if pid in quota_cap:
                     quota_left[pid] = quota_cap[pid] - used_now[pid]
 
+    # Whether a route already carries a boarding-assistance trip; updated on commit.
+    route_need = {
+        v.id: _needs_accessibility(route_stops[v.id], trips_by_id) for v in problem.vehicles
+    }
+    allowed_mix = problem.operator_policy.pooling_mode == PoolingMode.ALLOWED
+    base_issue: dict[str, str | None] = {}  # pooling verdict per base route, reset on commit
     for trip in ordered:
         if trip.id in served:
             continue
@@ -1165,10 +1188,10 @@ def _greedy_core(
                     problem,
                     v.id,
                     vehicle=v,
-                    needs_accessibility=trip.needs_boarding_assistance
-                    or _needs_accessibility(route_stops[v.id], trips_by_id),
+                    needs_accessibility=trip.needs_boarding_assistance or route_need[v.id],
                     occupied_driver_ids=occ,
                     preferred_id=vehicle_driver[v.id],
+                    index=drivers_index,
                 )
                 if did0 is None:
                     alt_no.append(
@@ -1194,16 +1217,26 @@ def _greedy_core(
             pu, do = _pair_stops(trip)
             via = _via_stop(trip)
             for scored_row in part:
-                seq = _materialize_insert(
-                    service_stops(route_stops[fleet_ids[scored_row[0]]]),
-                    pu,
-                    via,
-                    do,
-                    scored_row[1],
-                    scored_row[2],
-                    scored_row[3],
-                )
-                issue = pooling_stops_violate(problem, seq)
+                row_vid = fleet_ids[scored_row[0]]
+                if allowed_mix:
+                    # Any mix is legal, so the verdict is the base route's
+                    # completeness: the inserted pickup/dropoff pair is complete.
+                    if row_vid not in base_issue:
+                        base_issue[row_vid] = pooling_stops_violate(
+                            problem, route_stops[row_vid], merged
+                        )
+                    issue = base_issue[row_vid]
+                else:
+                    seq = _materialize_insert(
+                        service_stops(route_stops[row_vid]),
+                        pu,
+                        via,
+                        do,
+                        scored_row[1],
+                        scored_row[2],
+                        scored_row[3],
+                    )
+                    issue = pooling_stops_violate(problem, seq, merged)
                 if issue:
                     alt_no.append(f"{fleet_ids[scored_row[0]]}:{issue.split(':', 1)[0]}")
                     continue
@@ -1244,6 +1277,8 @@ def _greedy_core(
             commit_insert(kernel, fleet_i, i, mid, j, new_idx)
             seq = _materialize_insert(service_stops(route_stops[best_vid]), pu, via, do, i, mid, j)
             route_stops[best_vid] = seq
+            base_issue.pop(best_vid, None)
+            route_need[best_vid] = route_need[best_vid] or trip.needs_boarding_assistance
             vehicle_driver[best_vid] = did
             served.append(trip.id)
             reasons[trip.id] = ReasonCode.ACCEPTED.value
@@ -1286,10 +1321,10 @@ def _greedy_core(
                 problem,
                 v.id,
                 vehicle=v,
-                needs_accessibility=trip.needs_boarding_assistance
-                or _needs_accessibility(route_stops[v.id], trips_by_id),
+                needs_accessibility=trip.needs_boarding_assistance or route_need[v.id],
                 occupied_driver_ids=occ,
                 preferred_id=vehicle_driver[v.id],
+                index=drivers_index,
             )
             if driver_id is None:
                 alt_no.append(
@@ -1320,7 +1355,7 @@ def _greedy_core(
                     for s in route_stops[v.id]
                     if s.trip_id and s.stop_type == StopType.PICKUP
                 ] + [trip]
-                seq_plan = _simulate_route(problem, v, driver_id, trial_trips)
+                seq_plan = _simulate_route(problem, v, driver_id, trial_trips, stops_cache)
                 if seq_plan is not None:
                     candidates.append(
                         (
@@ -1388,6 +1423,8 @@ def _greedy_core(
             )
             continue
         route_stops[best_vid] = chosen_seq
+        base_issue.pop(best_vid, None)
+        route_need[best_vid] = route_need[best_vid] or trip.needs_boarding_assistance
         vehicle_driver[best_vid] = plan.driver_id
         served.append(trip.id)
         reasons[trip.id] = ReasonCode.ACCEPTED.value

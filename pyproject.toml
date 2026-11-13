@@ -1,20 +1,30 @@
 [build-system]
-requires = ["setuptools>=68", "wheel"]
+requires = ["setuptools>=77", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
 name = "synaps-mobiroute"
-version = "0.2.7"
-description = "Explainable accessible Dial-a-Ride / paratransit planning and dispatch optimization kernel"
+version = "0.3.0"
+description = "Verifiable DARP / PDPTW routing kernel: Rust insertion, CP-SAT and MIP solvers, independent notary with why-not certificates"
 readme = "README.md"
 requires-python = ">=3.12"
-license = { text = "MIT" }
-authors = [{ name = "SynAPS-MobiRoute contributors" }]
-maintainers = [{ name = "SynAPS-MobiRoute contributors" }]
+license = "MIT"
+license-files = ["LICENSE"]
+authors = [{ name = "Dmitrij Konkov" }]
+maintainers = [{ name = "Dmitrij Konkov" }]
 keywords = [
+  "vehicle-routing",
+  "VRP",
+  "VRPTW",
+  "pickup-and-delivery",
   "dial-a-ride",
   "DARP",
   "PDPTW",
+  "mixed-integer-programming",
+  "cp-sat",
+  "or-tools",
+  "metaheuristics",
+  "rust",
   "paratransit",
   "accessible-transport",
   "optimization",
@@ -26,14 +36,13 @@ classifiers = [
   "Development Status :: 3 - Alpha",
   "Intended Audience :: Science/Research",
   "Intended Audience :: Developers",
-  "License :: OSI Approved :: MIT License",
   "Operating System :: OS Independent",
   "Programming Language :: Python :: 3 :: Only",
   "Programming Language :: Python :: 3.12",
   "Programming Language :: Python :: 3.13",
   "Typing :: Typed",
   "Topic :: Scientific/Engineering",
-  "Topic :: Scientific/Engineering :: Artificial Intelligence",
+  "Topic :: Scientific/Engineering :: Mathematics",
 ]
 dependencies = [
   "pydantic>=2.7",
@@ -73,7 +82,10 @@ mobiroute = ["py.typed"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = ["src", "."]
-addopts = "-q"
+addopts = "-q -m 'not slow'"
+markers = [
+  "slow: exact MIP proofs on full benchmark instances (run with -m slow)",
+]
 
 [tool.ruff]
 target-version = "py312"

@@ -2,6 +2,46 @@
 
 ## Unreleased
 
+## 0.3.0 — 2026-11-13
+
+### Fixed
+- Appointment pickups wait for the tightened window floor
+  `max(earliest, alight − min(max_ride, detour cap) − curb)` in the Rust kernel,
+  the Python oracle, the route simulator and the notary. Before, every simulator
+  scheduled pickups as early as possible: Cordeau a2-16 lost 7 of 16 requests
+  (each refused even alone). Now greedy, beam, ALNS and RHC serve 16 of 16 and
+  the tiny CP-SAT plan verifies as OPTIMAL.
+- The notary refuses pickup dwell beyond the curb wait (`UNEXPLAINED_DWELL`):
+  a passenger held onboard at the curb no longer escapes the ride clock and quota.
+- `nearest` and `beam` respect the passenger-day quota (they published plans the
+  notary rejected on `ops_quota`).
+- `generate --mode large` asked for a depot outside the zone matrix.
+- `academic-benchmark` attached the a2-16 reference to any file; it now binds to
+  the vendored SHA-256 and reads the instance bytes once.
+- CLI input errors print one line and exit 2 instead of a traceback.
+
+### Added
+- Literature-exact Cordeau lane: strict parser, exact CP-SAT model, compact
+  two-index MIP (Furtado, Munari & Morabito 2017) on SCIP, HiGHS and CBC, LP
+  relaxation bound, and an independent difference-constraint verifier
+  (Bellman–Ford). a2-16 reproduces the published optimum 294.25.
+- Why-not certificates: an infeasible route returns its negative cycle with the
+  missing minutes and an English and a Russian explanation.
+- `literature-benchmark` (with `--solver mip`, `--backend`, `--svg`),
+  `benchmark/solver_lab.py`, SVG route map and timeline, a GitHub Pages site.
+- Native ABI gate: the Python package refuses a `mobiroute_native` wheel from
+  another minor line. `clippy -D warnings` in CI; dependency audit workflow.
+
+### Performance
+- Profile-guided fixes (pooling verdict, driver index, travel lookup, Shaw
+  relatedness, native coercion). Results are identical on 217 mode × solver
+  runs. stress_200 day-ahead greedy 47.9 s → 2.8 s; full disruption pipeline
+  67.6 s → 13.1 s; medium ALNS 10.1 s → 2.6 s (author's machine, single thread).
+
+### Removed
+- Agent instruction file, Dependabot config, application documents for an
+  accelerator programme; dated internal snapshots moved to `docs/archive/`.
+
 ## 0.2.7 — 2026-09-10
 
 - Package identity matches `main`: `__version__` / `pyproject.toml` / READMEs /
@@ -22,8 +62,7 @@
   (`report` + `evidence` stamp: version, SynAPS pin, native backend, instance
   sha256, hashes, `plan_id`, notary verdict, wall-clock). Exit code follows the
   notary, not "the process finished".
-- Docs: evidence-bundle contract, Academy of Innovators flow-10 submission pack
-  with a claim ladder, 2025–2026 DARP SOTA review, and comparability profiles in
+- Docs: evidence-bundle contract, 2025–2026 DARP SOTA review, and comparability profiles in
   the benchmark protocol. None of those documents authorises a literature gap,
   a MAST partnership, or live Moscow data.
 

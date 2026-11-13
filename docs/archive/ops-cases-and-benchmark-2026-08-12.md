@@ -9,7 +9,7 @@ snapshot. It is not remeasured. Greedy leftover rebuild and unresolved insert no
 longer stamp `TIME_WINDOW_CONFLICT`; those rows stay historical labels. Do not
 read them as the current reason-code contract.
 
-This document is the SSOT for (1) operator-shaped rules retrieved 2026-08-12, (2) how real call-centre cases map onto a DARP kernel, (3) world paratransit practice used as **analogues only**, (4) Academy of Innovators 10th-cohort requirements, and (5) measured numbers from `mobiroute ops-benchmark --seed 42`.
+This document is the SSOT for (1) operator-shaped rules retrieved 2026-08-12, (2) how real call-centre cases map onto a DARP kernel, (3) world paratransit practice used as **analogues only**, and (5) measured numbers from `mobiroute ops-benchmark --seed 42`.
 
 Run:
 
@@ -109,24 +109,6 @@ Qualitative app-store / forum complaints are **pain signals for org/UX layers**,
 
 Moscow **24 h notice** is the opposite of ADA next-day. Encoding both as labels on the same synthetic day is intentional: it shows the kernel can carry either policy, not that Moscow adopted FTA rules.
 
-## Academy of Innovators — 10th cohort (as of 2026-08-12)
-
-| Item | Evidence | MobiRoute mapping |
-| --- | --- | --- |
-| Organizer | Moscow Innovation Cluster / i.moscow/academy | One project: MobiRoute only |
-| Deadline | **14 September 2026** (Sergunina; iz.ru / vm.ru / m24.ru 24 Jun 2026) | Submit before that date |
-| Age | 14+ | Team eligibility is off-repo |
-| Cost | Free (FAQ on i.moscow/academy) | — |
-| Application package | Project card + **presentation** + team + **motivation letter** answering “why us?” | `docs/academy-innovators-application-ru.md`, `docs/pitch-deck-15-points-ru.md`, `docs/motivation-letter-ru.md` |
-| Tracker | Personal business tracker; meetings not skippable; ≥1 teammate present; tracker sessions online | Ask for tracker on a **shadow pilot**, not “already deployed at MAST” |
-| Education | 2×/week, in-person with recording | — |
-| Cohort size | “100 best projects” (site) | Do not invent a ranking |
-| Pilot help | Help launching pilots with city / corporate customers | Shadow mode: synthetic → de-identified partner data |
-| Demo day | Best projects on stage | Pitch the kernel, not a passenger app |
-| Ecosystem marketing | 40k+ / 45k+ participants, ₽1+ bn, 230+ pilots, ₽3.7 bn resident turnover 2025 | Operator marketing — **not** MobiRoute evidence |
-| Site timeline widget | HTML scrape on 2026-08-12 still listed “9 поток” without dates | Prefer the 24 Jun 2026 news for the 10th-cohort deadline |
-
-**Forbidden in the application:** mixing SynAPS Energy / GridPlan / AeroBIM; claiming Moscow KPI improvement; calling greedy `OPTIMAL`.
 
 ## Scenario catalogue (kernel scripts)
 

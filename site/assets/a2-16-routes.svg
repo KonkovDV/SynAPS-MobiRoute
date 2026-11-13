@@ -1,0 +1,64 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="746" height="564" viewBox="0 0 746 564" role="img" aria-label="Cordeau a2-16: verified optimal plan, cost 294.25">
+<style>
+  .surface { fill: #fcfcfb; }
+  .ink { fill: #0b0b0b; } .ink2 { fill: #52514e; } .muted { fill: #898781; }
+  .grid { stroke: #e1e0d9; stroke-width: 1; } .axis { stroke: #c3c2b7; stroke-width: 1; }
+  .window { fill: #898781; fill-opacity: 0.22; }
+  .limit { stroke: #898781; stroke-width: 1; stroke-dasharray: 3 3; }
+  .depot { fill: #0b0b0b; }
+  .s0 { stroke: #2a78d6; } .f0 { fill: #2a78d6; } .s1 { stroke: #eb6834; } .f1 { fill: #eb6834; }
+  @media (prefers-color-scheme: dark) {
+    .surface { fill: #1a1a19; }
+    .ink { fill: #f0efec; } .ink2 { fill: #c3c2b7; }
+    .grid { stroke: #2c2c2a; } .axis { stroke: #383835; }
+    .depot { fill: #f0efec; }
+    .s0 { stroke: #3987e5; } .f0 { fill: #3987e5; } .s1 { stroke: #d95926; } .f1 { fill: #d95926; }
+  }
+  text { font-family: system-ui, -apple-system, "Segoe UI", sans-serif; }
+</style>
+<rect class="surface" width="746" height="564" rx="8"/>
+<text class="ink" x="56" y="30" font-size="17" font-weight="600">Cordeau a2-16: verified optimal plan, cost 294.25</text>
+<text class="ink2" x="56" y="52" font-size="12.5">Equal-scale plane · filled = pickup, ring = dropoff, square = depot · hover a mark for details</text>
+<line class="grid" x1="167.9" y1="76" x2="167.9" y2="516"/><line class="grid" x1="56" y1="404.1" x2="496" y2="404.1"/>
+<line class="grid" x1="282.8" y1="76" x2="282.8" y2="516"/><line class="grid" x1="56" y1="289.2" x2="496" y2="289.2"/>
+<line class="grid" x1="397.8" y1="76" x2="397.8" y2="516"/><line class="grid" x1="56" y1="174.2" x2="496" y2="174.2"/>
+<polyline class="s0" fill="none" stroke-width="2" stroke-linejoin="round" points="282.8,289.2 222.8,288.3 70.1,97.8 298.3,144.7 411.3,324.9 463.0,502.3 435.4,459.9 347.0,471.8 65.5,202.0 302.6,130.4 402.7,76.0 57.5,158.2 80.1,398.4 282.8,289.2"><title>Route 1: 12 stops, cost 115.34</title></polyline>
+<polyline class="s1" fill="none" stroke-width="2" stroke-linejoin="round" points="282.8,289.2 488.3,390.1 432.2,428.0 266.9,452.4 56.0,257.0 113.3,314.6 386.0,125.0 444.5,224.6 441.1,268.9 130.8,287.5 258.4,87.9 186.9,498.3 369.4,456.3 466.2,496.1 372.6,410.1 384.1,334.1 312.1,265.8 411.0,125.6 232.4,500.9 255.3,407.9 436.6,134.4 282.8,289.2"><title>Route 2: 20 stops, cost 178.91</title></polyline>
+<circle class="f0" cx="222.8" cy="288.3" r="4.5"><title>pickup 10 · route 1 · window [32, 47] · service starts 32.0</title></circle>
+<circle class="f0" cx="70.1" cy="97.8" r="4.5"><title>pickup 5 · route 1 · window [0, 1440] · service starts 49.0</title></circle>
+<circle class="s0 surface" cx="298.3" cy="144.7" r="4.5" stroke-width="2"><title>dropoff 10 · route 1 · window [0, 1440] · service starts 62.1</title></circle>
+<circle class="s0 surface" cx="411.3" cy="324.9" r="4.5" stroke-width="2"><title>dropoff 5 · route 1 · window [82, 97] · service starts 82.0</title></circle>
+<circle class="f0" cx="463.0" cy="502.3" r="4.5"><title>pickup 14 · route 1 · window [160, 175] · service starts 160.0</title></circle>
+<circle class="s0 surface" cx="435.4" cy="459.9" r="4.5" stroke-width="2"><title>dropoff 14 · route 1 · window [0, 1440] · service starts 165.2</title></circle>
+<circle class="f0" cx="347.0" cy="471.8" r="4.5"><title>pickup 15 · route 1 · window [180, 195] · service starts 180.0</title></circle>
+<circle class="s0 surface" cx="65.5" cy="202.0" r="4.5" stroke-width="2"><title>dropoff 15 · route 1 · window [0, 1440] · service starts 200.0</title></circle>
+<circle class="f0" cx="302.6" cy="130.4" r="4.5"><title>pickup 7 · route 1 · window [0, 1440] · service starts 367.0</title></circle>
+<circle class="f0" cx="402.7" cy="76.0" r="4.5"><title>pickup 16 · route 1 · window [366, 381] · service starts 380.5</title></circle>
+<circle class="s0 surface" cx="57.5" cy="158.2" r="4.5" stroke-width="2"><title>dropoff 7 · route 1 · window [400, 415] · service starts 400.0</title></circle>
+<circle class="s0 surface" cx="80.1" cy="398.4" r="4.5" stroke-width="2"><title>dropoff 16 · route 1 · window [0, 1440] · service starts 413.5</title></circle>
+<circle class="f1" cx="488.3" cy="390.1" r="4.5"><title>pickup 12 · route 2 · window [14, 29] · service starts 14.0</title></circle>
+<circle class="f1" cx="432.2" cy="428.0" r="4.5"><title>pickup 6 · route 2 · window [0, 1440] · service starts 19.9</title></circle>
+<circle class="s1 surface" cx="266.9" cy="452.4" r="4.5" stroke-width="2"><title>dropoff 12 · route 2 · window [0, 1440] · service starts 30.2</title></circle>
+<circle class="s1 surface" cx="56.0" cy="257.0" r="4.5" stroke-width="2"><title>dropoff 6 · route 2 · window [49, 64] · service starts 49.0</title></circle>
+<circle class="f1" cx="113.3" cy="314.6" r="4.5"><title>pickup 4 · route 2 · window [0, 1440] · service starts 105.0</title></circle>
+<circle class="f1" cx="386.0" cy="125.0" r="4.5"><title>pickup 11 · route 2 · window [115, 130] · service starts 122.4</title></circle>
+<circle class="s1 surface" cx="444.5" cy="224.6" r="4.5" stroke-width="2"><title>dropoff 11 · route 2 · window [0, 1440] · service starts 130.5</title></circle>
+<circle class="s1 surface" cx="441.1" cy="268.9" r="4.5" stroke-width="2"><title>dropoff 4 · route 2 · window [138, 153] · service starts 138.0</title></circle>
+<circle class="f1" cx="130.8" cy="287.5" r="4.5"><title>pickup 3 · route 2 · window [0, 1440] · service starts 154.5</title></circle>
+<circle class="s1 surface" cx="258.4" cy="87.9" r="4.5" stroke-width="2"><title>dropoff 3 · route 2 · window [179, 194] · service starts 179.0</title></circle>
+<circle class="f1" cx="186.9" cy="498.3" r="4.5"><title>pickup 13 · route 2 · window [198, 213] · service starts 200.1</title></circle>
+<circle class="s1 surface" cx="369.4" cy="456.3" r="4.5" stroke-width="2"><title>dropoff 13 · route 2 · window [0, 1440] · service starts 211.3</title></circle>
+<circle class="f1" cx="466.2" cy="496.1" r="4.5"><title>pickup 9 · route 2 · window [276, 291] · service starts 276.0</title></circle>
+<circle class="f1" cx="372.6" cy="410.1" r="4.5"><title>pickup 8 · route 2 · window [0, 1440] · service starts 284.5</title></circle>
+<circle class="s1 surface" cx="384.1" cy="334.1" r="4.5" stroke-width="2"><title>dropoff 9 · route 2 · window [0, 1440] · service starts 290.9</title></circle>
+<circle class="s1 surface" cx="312.1" cy="265.8" r="4.5" stroke-width="2"><title>dropoff 8 · route 2 · window [298, 313] · service starts 298.2</title></circle>
+<circle class="f1" cx="411.0" cy="125.6" r="4.5"><title>pickup 2 · route 2 · window [0, 1440] · service starts 308.7</title></circle>
+<circle class="s1 surface" cx="232.4" cy="500.9" r="4.5" stroke-width="2"><title>dropoff 2 · route 2 · window [322, 337] · service starts 329.7</title></circle>
+<circle class="f1" cx="255.3" cy="407.9" r="4.5"><title>pickup 1 · route 2 · window [0, 1440] · service starts 369.0</title></circle>
+<circle class="s1 surface" cx="436.6" cy="134.4" r="4.5" stroke-width="2"><title>dropoff 1 · route 2 · window [402, 417] · service starts 402.0</title></circle>
+<rect class="depot" x="277.8" y="284.2" width="10" height="10"><title>depot</title></rect>
+<text class="ink" x="524" y="84" font-size="13" font-weight="600">Routes</text>
+<line class="s0" x1="524" y1="110" x2="546" y2="110" stroke-width="2"/><text class="ink" x="554" y="114" font-size="12.5">Vehicle 1</text><text class="ink2" x="554" y="130" font-size="11.5">12 stops · cost 115.34</text>
+<line class="s1" x1="524" y1="150" x2="546" y2="150" stroke-width="2"/><text class="ink" x="554" y="154" font-size="12.5">Vehicle 2</text><text class="ink2" x="554" y="170" font-size="11.5">20 stops · cost 178.91</text>
+<text class="ink2" x="524" y="198" font-size="12">Total cost 294.25</text><text class="ink2" x="524" y="216" font-size="12">16/16 requests served</text><text class="muted" x="524" y="234" font-size="11.5">verified feasible (difference constraints)</text>
+</svg>

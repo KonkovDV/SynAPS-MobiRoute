@@ -26,6 +26,8 @@ from mobiroute.solvers.insertion_kernel import ProblemKernel
 from mobiroute.solvers.native_accel import acceleration_status, attach_native
 from mobiroute.validation.feasibility import (
     accessibility_compatible,
+    passenger_quota_debits,
+    quota_caps,
 )
 from mobiroute.validation.input import validate_problem
 from mobiroute.validation.reasons import diagnose_rejection, non_empty_reason
@@ -55,22 +57,26 @@ def _simulate_vehicle(
     )
 
 
-def _total_duration(
+def _state_metrics(
     problem: DayProblem,
     stops: dict[str, list[Stop]],
     drivers: dict[str, str | None],
-) -> int:
+) -> tuple[int, dict[str, int]]:
+    """Total duration and per-passenger quota debit of one beam state."""
     trips_by_id = {t.id: t for t in problem.requests}
     total = 0
+    used: dict[str, int] = {}
     for v in problem.vehicles:
         if not stops[v.id]:
             continue
         occ = {d for vid, d in drivers.items() if d and vid != v.id}
         plan = _simulate_vehicle(problem, v, stops[v.id], trips_by_id, occ, drivers[v.id])
         if plan is None:
-            return 10**9
+            return 10**9, used
         total += plan.route_duration
-    return total
+        for pid, mins in passenger_quota_debits(problem, plan).items():
+            used[pid] = used.get(pid, 0) + mins
+    return total, used
 
 
 def solve_beam(problem: DayProblem, beam_width: int = 3) -> PlanningResult:
@@ -94,6 +100,7 @@ def solve_beam(problem: DayProblem, beam_width: int = 3) -> PlanningResult:
             dict[str, str],
         ]
     ] = [(0, 0, {k: list(v) for k, v in empty.items()}, dict(empty_drv), [], [], {})]
+    caps = quota_caps(problem)
     for trip in active:
         expanded: list[
             tuple[
@@ -108,6 +115,7 @@ def solve_beam(problem: DayProblem, beam_width: int = 3) -> PlanningResult:
         ] = []
         for _rej, _dur, stops, drivers, served, rejected, reasons in beam:
             placed = False
+            quota_blocked = False
             occupied = {d for d in drivers.values() if d}
             for v in problem.vehicles:
                 if accessibility_compatible(v, trip) is not None:
@@ -140,10 +148,15 @@ def solve_beam(problem: DayProblem, beam_width: int = 3) -> PlanningResult:
                 new_stops[v.id] = seq
                 new_drv = dict(drivers)
                 new_drv[v.id] = assigned
+                total, used = _state_metrics(problem, new_stops, new_drv)
+                # Passenger-day quota spans routes; the insert kernel sees one route.
+                if any(used.get(pid, 0) > cap for pid, cap in caps.items()):
+                    quota_blocked = True
+                    continue
                 expanded.append(
                     (
                         len(rejected),
-                        _total_duration(problem, new_stops, new_drv),
+                        total,
                         new_stops,
                         new_drv,
                         [*served, trip.id],
@@ -153,7 +166,11 @@ def solve_beam(problem: DayProblem, beam_width: int = 3) -> PlanningResult:
                 )
                 placed = True
             if not placed:
-                code = non_empty_reason(diagnose_rejection(problem, trip))
+                code = (
+                    ReasonCode.QUOTA_EXCEEDED.value
+                    if quota_blocked
+                    else non_empty_reason(diagnose_rejection(problem, trip))
+                )
                 expanded.append(
                     (
                         len(rejected) + 1,

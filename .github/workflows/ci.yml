@@ -66,6 +66,7 @@ jobs:
           mobiroute generate --mode tiny --seed 42 --out /tmp/tiny.json
           mobiroute solve --problem /tmp/tiny.json --solver greedy --out-dir /tmp/out
           mobiroute demo --out-dir /tmp/demo
+          mobiroute academic-benchmark --instance benchmark/instances/cordeau/a2-16.txt --solver greedy --out-dir /tmp/a2-16
 
   typecheck:
     runs-on: ubuntu-latest
@@ -122,6 +123,10 @@ jobs:
           python -m pip install maturin
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+      - name: Clippy (warnings are errors)
+        run: cargo clippy --manifest-path native/mobiroute_native/Cargo.toml --release -- -D warnings
       - name: Build native insertion kernel
         run: |
           mkdir -p native-dist
@@ -138,3 +143,26 @@ jobs:
           PY
       - name: Native parity tests
         run: pytest -q tests/test_insertion_kernel.py tests/test_pooling.py tests/test_residuals.py tests/test_alns.py
+
+  literature-benchmark:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: pyproject.toml
+      - name: Install
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -e ".[dev]"
+      - name: Exact MIP proof on Cordeau a2-16 (slow tests)
+        run: pytest -m slow
+      - name: Literature benchmark with evidence and SVG
+        run: |
+          mobiroute literature-benchmark --instance benchmark/instances/cordeau/a2-16.txt --out-dir lit --svg
+          mobiroute literature-benchmark --instance benchmark/instances/cordeau/a2-16.txt --out-dir lit-mip --solver mip --backend HIGHS --time-limit 300
+

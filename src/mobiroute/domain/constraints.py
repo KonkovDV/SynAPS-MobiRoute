@@ -56,6 +56,33 @@ def earliest_alight_time(appointment_start: int | None) -> int | None:
     return max(0, int(appointment_start) - EARLY_DROPOFF_SLACK)
 
 
+def pickup_service_floor(
+    earliest_pickup: int,
+    appointment_start: int | None,
+    max_ride_time: int,
+    boarding_duration: int,
+    detour_cap: int | None = None,
+) -> int:
+    """Earliest pickup service start that any feasible schedule can use.
+
+    Time-window tightening (Dumas, Desrosiers & Soumis 1991; Cordeau 2006):
+    the passenger cannot alight before ``earliest_alight_time``, the ride clock
+    (pickup departure to dropoff arrival) is capped by ``max_ride_time`` and the
+    detour cap, so the pickup cannot depart before ``alight - ride_cap``, i.e.
+    cannot start before ``alight - ride_cap - curb``. This is a valid inequality
+    implied by the hard constraints, not a service preference: holding an early
+    vehicle until this floor never removes a feasible schedule of the sequence.
+    """
+    floor = int(earliest_pickup)
+    alight = earliest_alight_time(appointment_start)
+    if alight is None:
+        return floor
+    ride_cap = int(max_ride_time)
+    if detour_cap is not None and detour_cap >= 0:
+        ride_cap = min(ride_cap, int(detour_cap))
+    return max(floor, alight - ride_cap - pickup_service_minutes(boarding_duration))
+
+
 def detour_limit(direct_minutes: int, ratio: float) -> int:
     """Ties-to-even milliratio; saturate caps at the native time maximum."""
     scaled = float(ratio) * 1000.0
