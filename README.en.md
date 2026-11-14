@@ -228,7 +228,7 @@ opening hours, an order with an "08:00-11:00" window, loading at the depot or
 at a supplier, weight, volume and pallets, vehicle requirements; vehicle
 types with a shift, a price per kilometre and per hour, a rest rule and a
 number of trips. The `mobiroute.vrp.geo.v1` format is described in
-[docs/cargo-vrp.md](docs/cargo-vrp.md#данные-из-координат-и-путевые-листы)
+[docs/cargo-vrp.md](docs/cargo-vrp.md#данные-из-координат-и-маршрутные-листы)
 (RU, with an English summary) and in the docstring of `mobiroute.vrp.geo`.
 Travel times and distances come offline (great circle × a detour factor at
 the profile's mean speed) or from an [OSRM](https://project-osrm.org/) server:
@@ -248,6 +248,8 @@ waiting an hour at the first customer's gate. That schedule has the shortest
 shift duration (Lemma 4 in
 [docs/mathematical-formulation.md](docs/mathematical-formulation.md#4d-the-schedule-handed-to-the-driver)),
 and the tests hold it to every constraint of the verifier.
+
+> A route sheet is the driver's trip plan, not the statutory waybill ("путевой лист") that Russian law requires for every trip (Road Transport Charter, Federal Law 259-FZ, art. 6; its required details are set by Ministry of Transport Order No. 390 of 28.09.2022: vehicle and driver, odometer readings, medical and technical pre-trip checks). Those details live in the accounting system; the CSV loads into it as the assignment.
 
 ![Route sheets of the Chelny day: who goes where and when, a Gantt chart from the engine](docs/img/chelny-sheets.en.svg)
 

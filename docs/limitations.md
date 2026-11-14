@@ -21,9 +21,26 @@ What the code does not do yet, and what its numbers do not mean.
 
 ## Rich VRP model
 
-* Driver rests: one rest per route, so at most twice the driving limit per
-  day (the 9-hour daily limit for the 4.5 h rule); the rest is not split
-  (15 + 30 min), and daily and weekly rest between shifts is out of scope.
+* Driver rules. Implemented: a break of at least $b$ minutes after at most
+  $D$ minutes of driving and at most $2D$ minutes of driving a day; with
+  $D$ = 4.5 h and $b$ = 45 min this is the rule of EU Regulation 561/2006
+  (art. 6-7) and of Russian Ministry of Transport Order No. 424 of
+  16.10.2020. The shift cap counts from departure to return, waiting
+  included, as working time does. Not modelled: a break split into
+  15 + 30 min; daily driving extended to 10 h twice a week (art. 6 of the EU
+  regulation); weekly and fortnightly driving limits; the meal break of the
+  Labour Code (art. 108), which is not working time; daily and weekly rest
+  between shifts; tachograph data. The rest is one contiguous block in one
+  gap between two stops. It may use idle time of that gap only if the driver
+  is free to rest there (queueing at a gate is not a break), so route sheets
+  place it right after the service, before the drive. These are engineering
+  constraints, not legal advice: check a configuration against the
+  regulations in force and the company's local acts.
+* Route sheets are trip plans ("маршрутный лист" in the Russian output), not
+  the statutory waybill ("путевой лист", Road Transport Charter, art. 6;
+  required details by Order No. 390 of 28.09.2022). Vehicle and driver data,
+  odometer readings and the medical and technical pre-trip checks stay in
+  the accounting system.
 * Multi-trip days need reload stops created up front
   (`model.add_reload_stops`); a stop is a copy of the depot, and reloading
   takes a fixed time whatever the load.

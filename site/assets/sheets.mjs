@@ -16,6 +16,7 @@ const EPS = 1e-6;
 // Exported minutes are rounded to 0.01: windows are compared with that slack.
 const TOL = 0.02;
 
+const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
 const hhmm = (t) => {
   const m = Math.round(t);
   return `${String(Math.floor(m / 60)).padStart(2, "0")}:${String(m % 60).padStart(2, "0")}`;
@@ -188,7 +189,6 @@ function sheets({ $, tr, lang, svgEl, reduce, rerender }, data) {
     const head = [tr("Рейс", "Trip"), tr("Что", "What"), tr("Заказ", "Order"), tr("Где", "Where"), tr("Окно", "Window"), tr("Прибытие", "Arrive"), tr("Начало", "Start"), tr("Конец", "End"), d0, d2];
     const table = $("sheets-table");
     table.tHead.innerHTML = `<tr>${head.map((h) => `<th scope="col">${h}</th>`).join("")}</tr>`;
-    const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
     table.tBodies[0].innerHTML = v.rows.map((r) => {
       const w = r.w ? `${r.w[0] ? hhmm(r.w[0]) : ""}–${r.w[1] !== null ? hhmm(r.w[1]) : ""}` : "";
       const waits = r.s > r.a + 0.5 ? ` class="waits" title="${tr("ожидание", "waiting")} ${Math.round(r.s - r.a)} ${tr("мин", "min")}"` : "";
@@ -318,7 +318,7 @@ function sheets({ $, tr, lang, svgEl, reduce, rerender }, data) {
     const saved = base.duration - L.c;
     let text;
     if (now.late) {
-      const name = L.names[now.late.i];
+      const name = esc(L.names[now.late.i]);
       text = tr(
         `<b class="bad">Нельзя.</b> Выезд в ${hhmm(d)}: «${name}» — начало позже окна на ${Math.ceil(now.late.by)} мин. Позже ${hhmm(L.hi)} выехать нельзя: это самое позднее расписание.`,
         `<b class="bad">Infeasible.</b> Leaving at ${hhmm(d)}: "${name}" starts ${Math.ceil(now.late.by)} min after its window. ${hhmm(L.hi)} is the latest departure: the latest schedule.`,

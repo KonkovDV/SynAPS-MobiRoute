@@ -205,6 +205,17 @@ def arrival_times(
     return out, math.fsum(legs)
 
 
+def _cell(text: str) -> str:
+    """A text cell that a spreadsheet will not run as a formula (OWASP CSV injection)."""
+    return f"'{text}" if text[:1] in {"=", "+", "-", "@", "\t", "\r"} else text
+
+
+def _md(text: str) -> str:
+    """Text safe inside a Markdown table cell."""
+    flat = " ".join(text.split())
+    return escape(flat, quote=False).replace("|", "\\|")
+
+
 def _tidy(values: Sequence[float]) -> tuple[float, ...]:
     """Loads without float dust: ``-6.8e-13`` kg is an empty body."""
     return tuple(round(q, 6) + 0.0 for q in values)
@@ -246,14 +257,14 @@ def sheets_csv(sheets: Sequence[RouteSheet], dimensions: Sequence[str]) -> str:
             lo, hi = _window(row.window)
             writer.writerow(
                 [
-                    sheet.vehicle,
-                    sheet.vehicle_type,
+                    _cell(sheet.vehicle),
+                    _cell(sheet.vehicle_type),
                     int(sheet.hired),
                     row.trip,
                     seq,
                     row.kind,
-                    row.order,
-                    row.place,
+                    _cell(row.order),
+                    _cell(row.place),
                     "" if row.lat is None else f"{row.lat:.6f}",
                     "" if row.lon is None else f"{row.lon:.6f}",
                     lo,
@@ -279,7 +290,7 @@ def sheets_markdown(
     k = 0 if ru else 1
     sign = CURRENCY_SIGNS.get(currency, currency)
     unit = f" {sign}" if sign else ""
-    lines = ["# Путевые листы" if ru else "# Route sheets", ""]
+    lines = ["# Маршрутные листы" if ru else "# Route sheets", ""]
     for sheet in sheets:
         own = ("наёмная" if ru else "hired") if sheet.hired else ("своя" if ru else "own")
         trips = _trips_ru(sheet.trips) if ru else f"{sheet.trips} trip{'s' * (sheet.trips > 1)}"
@@ -299,7 +310,7 @@ def sheets_markdown(
             )
             header = "| Trip | What | Order | Where | Window | Arrive | Start | End | "
         lines += [
-            f"## {sheet.vehicle} · {own} · {trips}",
+            f"## {_md(sheet.vehicle)} · {own} · {trips}",
             "",
             summary,
             "",
@@ -314,8 +325,8 @@ def sheets_markdown(
             cells = [
                 str(row.trip),
                 KINDS[row.kind][k],
-                row.order,
-                row.place.replace("|", "/"),
+                _md(row.order),
+                _md(row.place),
                 window,
                 clock(row.arrive),
                 clock(row.start),

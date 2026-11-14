@@ -221,10 +221,15 @@ both must be at most $D$, which with a single rest per route forces
 $\Delta \le 2D$. A rest taken between the end of service at $v_g$ and the start
 at $v_{g+1}$ is either before leg $g$ (at $v_g$; driving before it is $P_g$) or
 after it (at $v_{g+1}$; $P_{g+1}$), and in both cases the only timing
-consequence is $B_{g+1} \ge B_g + s_g + \tau_g + b$: the vehicle may wait
-anywhere between two services, so waiting for a window counts towards the
-rest. For a fixed $g$ the system is again of difference constraints
+consequence is $B_{g+1} \ge B_g + s_g + \tau_g + b$: the rest is one
+contiguous block of $b$ minutes inside the gap, and slack the gap has anyway
+(a window ahead) can hold it, so a rest costs time only where the gap is
+short of $b$. For a fixed $g$ the system is again of difference constraints
 (section 4). $\square$
+
+The block must be free time: under the rules a break is not a period of
+availability, such as queueing at a gate. Route sheets therefore place it
+right after the service at $v_g$, before the drive (section 4d).
 
 The search filters candidates by $\Delta + \Delta_{\text{ins}} \le 2D$ in $O(1)$
 (a rest only adds time, so all other fast tests remain necessary conditions)

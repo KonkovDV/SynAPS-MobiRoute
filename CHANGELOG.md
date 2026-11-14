@@ -9,11 +9,14 @@
   vehicle types with shifts, prices per km and per hour, rest rules and
   trips, rush-hour profiles. Road matrices offline (great circle times a
   detour factor) or from the OSRM `table` service in blocks of 100 points;
-  input errors are codes (`GEO_UNKNOWN_DEPOT:van`, `GEO_OSRM_NO_ROUTE:i->j`).
+  every malformed document ends in a code (`GEO_FIELD_MISSING:capacity`,
+  `GEO_UNKNOWN_DEPOT:van`, `GEO_OSRM_NO_ROUTE:i->j`), never a traceback.
 - Route sheets (`mobiroute.vrp.sheets`): one per vehicle with arrival, start
   and end of work, load per dimension and trip, reloads and the driver's
   rest; CSV for an ERP, Markdown in Russian or English and an SVG Gantt
   chart of the day. `vrp-solve --geo FILE [--osrm URL] --sheets [--lang en]`.
+  The Russian output says "маршрутный лист" (a trip plan), not "путевой лист":
+  the statutory waybill has required details the engine does not produce.
 - The driver's schedule (`schedule.compact_schedule`): the latest departure
   that still returns earliest, a shortest-duration schedule (Lemma 4 in the
   formulation, two Hypothesis properties).
@@ -47,6 +50,11 @@
   `setpart_study.py` (solver choice for set partitioning).
 - `dc_day` generator: store deliveries from a DC in two waves.
 - Property-based tests (Hypothesis) hold the search's checks to the verifier.
+
+### Security
+- CSV cells that start like a spreadsheet formula are quoted (OWASP CSV
+  injection); Markdown cells escape `|`, line breaks and HTML; the site
+  escapes data it writes as HTML; `--osrm` accepts only http(s) URLs.
 
 ### Changed
 - Kernel and ABI 0.5: rests and reload stops in Rust, bit-identical to the

@@ -305,6 +305,52 @@ def test_build_rejects_bad_documents(change: Callable[[dict[str, Any]], None], c
         geo.build(doc)
 
 
+@pytest.mark.parametrize(
+    ("change", "code"),
+    [
+        (_set("depots", None), "GEO_FIELD_MISSING:depots"),
+        (_set("vehicle_types.0.capacity", None), "GEO_FIELD_MISSING:capacity"),
+        (_set("profiles.road", {"detour": 1.2}), "GEO_FIELD_MISSING:speed_kmh"),
+        (_set("vehicle_types.0.rests", {"duration_min": 45}), "GEO_FIELD_MISSING:max_driving"),
+        (_set("orders", "x"), "GEO_FIELD_INVALID"),
+        (_set("vehicle_types.0.shift", ["07:00"]), "GEO_FIELD_INVALID"),
+        (_set("dimensions", 5), "GEO_FIELD_INVALID"),
+        (_set("orders.0.delivery.from", 480), "GEO_TIME_INVALID"),
+        (_set("orders.0.delivery.lat", True), "GEO_STOP_INVALID:A.delivery"),
+    ],
+)
+def test_malformed_documents_end_in_a_code_not_a_traceback(
+    change: Callable[[dict[str, Any]], None], code: str
+) -> None:
+    doc = copy.deepcopy(_doc())
+    change(doc)
+    with pytest.raises(ValueError, match=code):
+        geo.build(doc)
+    with pytest.raises(ValueError, match="GEO_FORMAT"):
+        geo.build([])  # type: ignore[arg-type]
+
+
+def test_osrm_accepts_only_http() -> None:
+    for url in ("file:///etc/passwd?", "ftp://osrm.test", "osrm.test:5000"):
+        with pytest.raises(ValueError, match="GEO_OSRM_URL_INVALID"):
+            geo.osrm_source(url)
+    geo.osrm_source("https://osrm.test")
+
+
+def test_sheets_neutralise_formulas_and_table_breakers() -> None:
+    doc = _doc()
+    doc["orders"][0]["delivery"]["name"] = '=HYPERLINK("http://x")'
+    doc["orders"][1]["pickup"]["name"] = "Склад | ворота 3\n<b>2 этаж</b>"
+    built = geo.build(doc)
+    sheet = _sheet_of(built, [1, 2, 3, 4, 5])
+    rows = list(csv.DictReader(io.StringIO(sheets_csv([sheet], built.instance.dimensions))))
+    assert rows[1]["place"] == '\'=HYPERLINK("http://x")'
+    text = sheets_markdown([sheet], built.instance.dimensions)
+    line = next(x for x in text.splitlines() if "ворота" in x)
+    assert "Склад \\| ворота 3 &lt;b&gt;2 этаж&lt;/b&gt;" in line
+    assert line.count(" | ") == text.splitlines()[6].count(" | ")
+
+
 def test_example_day_is_synthetic_and_matches_its_generator() -> None:
     data = json.loads(EXAMPLE.read_text(encoding="utf-8"))
     names = [d["name"] for d in data["depots"]] + [
@@ -443,7 +489,7 @@ def test_sheet_numbers_trips_at_the_reload_stop() -> None:
     assert sheet.rows[4].load == (100.0, 0.3)  # the collection, unloaded at the reload
 
     text = sheets_markdown([sheet], built.instance.dimensions, currency=built.currency)
-    assert text.startswith("# Путевые листы")
+    assert text.startswith("# Маршрутные листы")
     assert "## van #1 · своя · 2 рейса" in text and "₽" in text
     assert "| 2 | перезагрузка |" in text
     english = sheets_markdown([sheet], built.instance.dimensions, lang="en", currency="EUR")
@@ -467,6 +513,8 @@ def test_sheets_add_up_to_the_verdict() -> None:
     assert len(sheets) == result.verdict.cost.vehicles
     assert sum(s.cost for s in sheets) == pytest.approx(result.verdict.cost.total)
     assert sum(s.distance for s in sheets) == pytest.approx(result.verdict.cost.distance)
+    loads = [q for s in sheets for row in s.rows for q in row.load]
+    assert min(loads) >= 0.0 and all(q == round(q, 6) for q in loads)  # no float dust
     stops = [(row.order, row.kind) for s in sheets for row in s.rows if row.order]
     assert len(stops) == len(set(stops)) == sum(len(r.nodes) for r in inst.requests)
     assert len({s.vehicle for s in sheets}) == len(sheets)
@@ -481,7 +529,7 @@ def test_gantt_chart_draws_every_vehicle_and_every_stop() -> None:
     built = geo.build(doc)
     reload = next(k for k in range(built.instance.n_nodes) if built.places[k].role == "reload")
     sheet = _sheet_of(built, [1, 2, 3, 4, reload, 5])
-    svg = sheets_svg([sheet, sheet], title="tiny: путевые листы", currency="RUB")
+    svg = sheets_svg([sheet, sheet], title="tiny: маршрутные листы", currency="RUB")
     root = ET.fromstring(svg)
     ns = "{http://www.w3.org/2000/svg}"
     bars = [el for el in root.iter(f"{ns}rect") if el.find(f"{ns}title") is not None]
@@ -530,7 +578,7 @@ def test_cli_solves_a_geo_day_into_route_sheets(tmp_path: Path) -> None:
     )  # fmt: skip
     assert code == 0
     text = (tmp_path / "route-sheets.md").read_text(encoding="utf-8")
-    assert text.startswith("# Путевые листы") and "₽" in text
+    assert text.startswith("# Маршрутные листы") and "₽" in text
     rows = list(csv.DictReader(io.StringIO((tmp_path / "route-sheets.csv").read_text("utf-8"))))
     assert len({r["order"] for r in rows if r["kind"] == "delivery"}) == 45
     assert (tmp_path / "routes.svg").exists() and (tmp_path / "solution.json").exists()
