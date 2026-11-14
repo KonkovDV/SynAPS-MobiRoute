@@ -1,10 +1,10 @@
-"""Solver lab: one instance, every lane, one independent verifier.
+"""Solver lab: one instance, every solver, one independent verifier.
 
-Literature lane (Cordeau 2006 algebra, comparable with the published optimum):
+Literature setting (the Cordeau 2006 model, comparable with the published optimum):
 CP-SAT on a conservative integer grid, the compact two-index MIP on SCIP, HiGHS
-and CBC, and the LP relaxation bound. Operator lane (integer minutes, curb wait,
+and CBC, and the LP relaxation bound. Operator rules (integer minutes, curb wait,
 appointment lobby; never comparable with the literature): the kernel heuristics
-and tiny CP-SAT, plus a re-timing of their sequences under the literature algebra.
+and tiny CP-SAT, plus a re-timing of their sequences under the literature model.
 
 Usage:
   python benchmark/solver_lab.py [--instance PATH] [--mip-time-limit 60] [--out DIR]
@@ -40,7 +40,7 @@ from mobiroute.validation.feasibility import check_plan
 from mobiroute.vrp.alns import AlnsConfig
 from mobiroute.vrp.alns import solve as vrp_solve
 from mobiroute.vrp.io import parse_cordeau_vrp
-from mobiroute.vrp.ortools_lane import solve_ortools
+from mobiroute.vrp.ortools_baseline import solve_ortools
 
 ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_INSTANCE = ROOT / "benchmark" / "instances" / "cordeau" / "a2-16.txt"
@@ -66,7 +66,7 @@ def _literature_rows(raw: bytes, mip_limit: float) -> tuple[list[dict[str, Any]]
             gap = 100.0 * (verdict.cost - reference.objective) / reference.objective
         rows.append(
             {
-                "lane": "literature",
+                "setting": "literature",
                 "solver": label,
                 "status": run.status,
                 "verified": verdict.feasible and verdict.full_service,
@@ -78,7 +78,7 @@ def _literature_rows(raw: bytes, mip_limit: float) -> tuple[list[dict[str, Any]]
                 "seconds": run.wall_clock_seconds,
             }
         )
-    # Heuristics of the rich-VRP engine on the same published algebra, judged
+    # Heuristics of the rich-VRP engine on the same published model, judged
     # by the same Cordeau verifier (node ids coincide).
     vrp_inst = parse_cordeau_vrp(raw.decode("utf-8"), name="a2-16")
     started = time.perf_counter()
@@ -96,7 +96,7 @@ def _literature_rows(raw: bytes, mip_limit: float) -> tuple[list[dict[str, Any]]
             gap = 100.0 * (verdict.cost - reference.objective) / reference.objective
         rows.append(
             {
-                "lane": "literature",
+                "setting": "literature",
                 "solver": label,
                 "status": status,
                 "verified": verdict.feasible and verdict.full_service,
@@ -112,7 +112,7 @@ def _literature_rows(raw: bytes, mip_limit: float) -> tuple[list[dict[str, Any]]
     bound = lp_relaxation_bound(instance)
     rows.append(
         {
-            "lane": "literature",
+            "setting": "literature",
             "solver": "LP relaxation · GLOP",
             "status": "BOUND",
             "verified": None,
@@ -149,7 +149,7 @@ def _operator_rows(raw: bytes) -> list[dict[str, Any]]:
         routes = cordeau_node_routes(result)
         rows.append(
             {
-                "lane": "operator",
+                "setting": "operator",
                 "solver": label,
                 "status": result.status,
                 "verified": check_plan(problem, result).feasible,
@@ -196,7 +196,7 @@ def _markdown(payload: dict[str, Any]) -> str:
         f"Machine: {payload['host']['platform']}, Python {payload['host']['python']}, "
         f"mobiroute {payload['host']['mobiroute']}. Wall-clock, single thread.",
         "",
-        "## Literature algebra (comparable)",
+        "## Literature model (comparable)",
         "",
         "| Solver | Status | Verified | Cost | Bound | Gap to published | Time, s |",
         "| --- | --- | --- | ---: | ---: | ---: | ---: |",
@@ -211,9 +211,9 @@ def _markdown(payload: dict[str, Any]) -> str:
         )
     lines += [
         "",
-        "## Operator algebra (not comparable: integer minutes, 5-min curb, 30-min lobby)",
+        "## Operator rules (not comparable: integer minutes, 5-min curb, 30-min lobby)",
         "",
-        "| Solver | Status | Served | Notary | Kernel distance | Literature-feasible | "
+        "| Solver | Status | Served | Verified | Kernel distance | Literature-feasible | "
         "With 30-min lobby | Time, s |",
         "| --- | --- | --- | --- | ---: | --- | --- | ---: |",
     ]

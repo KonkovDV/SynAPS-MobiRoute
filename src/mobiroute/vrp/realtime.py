@@ -391,7 +391,7 @@ class Dispatcher:
 
     def _ortools_insert(self, r: int, tau: float) -> Decision:
         """Re-solve the whole live state with OR-Tools for every new order."""
-        from mobiroute.vrp.ortools_lane import solve_ortools
+        from mobiroute.vrp.ortools_baseline import solve_ortools
 
         began = time.perf_counter()
         req = self.inst.requests[r]

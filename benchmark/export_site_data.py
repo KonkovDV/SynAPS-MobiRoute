@@ -1,7 +1,7 @@
 """Regenerate the figures and data the README and the site show.
 
-Solves Cordeau a2-16 with the exact CP-SAT lane, verifies the plan with the
-independent notary and writes:
+Solves Cordeau a2-16 with the exact CP-SAT model, verifies the plan with the
+independent verifier and writes:
 
 * ``site/data/a2-16.json``: instance, verified optimal routes, service starts;
 * ``docs/img`` and ``site/assets``: route map and timeline SVGs.

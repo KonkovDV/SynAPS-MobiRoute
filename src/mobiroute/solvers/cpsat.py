@@ -1,4 +1,4 @@
-"""Tiny sequential CP-SAT DARP. OPTIMAL only if OR-Tools OPTIMAL and notary pass."""
+"""Tiny sequential CP-SAT DARP. OPTIMAL only if OR-Tools says OPTIMAL and the verifier agrees."""
 
 from __future__ import annotations
 
@@ -33,7 +33,7 @@ def _stamp_cpsat_fallback(
     reason: str,
     extra: dict[str, object] | None = None,
 ) -> PlanningResult:
-    """A fallback is not the greedy seed. Identity must fingerprint this lane."""
+    """A fallback is not the greedy seed. Identity must fingerprint this solver."""
     stamped = res.model_copy(
         update={
             "solution_type": "CPSAT_FALLBACK_GREEDY",
@@ -71,7 +71,7 @@ def solve_cpsat(problem: DayProblem, time_limit_s: float = 10.0) -> PlanningResu
 
     Each assigned trip is a PU→DO pair; two trips on one vehicle cannot overlap.
     This is **not** an optimum of the pooling DARP. Label OPTIMAL only when
-    OR-Tools status is OPTIMAL **and** the independent notary accepts the plan.
+    OR-Tools status is OPTIMAL **and** the independent verifier accepts the plan.
     """
     problem = validate_problem(problem)
     active = [t for t in problem.requests if t.booking_status.value not in {"CANCELLED", "NO_SHOW"}]
@@ -87,8 +87,8 @@ def solve_cpsat(problem: DayProblem, time_limit_s: float = 10.0) -> PlanningResu
         from ortools.sat.python import cp_model
     except ImportError:
         res = solve_greedy(problem)
-        # A missing engine is a fact about this lane, not a verdict on the plan
-        # the notary just verified. The status keeps describing the published
+        # A missing engine is a fact about this solver, not a verdict on the plan
+        # the verifier just accepted. The status keeps describing the published
         # plan; the missing dependency stays in `solver_config`.
         return _stamp_cpsat_fallback(
             res,

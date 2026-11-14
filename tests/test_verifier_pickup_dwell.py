@@ -1,8 +1,8 @@
-"""Red Team: a passenger held onboard at the curb must not vanish from the clocks.
+"""A passenger held on board at the curb must not vanish from the clocks.
 
 The ride clock starts at pickup departure. A plan that keeps the vehicle at the
 pickup after the curb wait, with the passenger already aboard, used to pass the
-notary while ride time and quota debit stayed unchanged.
+verifier while ride time and quota debit stayed unchanged.
 """
 
 from __future__ import annotations

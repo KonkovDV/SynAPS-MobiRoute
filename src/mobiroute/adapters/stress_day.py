@@ -1,4 +1,4 @@
-"""Harsh synthetic social-taxi day: 200 vehicles, mixed failures. Not real MAST."""
+"""A synthetic social-taxi stress day: 200 vehicles, mixed failures. Not real MAST."""
 
 from __future__ import annotations
 

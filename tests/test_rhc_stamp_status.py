@@ -1,4 +1,4 @@
-"""An RHC stamp may not publish an exact-lane status."""
+"""Rolling horizon never publishes an exact-solver status."""
 
 from __future__ import annotations
 

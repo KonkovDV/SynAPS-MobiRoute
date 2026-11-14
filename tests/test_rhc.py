@@ -9,7 +9,7 @@ from mobiroute.validation.completeness import incomplete_plan_issues
 from mobiroute.validation.feasibility import check_plan
 
 
-def test_rhc_never_optimal_and_notary() -> None:
+def test_rhc_is_never_optimal_and_always_verified() -> None:
     p = generate_day("tiny", seed=42)
     res = solve_rolling_horizon(p, window_minutes=120, overlap_minutes=20)
     assert res.solution_type == "RHC"

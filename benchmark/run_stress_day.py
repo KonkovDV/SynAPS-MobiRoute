@@ -1,4 +1,4 @@
-"""Harsh 200-vehicle synthetic day + disruption shake. Rust greedy. Not real MAST."""
+"""A 200-vehicle synthetic stress day with disruptions, solved by the Rust greedy. Not real MAST."""
 
 from __future__ import annotations
 
@@ -51,8 +51,8 @@ def _row(
         "service_rate_all": round(len(res.served_requests) / n, 4),
         "status": res.status,
         "verified_feasible": res.verified_feasible,
-        "notary_feasible": report.feasible,
-        "notary_violations": len(report.violations),
+        "verifier_feasible": report.feasible,
+        "verifier_violations": len(report.violations),
         "insertion_backend": res.solver_config.get("insertion_backend"),
         "solution_type": res.solution_type,
         "routes": len(res.route_plans),
@@ -62,7 +62,7 @@ def _row(
         out.update(extra)
     print(
         f"{name:22} {dt:8.3f}s  served={out['served']:4}/{active}  "
-        f"status={out['status']}  notary={out['notary_feasible']}  "
+        f"status={out['status']}  verified={out['verifier_feasible']}  "
         f"backend={out['insertion_backend']}",
         flush=True,
     )

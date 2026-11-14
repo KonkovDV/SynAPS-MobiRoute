@@ -75,7 +75,7 @@ class ManualOverrideIdentityTest(unittest.TestCase):
 
     def test_the_override_drops_totals_it_cannot_re_measure(self):
         _tid, out = self._reject_first_served()
-        # The baseline carries notary totals; the override cannot re-measure them.
+        # The baseline carries verified totals; the override cannot re-measure them.
         self.assertIn("violations", self.base.objective_values)
         self.assertEqual(set(out.objective_values), {"served", "rejected"})
         self.assertEqual(out.objective_values["rejected"], float(len(out.rejected_requests)))

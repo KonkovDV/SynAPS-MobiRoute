@@ -1,4 +1,4 @@
-"""Red-team: notary holes, sort-order traps, pipeline completeness, rare combos."""
+"""Edge cases: verifier gaps, sort-order traps, pipeline completeness, rare combinations."""
 
 from __future__ import annotations
 
@@ -32,7 +32,7 @@ def _result(problem, routes: list[RoutePlan], served: list[str]) -> PlanningResu
     )
 
 
-def test_notary_rejects_stretcher_sharing_cabin() -> None:
+def test_verifier_rejects_stretcher_sharing_cabin() -> None:
     p = problem(
         [
             vehicle(
@@ -120,7 +120,7 @@ def test_notary_rejects_stretcher_sharing_cabin() -> None:
     assert sim is None
 
 
-def test_notary_rejects_vehicle_shift_overrun() -> None:
+def test_verifier_rejects_vehicle_shift_overrun() -> None:
     v = vehicle("v1")
     v = v.model_copy(update={"shift_end": 50})
     p = problem(
@@ -160,7 +160,7 @@ def test_notary_rejects_vehicle_shift_overrun() -> None:
     assert any("VEHICLE_SHIFT_END" in x for x in report.violations)
 
 
-def test_notary_unknown_trip_does_not_crash() -> None:
+def test_verifier_unknown_trip_does_not_crash() -> None:
     p = problem(
         [vehicle("v1")],
         [driver("d1")],
@@ -186,7 +186,7 @@ def test_notary_unknown_trip_does_not_crash() -> None:
     assert any("UNKNOWN_TRIP:ghost" in x for x in report.violations)
 
 
-def test_notary_duplicate_vehicle_route() -> None:
+def test_verifier_duplicate_vehicle_route() -> None:
     p = problem(
         [vehicle("v1")],
         [driver("d1")],
@@ -201,7 +201,7 @@ def test_notary_duplicate_vehicle_route() -> None:
     assert any("DUPLICATE_VEHICLE_ROUTE" in x for x in report.violations)
 
 
-def test_notary_does_not_mutate_ride_times() -> None:
+def test_verifier_does_not_mutate_ride_times() -> None:
     p = problem(
         [vehicle("v1")],
         [driver("d1")],
@@ -237,7 +237,7 @@ def test_same_vehicle_return_not_starved_by_sort() -> None:
     assert res.reason_codes.get("ret") != "SAME_VEHICLE_UNAVAILABLE"
 
 
-def test_fifo_subscription_does_not_fail_notary_on_explained_frozen() -> None:
+def test_fifo_subscription_does_not_fail_the_verifier_on_explained_frozen() -> None:
     p = generate_ops_day("ops_subscription_vs_nextday", seed=42)
     res = solve_fifo(p)
     report = check_plan(p, res)
@@ -347,7 +347,7 @@ def test_online_insert_respects_remaining_quota() -> None:
     assert res.reason_codes.get("b") == ReasonCode.QUOTA_EXCEEDED.value
 
 
-def test_notary_flags_unexplained_via_idle() -> None:
+def test_verifier_flags_unexplained_via_idle() -> None:
     t = trip("via", "Z_NORTH", "Z_CENTER", earliest=60, latest=240, max_ride=200, via="Z_HOSP_A")
     p = problem([vehicle("v1")], [driver("d1")], [t])
     res = solve_greedy(p)
@@ -402,7 +402,7 @@ def test_cancel_outbound_cancels_wait_return() -> None:
     assert statuses[ret.id] == "CANCELLED"
 
 
-def test_seeded_replan_peels_over_quota_and_passes_notary() -> None:
+def test_seeded_replan_peels_over_quota_and_passes_the_verifier() -> None:
     a = trip("a", "Z_NORTH", "Z_SOUTH", earliest=60, latest=400, max_ride=400)
     b = trip("b", "Z_EAST", "Z_WEST", earliest=70, latest=400, max_ride=400)
     b = b.model_copy(update={"pseudonymous_passenger_id": a.pseudonymous_passenger_id})

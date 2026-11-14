@@ -1,6 +1,6 @@
 // Page behaviour. Everything here is progressive: the content is in the HTML,
-// this file adds motion and the interactive notary.
-import { nodeName, phrase, verifyRoute } from "./notary.mjs";
+// this file adds motion and the interactive verifier.
+import { nodeName, phrase, verifyRoute } from "./verifier.mjs";
 import { initVrp } from "./vrp.mjs";
 import { initSheets } from "./sheets.mjs";
 import { initPrices } from "./prices.mjs";
@@ -385,7 +385,7 @@ function race(lab) {
   }
 }
 
-/* ---------- the lab: edit a route, the notary answers ---------- */
+/* ---------- the lab: edit a route, the verifier answers ---------- */
 function laboratory(inst) {
   const n = inst.n;
   const original = inst.routes.map((r) => [...r]);

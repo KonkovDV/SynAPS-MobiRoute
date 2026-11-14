@@ -1,4 +1,4 @@
-"""Literature-exact Cordeau lane: parser, difference-constraint notary, CP-SAT, gate."""
+"""Cordeau (2006) as published: parser, difference-constraint verifier, CP-SAT, gap check."""
 
 from __future__ import annotations
 

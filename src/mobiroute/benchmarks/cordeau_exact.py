@@ -1,11 +1,11 @@
-"""Literature-exact Cordeau (2006) DARP lane.
+"""The Cordeau (2006) DARP exactly as published.
 
-The operator kernel adapts open data to a Moscow-shaped algebra (integer
+The operator kernel adapts open data to Moscow-style operator rules (integer
 minutes, 5-minute curb wait, alighting up to 30 minutes before an appointment).
 Its numbers are therefore never comparable with the literature. This module is
-the comparable lane, and nothing else:
+the comparable setting, and nothing else:
 
-* the published algebra of Cordeau (2006): Euclidean distances are travel
+* the published model of Cordeau (2006): Euclidean distances are travel
   times, the published service times, hard time windows at both ends, maximum
   ride time ``L`` (end of pickup service to start of dropoff service), route
   duration ``T``, capacity ``Q``, at most ``K`` routes, routing-cost objective;
@@ -353,11 +353,11 @@ def verify_routes(
     alight_slack: int = 0,
     eps: float = 1e-6,
 ) -> ExactVerdict:
-    """Independent literature-algebra notary for a fixed route set.
+    """Independent verifier of a fixed route set under the literature model.
 
     ``routes`` lists service node ids per vehicle, depots excluded. A nonzero
     ``alight_slack`` opens dropoff windows that many minutes early; it exists
-    to diagnose operator-algebra plans and never yields a literature verdict.
+    to diagnose plans made under the operator rules and never yields a literature verdict.
     """
     n = instance.n_requests
     violations: list[str] = []
@@ -509,7 +509,7 @@ def solve_exact_cpsat(
     workers: int = 1,
     scale: int = 1000,
 ) -> ExactSolveResult:
-    """Exact DARP model (Cordeau 2006 algebra) on a fixed-point time grid.
+    """Exact DARP model (Cordeau 2006) on a fixed-point time grid.
 
     Travel times are rounded **up** on the ``1/scale`` grid, so every model
     solution is feasible with real-valued travel; arc costs are rounded to the
@@ -707,7 +707,7 @@ def solve_exact_mip(
     time_limit_s: float = 120.0,
     with_lp_bound: bool = True,
 ) -> ExactSolveResult:
-    """Same instance, same algebra, solved as a MIP with real-valued travel.
+    """Same instance, same model, solved as a MIP with real-valued travel.
 
     ``OPTIMAL`` is the backend's proof on the exact (unrounded) model, up to its
     feasibility tolerance; :func:`verify_routes` still decides feasibility.
@@ -765,7 +765,7 @@ class LiteratureGapBlocker(StrEnum):
 class LiteratureReport(StrictModel):
     instance_id: str
     instance_sha256: str
-    algebra: str
+    model: str
     solver: str
     solver_status: str
     verified_feasible: bool
@@ -783,7 +783,7 @@ class LiteratureReport(StrictModel):
     allowed_claim: str
 
 
-LITERATURE_ALGEBRA = (
+LITERATURE_MODEL = (
     "Cordeau (2006): Euclidean real-valued travel, published service times, "
     "hard pickup and dropoff windows, ride <= L, duration <= T, load <= Q, <= K routes"
 )
@@ -814,7 +814,7 @@ def build_literature_report(
         within = abs(cost - reference.objective) <= 0.5 * 10 ** (-reference.decimals)
     if gap is None:
         claim = (
-            f"literature algebra, {instance.instance_id}: run recorded, no publishable gap "
+            f"literature model, {instance.instance_id}: run recorded, no publishable gap "
             f"({', '.join(blockers)})"
         )
     else:
@@ -828,14 +828,14 @@ def build_literature_report(
             else "the real-valued model, within solver tolerance"
         )
         claim = (
-            f"literature algebra, {instance.instance_id}: verified full-service plan, "
+            f"literature model, {instance.instance_id}: verified full-service plan, "
             f"cost {cost:.{reference.decimals}f} vs published {reference.objective:.2f}, "
             f"gap {shown:.2f}%{match}; {run.backend} status {run.status} on {model}"
         )
     return LiteratureReport(
         instance_id=instance.instance_id,
         instance_sha256=instance_sha256,
-        algebra=LITERATURE_ALGEBRA,
+        model=LITERATURE_MODEL,
         solver=run.solver,
         solver_status=run.status,
         verified_feasible=verdict.feasible and not verdict.alight_slack,

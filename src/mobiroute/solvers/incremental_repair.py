@@ -19,7 +19,7 @@ def solve_incremental_repair(
     driver_unavailable_id: str | None = None,
     traffic_delay_minutes: int = 0,
 ) -> tuple[DayProblem, PlanningResult, PlanDiff]:
-    """Named repair lane. Heuristic — never OPTIMAL."""
+    """Named repair step. Heuristic — never OPTIMAL."""
     updated, result, diff = recover_disruption(
         problem,
         baseline,
@@ -43,6 +43,6 @@ def solve_incremental_repair(
             ),
         }
     )
-    # The recovery lane published its own identity. What leaves this function is
-    # an incremental-repair plan, so the id must fingerprint this lane.
+    # The recovery step published its own identity. What leaves this function is
+    # an incremental-repair plan, so the id must fingerprint this step.
     return updated, stamped.model_copy(update={"plan_id": plan_identity(stamped)}), diff

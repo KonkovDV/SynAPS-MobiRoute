@@ -33,7 +33,7 @@ Modules
 ``setpart``      set partitioning over the route pool (CP-SAT, SCIP, HiGHS, CBC)
 ``prices``       LP duals of that model: the price of an order, the rent of a vehicle type
 ``exact``        CP-SAT model for proven optima on small instances
-``ortools_lane`` OR-Tools Routing baseline on the same model
+``ortools_baseline`` OR-Tools Routing baseline on the same model
 ``lateness``     minimal-lateness schedules (bisection and LP)
 ``realtime``     live dispatch simulator and policies
 ``verify``       independent verifier

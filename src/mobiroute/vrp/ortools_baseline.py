@@ -68,18 +68,18 @@ def solve_ortools(
     """Solve ``inst`` with OR-Tools Routing and verify the plan independently."""
     from ortools.constraint_solver import pywrapcp, routing_enums_pb2
 
-    inst.require_core_model("ORTOOLS_LANE")
+    inst.require_core_model("ORTOOLS")
     pickups_only = any(r.pickup is not None and r.delivery is None for r in inst.requests)
     deliveries_only = any(r.pickup is None and r.delivery is not None for r in inst.requests)
     if pickups_only and deliveries_only:
-        raise ValueError("ORTOOLS_LANE_MIXED_DEPOT_LOADS_UNSUPPORTED")
+        raise ValueError("ORTOOLS_MIXED_DEPOT_LOADS_UNSUPPORTED")
     unit_type: list[int] = []
     for t, vt in enumerate(inst.vehicle_types):
         units = vt.count if max_units_per_type is None else min(vt.count, max_units_per_type)
         units = min(units, max(1, inst.n_requests))
         unit_type += [t] * units
     if not unit_type:
-        raise ValueError("ORTOOLS_LANE_NO_VEHICLES")
+        raise ValueError("ORTOOLS_NO_VEHICLES")
     # Routing treats every node it knows as a mandatory visit, so the model holds
     # only depots and the nodes of the orders in this instance (a live snapshot
     # carries the whole day's nodes but only a few open orders).

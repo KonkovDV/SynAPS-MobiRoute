@@ -1,4 +1,4 @@
-"""Baselines respect the passenger-day quota instead of handing the notary a breach."""
+"""Baselines respect the passenger-day quota instead of handing the verifier a breach."""
 
 from __future__ import annotations
 

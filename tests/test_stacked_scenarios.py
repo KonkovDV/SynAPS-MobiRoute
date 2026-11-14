@@ -1,4 +1,4 @@
-"""Harsh Red Team: stacked disruptions, kernel-fork isolation, native/Pydantic lockstep."""
+"""Stacked scenarios: disruptions in a row, kernel fork isolation, native and Pydantic in step."""
 
 from __future__ import annotations
 
@@ -36,7 +36,7 @@ from mobiroute.validation.feasibility import check_plan
 from tests.factories import driver, problem, trip, vehicle
 
 
-def _assert_notary(problem, result) -> None:
+def _assert_verified(problem, result) -> None:
     report = check_plan(problem, result)
     if result.verified_feasible:
         assert report.feasible, report.violations[:12]
@@ -89,7 +89,7 @@ def test_native_eval_lockstep_via_unavail_appointment() -> None:
         ],
     )
     res = solve_greedy(p)
-    _assert_notary(p, res)
+    _assert_verified(p, res)
     if res.route_plans:
         _assert_native_lockstep(p, res)
 
@@ -107,7 +107,7 @@ def test_online_does_not_mutate_baseline_routes() -> None:
     assert [
         (rp.vehicle_id, dict(rp.arrival_times), dict(rp.ride_times)) for rp in base.route_plans
     ] == before_times
-    _assert_notary(_upd, res)
+    _assert_verified(_upd, res)
     assert extra.id not in base.served_requests
 
 
@@ -121,14 +121,14 @@ def test_online_from_same_baseline_does_not_poison_kernel() -> None:
     assigned_r2 = {tid for rp in r2.route_plans for tid in rp.passenger_assignments}
     if a.id in r1.served_requests:
         assert a.id not in assigned_r2
-    _assert_notary(_u2, r2)
+    _assert_verified(_u2, r2)
     assert kernel_for(base) is not kernel_for(r1) or kernel_for(r1) is None
     if r1.event_id and base.plan_id:
         assert r1.event_id != (base.event_id or "")
         assert r1.plan_id != base.plan_id
 
 
-def test_online_verified_feasible_matches_full_notary() -> None:
+def test_online_verified_feasible_matches_the_full_check() -> None:
     p = generate_day("tiny", seed=9)
     base = solve_greedy(p)
     extra = trip(
@@ -146,7 +146,7 @@ def test_online_verified_feasible_matches_full_notary() -> None:
     upd, res, _diff = online_insert(p, base, extra)
     report = check_plan(upd, res)
     assert res.verified_feasible == report.feasible
-    _assert_notary(upd, res)
+    _assert_verified(upd, res)
 
 
 def test_cancel_then_emergency_replans_before_insert() -> None:
@@ -163,7 +163,7 @@ def test_cancel_then_emergency_replans_before_insert() -> None:
     assert res.status != "OPTIMAL"
 
 
-def test_wait_return_cancel_then_traffic_notary() -> None:
+def test_wait_return_cancel_then_traffic_stays_verified() -> None:
     p = generate_ops_day("ops_wait_return", seed=42)
     base = solve_greedy(p)
     ret = next(t for t in p.requests if t.same_vehicle_as)
@@ -171,17 +171,17 @@ def test_wait_return_cancel_then_traffic_notary() -> None:
     assert out_id is not None
     cancelled = apply_cancellation(p, out_id)
     upd, res, _diff = recover_disruption(cancelled, base, traffic_delay_minutes=8)
-    _assert_notary(upd, res)
+    _assert_verified(upd, res)
     assert out_id not in res.served_requests
     assert ret.id not in res.served_requests
     if res.route_plans:
         _assert_native_lockstep(upd, res)
 
 
-def test_combat_stacked_disruptions_on_wheelchair_heavy() -> None:
+def test_stacked_stacked_disruptions_on_wheelchair_heavy() -> None:
     p = generate_day("wheelchair_heavy", seed=13)
     day = solve_greedy(p)
-    _assert_notary(p, day)
+    _assert_verified(p, day)
     _assert_native_lockstep(p, day)
     assert day.route_plans
     served = list(day.served_requests)
@@ -190,24 +190,24 @@ def test_combat_stacked_disruptions_on_wheelchair_heavy() -> None:
     appt = next((t for t in p.requests if t.id in set(served) and t.appointment_end), None)
 
     p2, r2, _ = recover_disruption(p, day, cancel_trip_id=served[0])
-    _assert_notary(p2, r2)
+    _assert_verified(p2, r2)
 
     noshow_id = served[1] if len(served) > 1 else served[0]
     p3, r3, _ = recover_disruption(p2, r2, no_show_trip_id=noshow_id)
-    _assert_notary(p3, r3)
+    _assert_verified(p3, r3)
 
     p4, r4, _ = recover_disruption(p3, r3, vehicle_unavailable_id=vid)
-    _assert_notary(p4, r4)
+    _assert_verified(p4, r4)
     assert all(rp.vehicle_id != vid for rp in r4.route_plans)
 
     if did:
         p5, r5, _ = recover_disruption(p4, r4, driver_unavailable_id=did)
-        _assert_notary(p5, r5)
+        _assert_verified(p5, r5)
     else:
         p5, r5 = p4, r4
 
     p6, r6, _ = recover_disruption(p5, r5, traffic_delay_minutes=8)
-    _assert_notary(p6, r6)
+    _assert_verified(p6, r6)
     if r6.route_plans:
         _assert_native_lockstep(p6, r6)
 
@@ -218,12 +218,12 @@ def test_combat_stacked_disruptions_on_wheelchair_heavy() -> None:
             appointment_trip_id=appt.id,
             appointment_end=max(0, appt.appointment_end - 15),
         )
-        _assert_notary(p7, r7)
+        _assert_verified(p7, r7)
     else:
         p7, r7 = p6, r6
 
     em = trip(
-        "combat-er",
+        "stacked-er",
         "Z_NORTH",
         "Z_HOSP_A",
         earliest=100,
@@ -235,18 +235,18 @@ def test_combat_stacked_disruptions_on_wheelchair_heavy() -> None:
         assist=True,
     )
     p8, r8, diff = recover_disruption(p7, r7, emergency_trip=em)
-    _assert_notary(p8, r8)
+    _assert_verified(p8, r8)
     assert diff.plan_churn
     assert r8.status != "OPTIMAL"
 
 
-def test_combat_small_day_traffic_then_two_online() -> None:
+def test_stacked_small_day_traffic_then_two_online() -> None:
     p = generate_day("small", seed=17)
     day = solve_greedy(p)
-    _assert_notary(p, day)
+    _assert_verified(p, day)
     traffic = apply_traffic_delay(p, 6)
     p2, r2, _ = recover_disruption(traffic, day, traffic_delay_minutes=6)
-    _assert_notary(p2, r2)
+    _assert_verified(p2, r2)
     cur_p, cur_r = p2, r2
     for i in range(3):
         em = trip(
@@ -259,7 +259,7 @@ def test_combat_small_day_traffic_then_two_online() -> None:
             max_wait=30,
         )
         cur_p, cur_r, _diff = online_insert(cur_p, cur_r, em)
-        _assert_notary(cur_p, cur_r)
+        _assert_verified(cur_p, cur_r)
     if cur_r.route_plans:
         _assert_native_lockstep(cur_p, cur_r)
 
@@ -384,7 +384,7 @@ def test_group_bus_capacity_and_stretcher_exclusive_insert() -> None:
     )
     p = problem([bus], [d], [*packed, stretcher])
     res = solve_greedy(p)
-    _assert_notary(p, res)
+    _assert_verified(p, res)
     if res.route_plans:
         _assert_native_lockstep(p, res)
     if stretcher.id in set(res.served_requests):
@@ -408,19 +408,19 @@ def test_unavail_travel_window_and_service_area_insert() -> None:
     outside = trip("out", "Z_EAST", "Z_WEST", earliest=70, latest=210, max_ride=120, max_wait=50)
     p = problem([v], [d], [inside, outside])
     res = solve_greedy(p)
-    _assert_notary(p, res)
+    _assert_verified(p, res)
     assert outside.id not in res.served_requests
     if res.route_plans:
         _assert_native_lockstep(p, res)
 
 
-def test_combat_ops_stretcher_then_traffic_then_emergency() -> None:
+def test_stacked_ops_stretcher_then_traffic_then_emergency() -> None:
     p = generate_ops_day("ops_stretcher", seed=42)
     day = solve_greedy(p)
-    _assert_notary(p, day)
+    _assert_verified(p, day)
     traffic = apply_traffic_delay(p, 7)
     p2, r2, _ = recover_disruption(traffic, day, traffic_delay_minutes=7)
-    _assert_notary(p2, r2)
+    _assert_verified(p2, r2)
     em = trip(
         "st-er",
         "Z_NORTH",
@@ -434,7 +434,7 @@ def test_combat_ops_stretcher_then_traffic_then_emergency() -> None:
         assist=True,
     )
     p3, r3, _ = recover_disruption(p2, r2, emergency_trip=em)
-    _assert_notary(p3, r3)
+    _assert_verified(p3, r3)
     assert r3.status != "OPTIMAL"
     if r3.route_plans:
         _assert_native_lockstep(p3, r3)
@@ -491,7 +491,7 @@ def test_traffic_peel_keeps_feasible_prefix() -> None:
     if "early" not in base.served_requests:
         pytest.skip("prefix trip was not served on the seed plan")
     delayed, rec, _diff = recover_disruption(p, base, traffic_delay_minutes=8)
-    _assert_notary(delayed, rec)
+    _assert_verified(delayed, rec)
     assert "early" in rec.served_requests
     assert rec.status != "OPTIMAL"
 
@@ -506,7 +506,7 @@ def test_quota_blocked_near_vehicle_still_uses_second_vehicle() -> None:
         ],
     )
     res = solve_greedy(p)
-    _assert_notary(p, res)
+    _assert_verified(p, res)
     assert "b" in res.served_requests
     if "a" in res.served_requests:
         va = next(rp.vehicle_id for rp in res.route_plans if "a" in rp.passenger_assignments)
@@ -515,6 +515,6 @@ def test_quota_blocked_near_vehicle_still_uses_second_vehicle() -> None:
             rp.ride_times["a"] for rp in res.route_plans if "a" in rp.passenger_assignments
         )
         if ride_a > 20:
-            raise AssertionError("notary should have rejected over-quota A")
+            raise AssertionError("the verifier should have rejected over-quota A")
         if va == vb:
             assert ride_a <= 20

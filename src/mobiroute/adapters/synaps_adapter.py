@@ -1,4 +1,4 @@
-"""Optional SynAPS adapter — documents mapping boundaries; no FJSP pollution."""
+"""Link to SynAPS, the upstream scheduling engine (manufacturing, FJSP)."""
 
 from __future__ import annotations
 
@@ -10,10 +10,8 @@ def synaps_pin() -> str:
 
 
 def adapter_status() -> dict[str, object]:
-    """
-    MobiRoute v0 uses native DARP solvers.
-    Compiling DARP → SynAPS ScheduleProblem is EXPERIMENTAL / NOT enabled by default.
-    """
+    """The DARP and VRP solvers here are native; compiling a DARP day into a
+    SynAPS ScheduleProblem is experimental and off by default."""
     return {
         "synaps_commit": SYNAPS_COMMIT,
         "native_darp": True,

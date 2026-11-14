@@ -1,4 +1,4 @@
-"""Tiny CP-SAT correctness and honesty tests."""
+"""Tiny CP-SAT: correctness and the status it may publish."""
 
 from __future__ import annotations
 
@@ -24,7 +24,7 @@ def _too_large_for_tiny_cpsat():
     return base.model_copy(update={"vehicles": vehs, "drivers": drvs})
 
 
-def test_cpsat_optimal_implies_notary():
+def test_cpsat_optimal_implies_verified():
     p = problem(
         [vehicle("v1"), vehicle("v2", depot="Z_DEPOT_2")],
         [driver("d1"), driver("d2", depot="Z_DEPOT_2")],
@@ -45,7 +45,7 @@ def test_cpsat_optimal_implies_notary():
         assert res.verified_feasible
 
 
-def test_cpsat_never_optimal_when_notary_fails_is_enforced():
+def test_cpsat_never_optimal_when_the_verifier_fails():
     p = generate_day("tiny", seed=7)
     p = p.model_copy(update={"requests": p.requests[:6]})
     res = solve_cpsat(p, time_limit_s=8.0)
@@ -156,7 +156,7 @@ def test_cpsat_sequential_not_pooling_model():
         for rp in cpsat.route_plans:
             if rp.passenger_load_after_stop:
                 assert max(rp.passenger_load_after_stop.values()) <= 1
-    # honesty: do not call greedy OPTIMAL
+    # a greedy plan is never OPTIMAL
     assert greedy.status != "OPTIMAL"
 
 

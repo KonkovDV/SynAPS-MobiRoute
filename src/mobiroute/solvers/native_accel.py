@@ -33,7 +33,7 @@ NATIVE_REQUIRED = (
 )
 
 # The kernel's scheduling semantics (e.g. the appointment pickup floor) must
-# match the Python oracle and notary. A wheel from another minor line is refused.
+# match the Python oracle and the verifier. A wheel from another minor line is refused.
 NATIVE_ABI = "0.5"
 
 _native: Any | None = None

@@ -1,4 +1,4 @@
-"""CLI success requires both notary verification and a successful status."""
+"""CLI success requires both a verified plan and a successful status."""
 
 from pathlib import Path
 

@@ -211,7 +211,7 @@ class Instance:
         return any(p.speed is not None for p in self.profiles.values())
 
     def require_core_model(self, who: str) -> None:
-        """Reject rules a solver lane does not model (rests, multi-trip days)."""
+        """Reject rules a solver does not model (rests, multi-trip days)."""
         if self.has_rest_rules:
             raise ValueError(f"{who}_REST_RULES_UNSUPPORTED")
         if self.has_reloads:

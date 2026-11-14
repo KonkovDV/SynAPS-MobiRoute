@@ -4,7 +4,7 @@ Before 0.2.8 every simulator scheduled pickups as early as possible and never
 delayed one to respect a later appointment, so a passenger ready long before
 the appointment was rejected even alone in an empty fleet (Cordeau a2-16: 7 of
 16 requests). The floor ``alight - min(max_ride, detour cap) - curb`` is implied
-by the hard constraints; search, oracle and notary must agree on it.
+by the hard constraints; search, oracle and verifier must agree on it.
 """
 
 from __future__ import annotations
@@ -106,7 +106,7 @@ def test_oracle_native_and_pydantic_agree_on_the_floor() -> None:
     assert sum(plan.waiting_times.values()) == oracle[4]
 
 
-def test_notary_holds_the_line_on_both_sides_of_the_floor() -> None:
+def test_verifier_holds_the_line_on_both_sides_of_the_floor() -> None:
     p = _appointment_problem()
     res = solve_greedy(p)
     route = res.route_plans[0]
@@ -151,8 +151,8 @@ def test_every_a2_16_request_alone_is_served() -> None:
     assert refused == []
 
 
-@pytest.mark.parametrize("lane", ["greedy", "beam", "alns", "rhc", "cpsat"])
-def test_a2_16_kernel_lanes_serve_every_request(lane: str) -> None:
+@pytest.mark.parametrize("solver", ["greedy", "beam", "alns", "rhc", "cpsat"])
+def test_a2_16_kernel_solvers_serve_every_request(solver: str) -> None:
     if not native_available():
         pytest.skip("mobiroute_native not built")
     from mobiroute.solvers.alns import solve_alns
@@ -168,9 +168,9 @@ def test_a2_16_kernel_lanes_serve_every_request(lane: str) -> None:
         "cpsat": solve_cpsat,
     }
     p = load_cordeau_a2_16()
-    res = solvers[lane](p)
+    res = solvers[solver](p)
     assert check_plan(p, res).feasible
     assert res.verified_feasible
     assert sorted(res.served_requests) == sorted(t.id for t in p.requests)
     # Max-served optimum with every request served; never a routing-cost claim.
-    assert res.status == ("OPTIMAL" if lane == "cpsat" else "HEURISTIC_FEASIBLE")
+    assert res.status == ("OPTIMAL" if solver == "cpsat" else "HEURISTIC_FEASIBLE")

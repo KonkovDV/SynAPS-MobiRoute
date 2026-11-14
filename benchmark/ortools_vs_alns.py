@@ -22,7 +22,7 @@ from mobiroute.vrp.alns import AlnsConfig, solve
 from mobiroute.vrp.generators import cargo_day, plant_day
 from mobiroute.vrp.io import load_benchmark
 from mobiroute.vrp.model import Instance
-from mobiroute.vrp.ortools_lane import solve_ortools
+from mobiroute.vrp.ortools_baseline import solve_ortools
 
 ROOT = Path(__file__).resolve().parents[1]
 CASES = [

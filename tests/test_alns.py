@@ -9,7 +9,7 @@ from mobiroute.validation.feasibility import check_plan
 from tests.factories import driver, problem, trip, vehicle
 
 
-def test_alns_never_optimal_and_notary() -> None:
+def test_alns_is_never_optimal_and_always_verified() -> None:
     p = generate_day("tiny", seed=42)
     res = solve_alns(p, iterations=4, destroy_frac=0.3)
     assert res.solution_type == "ALNS"

@@ -1,4 +1,4 @@
-"""One signer for `input_hash`; one identity per published configuration."""
+"""Only finalize sets `input_hash`; every published configuration has its own identity."""
 
 import unittest
 

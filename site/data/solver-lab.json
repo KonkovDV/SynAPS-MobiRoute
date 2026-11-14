@@ -12,7 +12,7 @@
   },
   "literature": [
     {
-      "lane": "literature",
+      "setting": "literature",
       "solver": "CP-SAT",
       "status": "OPTIMAL",
       "verified": true,
@@ -24,7 +24,7 @@
       "seconds": 0.646
     },
     {
-      "lane": "literature",
+      "setting": "literature",
       "solver": "MIP \u00b7 SCIP",
       "status": "OPTIMAL",
       "verified": true,
@@ -36,7 +36,7 @@
       "seconds": 25.899
     },
     {
-      "lane": "literature",
+      "setting": "literature",
       "solver": "MIP \u00b7 HIGHS",
       "status": "OPTIMAL",
       "verified": true,
@@ -48,7 +48,7 @@
       "seconds": 40.444
     },
     {
-      "lane": "literature",
+      "setting": "literature",
       "solver": "MIP \u00b7 CBC",
       "status": "FEASIBLE",
       "verified": true,
@@ -60,7 +60,7 @@
       "seconds": 58.974
     },
     {
-      "lane": "literature",
+      "setting": "literature",
       "solver": "ALNS, rich-VRP engine (10k it)",
       "status": "HEURISTIC",
       "verified": true,
@@ -72,7 +72,7 @@
       "seconds": 2.744
     },
     {
-      "lane": "literature",
+      "setting": "literature",
       "solver": "OR-Tools Routing PCI+GLS (10 s)",
       "status": "SUCCESS",
       "verified": true,
@@ -84,7 +84,7 @@
       "seconds": 10.0
     },
     {
-      "lane": "literature",
+      "setting": "literature",
       "solver": "LP relaxation \u00b7 GLOP",
       "status": "BOUND",
       "verified": null,
@@ -96,7 +96,7 @@
   ],
   "operator": [
     {
-      "lane": "operator",
+      "setting": "operator",
       "solver": "Greedy insertion (Rust)",
       "status": "HEURISTIC_FEASIBLE",
       "verified": true,
@@ -107,7 +107,7 @@
       "seconds": 0.012
     },
     {
-      "lane": "operator",
+      "setting": "operator",
       "solver": "Beam search",
       "status": "HEURISTIC_FEASIBLE",
       "verified": true,
@@ -118,7 +118,7 @@
       "seconds": 0.017
     },
     {
-      "lane": "operator",
+      "setting": "operator",
       "solver": "ALNS",
       "status": "HEURISTIC_FEASIBLE",
       "verified": true,
@@ -129,7 +129,7 @@
       "seconds": 0.049
     },
     {
-      "lane": "operator",
+      "setting": "operator",
       "solver": "Rolling horizon",
       "status": "HEURISTIC_FEASIBLE",
       "verified": true,
@@ -140,7 +140,7 @@
       "seconds": 0.012
     },
     {
-      "lane": "operator",
+      "setting": "operator",
       "solver": "CP-SAT tiny (sequential)",
       "status": "OPTIMAL",
       "verified": true,

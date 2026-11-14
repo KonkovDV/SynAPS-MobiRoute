@@ -29,7 +29,7 @@ from mobiroute.vrp.model import (
     euclidean_matrix,
     single_profile,
 )
-from mobiroute.vrp.ortools_lane import solve_ortools
+from mobiroute.vrp.ortools_baseline import solve_ortools
 from mobiroute.vrp.realtime import Dispatcher, simulate
 from mobiroute.vrp.schedule import route_timing
 from mobiroute.vrp.solution import Route, Solution
@@ -229,7 +229,7 @@ def test_alns_matches_the_exact_model_when_orders_may_be_refused() -> None:
         assert heur.objective == pytest.approx(search_objective(inst, exact.solution), rel=1e-9)
 
 
-def test_ortools_lane_returns_verified_plans() -> None:
+def test_ortools_baseline_returns_verified_plans() -> None:
     inst, _ = load_benchmark(INST / "solomon" / "C101.txt")
     run = solve_ortools(inst, time_limit=2.0)
     assert run.verdict.feasible and run.verdict.complete
@@ -406,7 +406,7 @@ def test_merge_operator_turns_the_local_optimum_into_the_optimum() -> None:
     assert sorted(len(r.nodes) for r in merged.routes if r.nodes) == [2, 3, 4, 4]
 
 
-def test_ortools_lane_ignores_nodes_of_absent_orders() -> None:
+def test_ortools_baseline_ignores_nodes_of_absent_orders() -> None:
     # A live snapshot keeps every node of the day but only a few open orders;
     # Routing must not be asked to visit the nodes of orders that do not exist.
     from dataclasses import replace

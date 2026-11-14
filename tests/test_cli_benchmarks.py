@@ -1,4 +1,4 @@
-"""CLI contracts: claim gates bind to bytes, inputs fail cleanly, modes are valid."""
+"""CLI contracts: references bind to instance bytes, bad inputs fail cleanly, modes are valid."""
 
 from __future__ import annotations
 
@@ -34,7 +34,7 @@ def test_academic_benchmark_attaches_the_reference_to_the_vendored_bytes(
     assert report["instance_id"] == "cordeau-a2-16"
     assert report["reference_objective"] == 294.25
     assert report["served_count"] == 16
-    assert report["gap_blockers"] == ["ALGEBRA_NOT_COMPARABLE"]
+    assert report["gap_blockers"] == ["MODEL_NOT_COMPARABLE"]
     cross = payload["literature_crosscheck"]
     assert cross["kernel_routes_literature_feasible"] is False
     assert cross["feasible_with_operator_lobby_slack_30"] is True

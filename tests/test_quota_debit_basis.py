@@ -70,7 +70,7 @@ class CurbWaitDebitTests(unittest.TestCase):
             ReasonCode.MANUAL_REVIEW_REQUIRED,
         )
 
-    def test_cpsat_quota_gate_agrees_with_the_notary(self):
+    def test_cpsat_quota_gate_agrees_with_the_verifier(self):
         if importlib.util.find_spec("ortools") is None:
             self.skipTest("ortools not installed")
         from mobiroute.solvers.cpsat import solve_cpsat

@@ -219,7 +219,7 @@ class OperatorPolicyTests(unittest.TestCase):
         self.assertIsNotNone(issue)
         self.assertTrue(str(issue).startswith("POOLING_INCOMPLETE_SEQUENCE:"))
 
-    def test_opt_in_search_tag_uses_the_notary_code(self):
+    def test_opt_in_search_tag_uses_the_verifier_code(self):
         from mobiroute.validation.feasibility import pooling_stops_violate
 
         problem, result = pooled_pair()

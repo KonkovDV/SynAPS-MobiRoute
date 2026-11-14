@@ -928,7 +928,7 @@ SCRIPTS: dict[str, OpsScript] = {
         title="Wait-and-return at clinic",
         moscow_rule="Need wait at destination and/or return; total wait ≤ 60 min; same vehicle.",
         world_practice="Will-call / open return is premium in ADA; not required next-day service.",
-        kernel_owns="same_vehicle_as + insert_immediately_after; notary.",
+        kernel_owns="same_vehicle_as + insert_immediately_after; verifier.",
         not_kernel="How long the doctor actually takes.",
         events=(OpsEvent(kind="day_ahead"),),
     ),

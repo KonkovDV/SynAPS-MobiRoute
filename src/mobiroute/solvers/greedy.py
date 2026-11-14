@@ -828,7 +828,7 @@ def _peel_final_quota(
     kernel: ProblemKernel,
     vid_index: dict[str, int],
 ) -> list[RoutePlan]:
-    """Drop longest over-quota rides until the notary would accept the caps."""
+    """Drop longest over-quota rides until the verifier would accept the caps."""
     plans = list(route_plans)
     for _ in range(max(1, len(served) + 1)):
         used: dict[str, int] = {}

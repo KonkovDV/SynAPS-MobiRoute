@@ -1,4 +1,4 @@
-"""Run the synthetic ops scenario suite and collect honest metrics."""
+"""Run the synthetic ops scenario suite and collect its metrics."""
 
 from __future__ import annotations
 
@@ -66,7 +66,7 @@ def _row(
         "algorithm": algorithm,
         "status": result.status,
         "verified_feasible": result.verified_feasible,
-        "notary_feasible": report.feasible,
+        "verifier_feasible": report.feasible,
         "served": len(result.served_requests),
         "rejected": len(result.rejected_requests),
         "n_requests": len(problem.requests),

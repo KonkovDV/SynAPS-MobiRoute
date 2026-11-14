@@ -3,7 +3,7 @@
 Academic type-a/b files: header ``K n T Q L`` then ``2n+2`` nodes
 (depot, n pickups, n dropoffs, return depot). Pickup ``i`` pairs with
 dropoff ``i+n``. Travel is rounded Euclidean minutes on the integer
-kernel grain. That is **not** the real-valued BKS algebra.
+kernel grain. That is **not** the real-valued model behind the best-known values.
 
 Literature BKS for ``a2-16`` is 294.25 (Ho et al. 2018 table of Cordeau
 2006 / Ropke et al. 2007). MobiRoute does not claim that number: curb
@@ -168,7 +168,7 @@ def load_cordeau_a2_16(path: Path | None = None) -> DayProblem:
 def cordeau_node_routes(result: PlanningResult) -> list[list[int]]:
     """Kernel stop sequences as Cordeau node ids (zones ``n{i}``), for diagnostics.
 
-    Lets the literature notary re-time an operator-algebra plan. The answer
+    Lets the literature verifier re-time a plan made under the operator rules. The answer
     explains non-comparability; it never turns a kernel run into a literature run.
     """
     routes: list[list[int]] = []

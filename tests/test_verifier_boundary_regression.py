@@ -1,4 +1,4 @@
-"""Independent notary guards, including legacy routes without depot stops."""
+"""Verifier guards, including legacy routes without depot stops."""
 
 import pytest
 
@@ -55,7 +55,7 @@ def _issues(p, r):
         (lambda p, r: r.ordered_stops.append(r.ordered_stops[-1]), "DUPLICATE_DROPOFF"),
     ],
 )
-def test_notary_rejects_broken_service_contract(mutate, code):
+def test_verifier_rejects_broken_service_contract(mutate, code):
     p, r = _case()
     assert _issues(p, r) == []
     mutate(p, r)

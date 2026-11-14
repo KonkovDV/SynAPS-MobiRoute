@@ -74,7 +74,7 @@ class Driver(StrictModel):
     availability: bool = True
     # Empty → any vehicle_type at the same depot.
     qualified_vehicle_types: list[str] = Field(default_factory=list)
-    # Policy rest / lunch / shop-out windows. Same occupancy algebra as
+    # Policy rest / lunch / shop-out windows. Same occupancy rules as
     # vehicle.unavailable_intervals. Not a duty-time certificate (Mintrans Order No. 424).
     unavailable_intervals: list[tuple[TimeMin, TimeMin]] = Field(default_factory=list)
 
@@ -340,7 +340,7 @@ class TravelMatrix(StrictModel):
     def lookup(self) -> Callable[[ZoneId, ZoneId], TimeMin]:
         """Closure over the shortest-path table: one cache read, then dict lookups.
 
-        Hot loops (route simulation, notary) take it once per route. Unknown zones
+        Hot loops (route simulation, verifier) take it once per route. Unknown zones
         raise ``KeyError("UNKNOWN_ZONE:a->b")`` exactly like :meth:`travel`.
         """
         hop, _nxt = self._ensure_graph()

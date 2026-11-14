@@ -1,7 +1,7 @@
 """Feasibility-first gating for open-data benchmark claims.
 
 A green CI job is not a benchmark result. This module turns the review rule
-"no published gap without a comparable, fully served, notary-verified run"
+"no published gap without a comparable, fully served, verified run"
 into an executable contract: :func:`build_academic_report` fills
 ``gap_percent`` only when every gate passes, and otherwise publishes the
 blockers that stopped it.
@@ -16,8 +16,8 @@ Profiles
     Never comparable with a literature best-known solution.
 
 Even under profile A the vendored Cordeau loader rounds Euclidean travel to
-integer minutes and applies a curb dwell, so ``algebra_matches_reference``
-stays ``False`` until a loader reproduces the published cost algebra.
+integer minutes and applies a curb dwell, so ``model_matches_reference``
+stays ``False`` until a loader reproduces the published cost model.
 """
 
 from __future__ import annotations
@@ -37,7 +37,7 @@ _COMPARABLE_STATUSES = frozenset({"OPTIMAL", "FEASIBLE", "HEURISTIC_FEASIBLE"})
 
 
 class BenchmarkProfile(StrEnum):
-    """Which constraint algebra a benchmark run used."""
+    """Which constraint model a benchmark run used."""
 
     LITERATURE = "literature_profile_a"
     OPERATOR = "operator_profile_b"
@@ -47,7 +47,7 @@ class GapBlocker(StrEnum):
     """Why a gap against a published objective may not be quoted."""
 
     PROFILE_NOT_LITERATURE = "PROFILE_NOT_LITERATURE"
-    ALGEBRA_NOT_COMPARABLE = "ALGEBRA_NOT_COMPARABLE"
+    MODEL_NOT_COMPARABLE = "MODEL_NOT_COMPARABLE"
     PLAN_NOT_VERIFIED = "PLAN_NOT_VERIFIED"
     STATUS_NOT_COMPARABLE = "STATUS_NOT_COMPARABLE"
     SERVICE_INCOMPLETE = "SERVICE_INCOMPLETE"
@@ -56,14 +56,14 @@ class GapBlocker(StrEnum):
 
 
 class AcademicBenchmarkReport(StrictModel):
-    """One open-data run with a machine-checked claim gate."""
+    """One open-data run and the checks that decide whether its gap may be published."""
 
     instance_id: str
     profile: BenchmarkProfile
     claim_level: str
     status: str
     verified_feasible: bool
-    algebra_matches_reference: bool
+    model_matches_reference: bool
     requests_total: int
     served_count: int
     rejected_count: int
@@ -96,8 +96,8 @@ class BenchmarkEvidence(StrictModel):
     config_hash: str
     plan_id: str
     wall_clock_seconds: float
-    notary_feasible: bool
-    notary_violations: list[str]
+    verifier_feasible: bool
+    verifier_violations: list[str]
     exit_code: int
 
 
@@ -108,7 +108,7 @@ def build_academic_report(
     profile: BenchmarkProfile,
     reference_objective: float | None = None,
     reference_source: str | None = None,
-    algebra_matches_reference: bool = False,
+    model_matches_reference: bool = False,
 ) -> AcademicBenchmarkReport:
     """Report one run and gate the gap behind every comparability condition."""
     trip_ids = {trip.id for trip in problem.requests}
@@ -122,8 +122,8 @@ def build_academic_report(
     blockers: list[str] = []
     if profile is not BenchmarkProfile.LITERATURE:
         blockers.append(GapBlocker.PROFILE_NOT_LITERATURE.value)
-    if not algebra_matches_reference:
-        blockers.append(GapBlocker.ALGEBRA_NOT_COMPARABLE.value)
+    if not model_matches_reference:
+        blockers.append(GapBlocker.MODEL_NOT_COMPARABLE.value)
     if not result.verified_feasible:
         blockers.append(GapBlocker.PLAN_NOT_VERIFIED.value)
     if result.status not in _COMPARABLE_STATUSES:
@@ -155,7 +155,7 @@ def build_academic_report(
         claim_level=result.claim_level,
         status=result.status,
         verified_feasible=result.verified_feasible,
-        algebra_matches_reference=algebra_matches_reference,
+        model_matches_reference=model_matches_reference,
         requests_total=total,
         served_count=len(served),
         rejected_count=len(rejected),
@@ -177,7 +177,7 @@ def build_cordeau_a2_16_report(
     result: PlanningResult,
     *,
     profile: BenchmarkProfile = BenchmarkProfile.LITERATURE,
-    algebra_matches_reference: bool = False,
+    model_matches_reference: bool = False,
 ) -> AcademicBenchmarkReport:
     """a2-16 report wired to the literature BKS; the gap stays gated."""
     return build_academic_report(
@@ -186,7 +186,7 @@ def build_cordeau_a2_16_report(
         profile=profile,
         reference_objective=CORDEAU_A2_16_REFERENCE,
         reference_source=CORDEAU_A2_16_REFERENCE_SOURCE,
-        algebra_matches_reference=algebra_matches_reference,
+        model_matches_reference=model_matches_reference,
     )
 
 
@@ -198,8 +198,8 @@ def build_evidence(
     solver: str,
     seed: int,
     wall_clock_seconds: float,
-    notary_feasible: bool,
-    notary_violations: Sequence[str],
+    verifier_feasible: bool,
+    verifier_violations: Sequence[str],
     exit_code: int,
 ) -> BenchmarkEvidence:
     """Collect the run stamp a reviewer needs to reproduce or reject a number."""
@@ -222,7 +222,7 @@ def build_evidence(
         config_hash=result.config_hash,
         plan_id=result.plan_id,
         wall_clock_seconds=round(wall_clock_seconds, 3),
-        notary_feasible=notary_feasible,
-        notary_violations=[str(item) for item in notary_violations],
+        verifier_feasible=verifier_feasible,
+        verifier_violations=[str(item) for item in verifier_violations],
         exit_code=exit_code,
     )

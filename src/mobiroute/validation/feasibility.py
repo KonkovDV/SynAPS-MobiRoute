@@ -1,4 +1,4 @@
-"""Independent feasibility notary for DARP plans."""
+"""Independent feasibility verifier for DARP plans."""
 
 from __future__ import annotations
 
@@ -95,10 +95,10 @@ def trip_direct_minutes(problem: DayProblem, trip: TripRequest) -> int | None:
 
 
 def trip_pickup_floor(problem: DayProblem, trip: TripRequest) -> int:
-    """Tightened earliest pickup service start shared by search and notary.
+    """Tightened earliest pickup service start shared by search and verifier.
 
     See :func:`mobiroute.domain.constraints.pickup_service_floor`. Derived from
-    the trip's own hard constraints, so the notary does not trust the solver.
+    the trip's own hard constraints, so the verifier does not trust the solver.
     """
     if trip.appointment_start is None:
         return trip.earliest_pickup
@@ -634,7 +634,7 @@ def check_plan(
     problem: DayProblem,
     result: PlanningResult,
 ) -> FeasibilityReport:
-    """Verify every route. There is no partial-vehicle notary."""
+    """Verify every route; there is no partial check."""
     trips = {t.id: t for t in problem.requests}
     violations: list[str] = []
     assigned: dict[str, str] = {}

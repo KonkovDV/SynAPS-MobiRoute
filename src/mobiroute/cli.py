@@ -69,7 +69,7 @@ def main(argv: list[str] | None = None) -> int:
         default="literature",
         help=(
             "declared intent label only: the operator-kernel adapter always applies its "
-            "own algebra (integer minutes, 5-min curb wait, 30-min lobby slack), so no "
+            "own rules (integer minutes, 5-min curb wait, 30-min lobby slack), so no "
             "kernel run publishes a literature gap; use literature-benchmark for that"
         ),
     )
@@ -78,7 +78,7 @@ def main(argv: list[str] | None = None) -> int:
 
     lit = sub.add_parser(
         "literature-benchmark",
-        help="Exact CP-SAT or MIP on the published Cordeau (2006) algebra, independently verified",
+        help="Exact CP-SAT or MIP on the published Cordeau (2006) model, independently verified",
     )
     lit.add_argument("--instance", type=Path, required=True)
     lit.add_argument("--solver", choices=["cpsat", "mip"], default="cpsat")
@@ -281,7 +281,7 @@ def _dispatch(args: argparse.Namespace) -> int:
         started = time.perf_counter()
         result = _run_kernel_solver(problem, args.solver, time_limit_s=args.time_limit)
         elapsed = time.perf_counter() - started
-        notary = check_plan(problem, result)
+        check = check_plan(problem, result)
         report = build_academic_report(
             problem,
             result,
@@ -296,12 +296,12 @@ def _dispatch(args: argparse.Namespace) -> int:
             solver=args.solver,
             seed=problem.seed,
             wall_clock_seconds=elapsed,
-            notary_feasible=notary.feasible,
-            notary_violations=[str(item) for item in notary.violations],
-            exit_code=0 if notary.feasible else 2,
+            verifier_feasible=check.feasible,
+            verifier_violations=[str(item) for item in check.violations],
+            exit_code=0 if check.feasible else 2,
         )
-        # Re-time the kernel's sequences under the published algebra: this is the
-        # machine-checked reason behind ALGEBRA_NOT_COMPARABLE, not a literature run.
+        # Re-time the kernel's sequences under the published model: this is the
+        # machine-checked reason behind MODEL_NOT_COMPARABLE, not a literature run.
         literature = parse_cordeau_instance(text, instance_id=instance_id)
         node_routes = cordeau_node_routes(result)
         strict = verify_routes(literature, node_routes)
@@ -311,7 +311,7 @@ def _dispatch(args: argparse.Namespace) -> int:
             "kernel_routes_literature_violations": strict.violations[:8],
             "kernel_routes_literature_cost": strict.cost,
             "feasible_with_operator_lobby_slack_30": lobby.feasible,
-            "note": "diagnostic re-timing of operator-algebra sequences; never a gap",
+            "note": "diagnostic re-timing of sequences made under the operator rules; never a gap",
         }
         args.out_dir.mkdir(parents=True, exist_ok=True)
         (args.out_dir / "academic_benchmark.json").write_text(
@@ -328,7 +328,7 @@ def _dispatch(args: argparse.Namespace) -> int:
         )
         write_json(result, args.out_dir / "result.json")
         print(log_safe(report.allowed_claim))
-        return 0 if notary.feasible else 2
+        return 0 if check.feasible else 2
 
     if args.cmd == "literature-benchmark":
         import platform
@@ -438,7 +438,7 @@ def _vrp_solve(args: argparse.Namespace) -> int:
     from mobiroute.vrp.alns import AlnsConfig, solve
     from mobiroute.vrp.exact import solve_exact
     from mobiroute.vrp.model import Instance
-    from mobiroute.vrp.ortools_lane import solve_ortools
+    from mobiroute.vrp.ortools_baseline import solve_ortools
     from mobiroute.vrp.verify import Verdict
 
     inst, built = _vrp_instance(args)

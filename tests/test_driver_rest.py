@@ -35,7 +35,7 @@ def test_python_soa_rejects_occupancy_through_driver_rest() -> None:
     assert plan is None
 
 
-def test_notary_flags_driver_rest_occupancy() -> None:
+def test_verifier_flags_driver_rest_occupancy() -> None:
     t = trip("t", "Z_NORTH", "Z_SOUTH", earliest=100, latest=160, max_ride=90, max_wait=40)
     open_p = problem([vehicle("v1")], [driver("d1")], [t])
     plan = simulate_stop_sequence(open_p, open_p.vehicles[0], "d1", _trip_stops(t), {t.id: t})

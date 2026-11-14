@@ -197,11 +197,11 @@ def test_json_round_trip_keeps_rests_and_trips() -> None:
 
 def test_lanes_without_rules_say_so() -> None:
     from mobiroute.vrp.exact import solve_exact
-    from mobiroute.vrp.ortools_lane import solve_ortools
+    from mobiroute.vrp.ortools_baseline import solve_ortools
     from mobiroute.vrp.realtime import Dispatcher
 
     rested = _with_rests(_two_wave_day(1), 270.0, 45.0)
-    with pytest.raises(ValueError, match="ORTOOLS_LANE_REST_RULES_UNSUPPORTED"):
+    with pytest.raises(ValueError, match="ORTOOLS_REST_RULES_UNSUPPORTED"):
         solve_ortools(rested, time_limit=1.0)
     with pytest.raises(ValueError, match="EXACT_MULTI_TRIP_UNSUPPORTED"):
         solve_exact(_two_wave_day(2), time_limit=1.0)

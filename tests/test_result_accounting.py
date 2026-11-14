@@ -1,4 +1,4 @@
-"""Malformed result partitions must not acquire a feasible/notary status."""
+"""Malformed result partitions must not acquire a feasible or verified status."""
 
 import unittest
 

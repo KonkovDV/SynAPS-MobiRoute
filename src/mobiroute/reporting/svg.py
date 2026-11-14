@@ -53,7 +53,7 @@ def _node_label(instance: CordeauInstance, node: int) -> str:
 
 
 def route_map_svg(instance: CordeauInstance, verdict: ExactVerdict, *, title: str) -> str:
-    """Routes on the instance plane; equal scale on both axes keeps geometry honest."""
+    """Routes on the instance plane; both axes share one scale, so distances are not distorted."""
     size, left, top = 440, 56, 76
     xs = [node.x for node in instance.nodes]
     ys = [node.y for node in instance.nodes]

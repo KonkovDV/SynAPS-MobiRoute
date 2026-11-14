@@ -1,4 +1,4 @@
-"""The repair lane publishes its own identity, not the recovery lane's."""
+"""The repair step publishes its own identity, not the recovery step's."""
 
 import unittest
 

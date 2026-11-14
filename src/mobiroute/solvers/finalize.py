@@ -1,4 +1,4 @@
-"""Shared post-solve notary: enrich routes, completeness, status honesty."""
+"""Shared post-solve step: enrich routes, account for every request, verify, set the status."""
 
 from __future__ import annotations
 
@@ -140,7 +140,7 @@ def finalize_result(
         result = result.model_copy(update={"explanations": default_explanations(problem, result)})
     result = result.model_copy(update={"explanations": reconcile_explanations(result)})
 
-    # The notary reads the whole plan. Partial vehicle sets cannot certify.
+    # The verifier reads the whole plan: a subset of vehicles proves nothing.
     report = check_plan(problem, result)
     result.verified_feasible = report.feasible
     result.objective_values = {

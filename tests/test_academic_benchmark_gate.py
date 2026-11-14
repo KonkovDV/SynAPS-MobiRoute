@@ -1,4 +1,4 @@
-"""No comparable run, no published gap: the claim gate is a test, not a promise."""
+"""No comparable run, no published gap."""
 
 from __future__ import annotations
 
@@ -40,7 +40,7 @@ def _fixture_result(*, served: list[str], verified: bool, status: str) -> Planni
     )
 
 
-def test_adapted_cordeau_algebra_blocks_every_published_gap() -> None:
+def test_adapted_cordeau_model_blocks_every_published_gap() -> None:
     problem = load_cordeau_a2_16(_INSTANCE)
     served = [trip.id for trip in problem.requests]
     result = _fixture_result(served=served, verified=True, status="HEURISTIC_FEASIBLE")
@@ -51,7 +51,7 @@ def test_adapted_cordeau_algebra_blocks_every_published_gap() -> None:
     assert report.full_service
     assert report.service_rate == 1.0
     assert report.gap_percent is None
-    assert report.gap_blockers == ["ALGEBRA_NOT_COMPARABLE"]
+    assert report.gap_blockers == ["MODEL_NOT_COMPARABLE"]
     assert "no publishable gap" in report.allowed_claim
 
 
@@ -64,7 +64,7 @@ def test_operator_profile_can_never_publish_a_literature_gap() -> None:
         problem,
         result,
         profile=BenchmarkProfile.OPERATOR,
-        algebra_matches_reference=True,
+        model_matches_reference=True,
     )
 
     assert report.profile == BenchmarkProfile.OPERATOR
@@ -81,7 +81,7 @@ def test_unverified_partial_run_lists_every_blocker() -> None:
 
     assert report.gap_percent is None
     assert set(report.gap_blockers) == {
-        "ALGEBRA_NOT_COMPARABLE",
+        "MODEL_NOT_COMPARABLE",
         "PLAN_NOT_VERIFIED",
         "STATUS_NOT_COMPARABLE",
         "SERVICE_INCOMPLETE",
@@ -102,7 +102,7 @@ def test_gap_formula_runs_only_when_every_gate_passes() -> None:
         profile=BenchmarkProfile.LITERATURE,
         reference_objective=200.0,
         reference_source="unit fixture, not a literature table",
-        algebra_matches_reference=True,
+        model_matches_reference=True,
     )
 
     # The fixture carries no route plans, so the kernel objective is 0.0 by
@@ -120,7 +120,7 @@ def test_greedy_a2_16_run_is_recorded_with_evidence_and_no_quality_claim() -> No
 
     problem = load_cordeau_a2_16(_INSTANCE)
     result = solve_greedy(problem)
-    notary = check_plan(problem, result)
+    check = check_plan(problem, result)
     report = build_cordeau_a2_16_report(problem, result)
     evidence = build_evidence(
         result,
@@ -129,18 +129,18 @@ def test_greedy_a2_16_run_is_recorded_with_evidence_and_no_quality_claim() -> No
         solver="greedy",
         seed=problem.seed,
         wall_clock_seconds=0.0,
-        notary_feasible=notary.feasible,
-        notary_violations=[str(item) for item in notary.violations],
+        verifier_feasible=check.feasible,
+        verifier_violations=[str(item) for item in check.violations],
         exit_code=0,
     )
 
-    assert notary.feasible, notary.violations
+    assert check.feasible, check.violations
     assert report.claim_level == "open_data_benchmark"
     assert report.served_count + report.rejected_count == report.requests_total
     assert report.unaccounted_count == 0
     assert report.kernel_route_distance > 0.0
     assert report.gap_percent is None
-    assert "ALGEBRA_NOT_COMPARABLE" in report.gap_blockers
+    assert "MODEL_NOT_COMPARABLE" in report.gap_blockers
     assert evidence.mobiroute_version == __version__
     assert evidence.native_available
-    assert evidence.notary_feasible
+    assert evidence.verifier_feasible

@@ -1,4 +1,4 @@
-"""The in-browser notary (site/assets/notary.mjs) must agree with the Python one.
+"""The in-browser verifier (site/assets/verifier.mjs) must agree with the Python one.
 
 Every single-stop move inside both optimal a2-16 routes is verified by both
 implementations: same verdict, same cost, same missing minutes, same conflict.
@@ -17,7 +17,7 @@ from mobiroute.benchmarks.cordeau_exact import load_cordeau_bytes, verify_routes
 
 _ROOT = Path(__file__).resolve().parents[1]
 _DATA = _ROOT / "site" / "data" / "a2-16.json"
-_NOTARY = _ROOT / "site" / "assets" / "notary.mjs"
+_VERIFIER = _ROOT / "site" / "assets" / "verifier.mjs"
 
 _SCRIPT = """
 import { readFileSync } from "node:fs";
@@ -49,7 +49,7 @@ def _moves(route: list[int]) -> list[list[int]]:
     return cases
 
 
-def test_browser_notary_matches_python_on_every_single_move() -> None:
+def test_browser_verifier_matches_python_on_every_single_move() -> None:
     node = shutil.which("node")
     if node is None:
         pytest.skip("node is not installed")
@@ -61,7 +61,7 @@ def test_browser_notary_matches_python_on_every_single_move() -> None:
     assert len(cases) > 500
 
     done = subprocess.run(
-        [node, "--input-type=module", "-e", _SCRIPT, _NOTARY.as_uri(), str(_DATA)],
+        [node, "--input-type=module", "-e", _SCRIPT, _VERIFIER.as_uri(), str(_DATA)],
         input=json.dumps(cases),
         capture_output=True,
         text=True,

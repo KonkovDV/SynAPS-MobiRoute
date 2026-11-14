@@ -1,1 +1,1 @@
-"""Benchmark reporting helpers with an explicit claim gate."""
+"""Benchmark reporting: a gap to the literature is published only for a comparable run."""

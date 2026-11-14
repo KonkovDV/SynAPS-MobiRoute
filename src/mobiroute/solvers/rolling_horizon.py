@@ -21,7 +21,7 @@ from mobiroute.solvers.greedy import solve_greedy
 from mobiroute.solvers.native_accel import acceleration_status
 from mobiroute.validation.input import validate_problem
 
-# A window composition is a sequence of heuristic passes, so an exact-lane
+# A window composition is a sequence of heuristic passes, so an exact-solver
 # label can never survive the stamp. Same rule as the ALNS stamp.
 _EXACT_LABELS = frozenset({SolutionStatus.OPTIMAL.value, SolutionStatus.FEASIBLE.value})
 

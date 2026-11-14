@@ -141,7 +141,7 @@ def assembled(trips, sequences):
         for i in range(1, len(sequences) + 1)
     ]
     problem = DayProblem(
-        problem_id="linked-notary",
+        problem_id="linked-verifier",
         seed=1,
         passengers=[],
         requests=trips,
@@ -183,8 +183,8 @@ def assembled(trips, sequences):
     return problem, result
 
 
-class LinkedNotaryTests(unittest.TestCase):
-    def test_notary_rejects_wrong_vehicle_and_broken_adjacency(self):
+class LinkedVerifierTests(unittest.TestCase):
+    def test_verifier_rejects_wrong_vehicle_and_broken_adjacency(self):
         from mobiroute.validation.feasibility import check_plan
 
         trips = [trip("a"), trip("b", same="a", after="a"), trip("other")]
@@ -200,7 +200,7 @@ class LinkedNotaryTests(unittest.TestCase):
                 self.assertFalse(report.feasible)
                 self.assertIn(code, report.violations)
 
-    def test_notary_rejects_missing_parent(self):
+    def test_verifier_rejects_missing_parent(self):
         from mobiroute.validation.feasibility import check_plan
 
         problem, result = assembled([trip("child", same="missing")], [["child"]])

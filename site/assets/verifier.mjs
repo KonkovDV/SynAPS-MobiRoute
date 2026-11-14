@@ -1,8 +1,8 @@
-// Route notary for the Cordeau (2006) DARP algebra, in the browser.
+// Route verifier for the Cordeau (2006) DARP, in the browser.
 // A line-by-line port of verify_routes in src/mobiroute/benchmarks/cordeau_exact.py:
 // the timing constraints of a fixed stop sequence are difference constraints
 // B[v] - B[u] <= w, feasible iff the constraint graph has no negative cycle
-// (Bellman-Ford). tests/test_site_notary_parity.py keeps both in lockstep.
+// (Bellman-Ford). tests/test_site_verifier_parity.py keeps both in lockstep.
 
 const dist = (inst, i, j) =>
   Math.hypot(inst.nodes[i].x - inst.nodes[j].x, inst.nodes[i].y - inst.nodes[j].y);
