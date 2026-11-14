@@ -9,7 +9,13 @@
 * ``site/data/route-sheets.json`` - the synthetic Naberezhnye Chelny day
   (``examples/chelny-day.geo.json``) solved as ``vrp-solve --geo`` does: the
   route sheets of every vehicle and, per route, the windows and travel times
-  the page needs to replay the departure choice of Lemma 4.
+  the page needs to replay the departure choice of Lemma 4;
+* ``site/data/prices.json`` - the same plan priced by LP duality: what each
+  order costs, the rent of every vehicle type, and the day re-solved with one
+  more unit of each type that ran out, to hold the rent against a direct count.
+
+A result file that is absent keeps its part of ``comparisons.json`` as
+published: re-running one study does not blank the others on the page.
 
 Usage (after the benchmark scripts):
   python benchmark/export_vrp_site_data.py
@@ -27,7 +33,9 @@ from typing import Any
 from mobiroute.vrp import geo
 from mobiroute.vrp.alns import AlnsConfig, solve
 from mobiroute.vrp.generators import cargo_day, plant_day
+from mobiroute.vrp.geo import GeoInstance
 from mobiroute.vrp.model import Instance
+from mobiroute.vrp.prices import Prices, solve_with_prices
 from mobiroute.vrp.realtime import simulate
 from mobiroute.vrp.schedule import compact_schedule, route_timing
 from mobiroute.vrp.sheets import CURRENCY_SIGNS, route_sheets
@@ -156,11 +164,72 @@ def _num(value: float) -> float | None:
     return round(value, 2) if math.isfinite(value) else None
 
 
-def sheets_day() -> dict[str, Any]:
-    """Route sheets of the Chelny example with the data behind Lemma 4."""
-    built = geo.load(str(ROOT / "examples" / "chelny-day.geo.json"))
+CHELNY = ROOT / "examples" / "chelny-day.geo.json"
+CHELNY_CONFIG = AlnsConfig(iterations=5000, seed=7)
+
+
+def prices_day(built: GeoInstance, routes: list[list[int]], prices: Prices) -> dict[str, Any]:
+    """Order prices and vehicle rents of the Chelny plan, with the rents checked.
+
+    The check is a direct count: the day is solved again with one more unit of
+    each type that carries a rent, and the saving is put next to the rent.
+    """
     inst = built.instance
-    result = solve(inst, AlnsConfig(iterations=5000, seed=7))
+    vehicle_of = {n: k for k, nodes in enumerate(routes) for n in nodes}
+    orders = []
+    for req, price in zip(inst.requests, prices.orders, strict=True):
+        node = req.delivery if req.delivery is not None else req.pickup
+        assert node is not None and price.price is not None
+        place = built.places[node]
+        orders.append(
+            {
+                "id": req.id,
+                "label": place.label,
+                "lat": place.lat,
+                "lon": place.lon,
+                "veh": vehicle_of[node],
+                "price": round(price.price, 2),
+                "saving": None if price.saving is None else round(price.saving, 2),
+                "q": list(req.demand),
+            }
+        )
+    data = json.loads(CHELNY.read_text(encoding="utf-8"))
+    rents = []
+    for (vid, rent), vt in zip(prices.vehicles, inst.vehicle_types, strict=True):
+        row: dict[str, Any] = {"type": vid, "hired": vt.hired, "units": vt.count}
+        row["rent"] = round(rent, 2)
+        if rent > 1e-6:
+            more = json.loads(json.dumps(data))
+            for item in more["vehicle_types"]:
+                if item["id"] == vid:
+                    item["count"] = int(item.get("count", 1)) + 1
+            again = solve(geo.build(more).instance, CHELNY_CONFIG)
+            assert again.verdict.feasible and not again.verdict.unassigned
+            row["resolved"] = round(prices.plan_value - again.objective, 2)
+            print(f"rent {vid}: LP {rent:.0f}, one more unit saves {row['resolved']:.0f}")
+        rents.append(row)
+    depot = built.places[inst.vehicle_types[0].start_depot]
+    assert prices.lp_value is not None and prices.gap is not None
+    return {
+        "name": inst.name,
+        "currency": CURRENCY_SIGNS.get(built.currency, built.currency),
+        "dimensions": list(inst.dimensions),
+        "plan": round(prices.plan_value, 2),
+        "lp": round(prices.lp_value, 2),
+        "gap": round(prices.gap, 2),
+        "columns": prices.columns,
+        "rentsTotal": round(prices.rents, 2),
+        "depot": {"lat": depot.lat, "lon": depot.lon, "label": depot.label},
+        "rents": rents,
+        "orders": orders,
+    }
+
+
+def sheets_day() -> tuple[dict[str, Any], dict[str, Any]]:
+    """Route sheets of the Chelny example with the data behind Lemma 4, and its prices."""
+    built = geo.load(str(CHELNY))
+    inst = built.instance
+    result, prices = solve_with_prices(inst, CHELNY_CONFIG)
     assert result.verdict.feasible and not result.verdict.unassigned
     sheets = route_sheets(inst, result.solution, result.verdict, built.places)
     used = [r for r in result.solution.routes if r.nodes]
@@ -227,7 +296,7 @@ def sheets_day() -> dict[str, Any]:
         key=lambda x: x[2],
     )
     depot = built.places[inst.vehicle_types[0].start_depot]
-    return {
+    day = {
         "name": inst.name,
         "currency": CURRENCY_SIGNS.get(built.currency, built.currency),
         "dimensions": list(inst.dimensions),
@@ -238,6 +307,42 @@ def sheets_day() -> dict[str, Any]:
         "suppliers": [{"lat": a, "lon": b, "label": c} for a, b, c in suppliers],
         "vehicles": vehicles,
     }
+    return day, prices_day(built, [list(r.nodes) for r in used], prices)
+
+
+def solvers_summary() -> dict[str, Any] | None:
+    """Per family and solver: verified runs, runs at the best-known fleet, mean gap."""
+    study = _read("solvers_study.json")
+    if study is None:
+        return None
+    rows = [r for r in study["rows"] if not r.get("error")]
+    out: dict[str, Any] = {"families": []}
+    for family in sorted({r["family"] for r in rows}):
+        fam = [r for r in rows if r["family"] == family]
+        solvers = []
+        for name in dict.fromkeys(r["solver"] for r in fam):
+            mine = [r for r in fam if r["solver"] == name]
+            good = [r for r in mine if r["verified"]]
+            gaps = [
+                100.0 * (r["distance"] / r["ref_distance"] - 1.0)
+                for r in good
+                if r.get("ref_distance")
+            ]
+            solvers.append(
+                {
+                    "solver": name,
+                    "runs": len(mine),
+                    "verified": len(good),
+                    "atRefFleet": sum(
+                        1
+                        for r in good
+                        if r.get("ref_vehicles") is not None and r["vehicles"] <= r["ref_vehicles"]
+                    ),
+                    "meanGap": round(sum(gaps) / len(gaps), 2) if gaps else None,
+                }
+            )
+        out["families"].append({"family": family, "budget": fam[0]["budget_s"], "solvers": solvers})
+    return out
 
 
 def _read(name: str) -> Any:
@@ -249,10 +354,12 @@ def main() -> None:
     DATA.mkdir(parents=True, exist_ok=True)
     (DATA / "fleet-mix.json").write_text(json.dumps(fleet_mix(), separators=(",", ":")) + "\n")
     (DATA / "dispatch.json").write_text(json.dumps(dispatch(), separators=(",", ":")) + "\n")
-    (DATA / "route-sheets.json").write_text(
-        json.dumps(sheets_day(), ensure_ascii=False, separators=(",", ":")) + "\n",
-        encoding="utf-8",
-    )
+    day, prices = sheets_day()
+    for name, payload in (("route-sheets.json", day), ("prices.json", prices)):
+        (DATA / name).write_text(
+            json.dumps(payload, ensure_ascii=False, separators=(",", ":")) + "\n",
+            encoding="utf-8",
+        )
     bench = _read("vrp/vrp_benchmark.json")
     if bench is not None:
         keep = (
@@ -275,15 +382,26 @@ def main() -> None:
             "rows": [{k: r[k] for k in keep} for r in bench["rows"]],
         }
         (DATA / "benchmarks.json").write_text(json.dumps(slim, separators=(",", ":")) + "\n")
-    comparisons = {
+    target = DATA / "comparisons.json"
+    comparisons = json.loads(target.read_text()) if target.exists() else {}
+    fresh = {
         "ortools": _read("ortools_vs_alns.json"),
         "exact": _read("exact_vs_alns.json"),
         "speed": _read("vrp_speed.json"),
         "realtime": _read("realtime_dispatch.json"),
+        "solvers": solvers_summary(),
     }
-    if comparisons["exact"] is not None:
-        comparisons["exact"] = {"summary": comparisons["exact"]["summary"]}
-    (DATA / "comparisons.json").write_text(json.dumps(comparisons, separators=(",", ":")) + "\n")
+    if fresh["exact"] is not None:
+        fresh["exact"] = {
+            "summary": fresh["exact"]["summary"],
+            "selective": fresh["exact"].get("selective_summary"),
+        }
+    for key, value in fresh.items():
+        if value is not None:
+            comparisons[key] = value
+        else:
+            print(f"comparisons.{key}: no result file, kept as published")
+    target.write_text(json.dumps(comparisons, separators=(",", ":")) + "\n")
     print("site data written")
 
 

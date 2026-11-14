@@ -26,14 +26,14 @@
 <text class="ink2" x="352" y="110" font-size="13">found by the heuristic</text>
 <rect x="640" y="24" width="296" height="96" rx="8" fill="none" class="line" stroke-width="1"/>
 <rect x="640" y="42" width="3" height="60" rx="1.5" class="accent"/>
-<text class="ink" x="660" y="74" font-size="30" font-weight="600">15 · 3 · 0</text>
+<text class="ink" x="660" y="74" font-size="30" font-weight="600">12 · 6 · 0</text>
 <text class="ink2" x="660" y="94" font-size="13">vs OR-Tools, 10 s:</text>
 <text class="ink2" x="660" y="110" font-size="13">better · equal · worse</text>
 <rect x="24" y="132" width="296" height="96" rx="8" fill="none" class="line" stroke-width="1"/>
 <rect x="24" y="150" width="3" height="60" rx="1.5" class="accent"/>
-<text class="ink" x="44" y="182" font-size="30" font-weight="600">−18%</text>
+<text class="ink" x="44" y="182" font-size="30" font-weight="600">−17%</text>
 <text class="ink2" x="44" y="202" font-size="13">cost of a cargo day,</text>
-<text class="ink2" x="44" y="218" font-size="13">two vehicles fewer</text>
+<text class="ink2" x="44" y="218" font-size="13">up to 3 vehicles fewer</text>
 <rect x="332" y="132" width="296" height="96" rx="8" fill="none" class="line" stroke-width="1"/>
 <rect x="332" y="150" width="3" height="60" rx="1.5" class="accent"/>
 <text class="ink" x="352" y="182" font-size="30" font-weight="600">×49</text>

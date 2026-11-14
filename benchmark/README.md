@@ -9,13 +9,15 @@ table to `docs/benchmarks/`. Rules: [docs/benchmark-protocol.md](../docs/benchma
 | `vrp_benchmark.py` | rich-VRP engine on 130 public instances (Solomon, Li & Lim, Sartori–Buriol, Cordeau), gaps to references | `docs/benchmarks/vrp-public-benchmarks.md` |
 | `exact_vs_alns.py` | ALNS against CP-SAT proven optima on random instances of the full model | `docs/benchmarks/exact-vs-alns.md` |
 | `ortools_vs_alns.py` | OR-Tools Routing (PCI + GLS) against ALNS at equal wall clock | `docs/benchmarks/ortools-vs-alns.md` |
+| `solvers_study.py` | ALNS against PyVRP, VROOM and jsprit on Solomon and on 1000-customer instances, equal time, one thread | `docs/benchmarks/solvers.md` |
 | `realtime_dispatch.py` | live dispatch policies on shuttle and plant days | `docs/benchmarks/realtime-dispatch.md` |
 | `measure_vrp_speed.py` | cost of an ALNS iteration, Python reference vs Rust kernel | `docs/benchmarks/vrp-speed.md` |
+| `profile_vrp.py` | `cProfile` ranking by own time of one ALNS run on both backends | `docs/benchmarks/vrp-profile.md` |
 | `solver_lab.py` | Cordeau a2-16 through CP-SAT, MIP (SCIP, HiGHS, CBC), LP bound, ALNS and OR-Tools | `docs/benchmarks/solver-lab-a2-16.md` |
 | `rules_study.py` | driver rests, multi-trip days and rush hours on synthetic days | `docs/benchmarks/rules.md` |
 | `seed_study.py` | five seeds on Solomon R2/RC2, with and without local search, Wilcoxon test | `docs/benchmarks/seed-study.md` |
 | `setpart_study.py` | set partitioning over ALNS route pools: CP-SAT, SCIP, HiGHS, CBC, LP bound | `docs/benchmarks/setpart-solvers.md` |
-| `export_site_data.py`, `export_vrp_site_data.py` | data and figures for the site | `site/data/`, `docs/img/` |
+| `export_site_data.py`, `export_vrp_site_data.py`, `make_readme_figures.py` | data and figures for the site and the README, read from the result files | `site/data/`, `docs/img/` |
 | `run_stress_day.py`, `measure_day_speed.py`, `run_ops_benchmark.py`, `run_benchmark.py`, `generate_day.py`, `generate_moscow_day.py` | paratransit kernel: stress day, speed, synthetic operator scenarios | `benchmark/results/` |
 
 Instances and their provenance: [instances/README.md](instances/README.md).
@@ -27,9 +29,12 @@ python benchmark/exact_vs_alns.py --instances 40
 python benchmark/ortools_vs_alns.py --time-limit 10
 python benchmark/realtime_dispatch.py --with-ortools
 python benchmark/measure_vrp_speed.py
+python benchmark/profile_vrp.py
+python benchmark/solvers_study.py   # pip install pyvrp==0.14.1 pyvroom==1.15.2; jsprit: see the script
 python benchmark/solver_lab.py
 python benchmark/rules_study.py
 python benchmark/seed_study.py
 python benchmark/setpart_study.py
 python benchmark/export_vrp_site_data.py
+python benchmark/make_readme_figures.py
 ```

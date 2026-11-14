@@ -55,7 +55,7 @@ Routes = list[list[int]]
 
 
 def cases(which: str) -> list[Path]:
-    solomon = sorted((INST / "solomon").glob("*.txt"))
+    solomon = sorted(p for p in (INST / "solomon").glob("*.txt") if p.stem != "SHA256SUMS")
     large = sorted((INST / "gehring-homberger").glob("*.vrp")) + sorted(
         (INST / "uchoa-x").glob("*.vrp")
     )
@@ -311,6 +311,15 @@ def render(rows: list[dict[str, Any]], seconds: float, large_seconds: float) -> 
         "Gehring-Homberger (DIMACS rounding) and X (CVRPLIB rounding) rank distance only "
         "(best known: CVRPLIB). Produced by `python benchmark/solvers_study.py`.",
         "",
+        "How to read it. Every solver runs with its default search settings (VROOM at "
+        "exploration level 5), not a tuned setup. The other solvers minimise cost, so on Solomon they are told to "
+        "save vehicles by a fixed cost of 10^5 per vehicle; ALNS has a phase of its own for "
+        "that (guided ejection), which is what the vehicle column shows. Where distance alone "
+        "ranks (Gehring-Homberger, X), PyVRP is ahead of everything here. Budgets are wall "
+        "clock on a shared 4-core machine with other jobs running, so a rerun moves "
+        "individual rows, not the picture; jsprit's time is measured inside the JVM and can "
+        "overrun its budget on 1000 customers.",
+        "",
         "## Summary",
         "",
         "| Family | Solver | Verified | At best-known vehicles | Mean gap, distance | Best of the four |",
@@ -351,7 +360,9 @@ def render(rows: list[dict[str, Any]], seconds: float, large_seconds: float) -> 
         "",
         "Mean gap is over verified plans and against the best known distance; on Solomon "
         "a plan with more vehicles than the best known can show a negative distance gap, "
-        "so read it with the vehicle column.",
+        "so read it with the vehicle column. *At best-known vehicles* matters on Solomon "
+        "only: the other families rank distance, and a plan there may use fewer or more "
+        "vehicles than the best known one.",
         "",
         "## Every run",
         "",
