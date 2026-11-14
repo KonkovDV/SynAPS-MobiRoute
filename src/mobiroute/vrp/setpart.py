@@ -92,11 +92,16 @@ def solve_set_partitioning(
     time_limit: float = 5.0,
     deterministic: bool = True,
     workers: int = 1,
+    linearization: int = 2,
 ) -> SpResult:
     """Best plan made of pool routes (see module docstring).
 
     ``deterministic`` gives CP-SAT a deterministic-time budget instead of a
     wall-clock one, so the same pool always gives the same plan.
+    ``linearization`` is CP-SAT's ``linearization_level``: at 2 it keeps the
+    LP relaxation of the whole model, which is what proves set-partitioning
+    optima (on one worker, level 1 left the R101 pool unproven after 10 s,
+    level 2 proves it in 0.13 s; see ``benchmark/setpart_study.py``).
     """
     c = pool.c
     if incumbent is not None:
@@ -108,18 +113,25 @@ def solve_set_partitioning(
     cover: list[list[int]] = [[] for _ in range(len(c.penalty))]
     by_type: list[list[int]] = [[] for _ in range(c.n_types)]
     costs: list[float] = []
-    # A reload stop is a node like any other: one route may use it.
-    stops: dict[int, list[int]] = {}
     for k, key in enumerate(keys):
         t, requests = key
         costs.append(pool.columns[key][0])
         by_type[t].append(k)
         for r in requests:
             cover[r].append(k)
+    classes, class_of = _reload_classes(c)
+    uses: list[dict[int, int]] = [{} for _ in classes]
+    for k, key in enumerate(keys):
         for n in pool.columns[key][1]:
             if c.reload_of[n] >= 0:
-                stops.setdefault(n, []).append(k)
-    shared = [cols for cols in stops.values() if len(cols) > 1]
+                cl = class_of[n]
+                uses[cl][k] = uses[cl].get(k, 0) + 1
+    # Chosen routes may not use more copies of a reload stop than exist.
+    shared = [
+        (sorted(u.items()), len(classes[cl]))
+        for cl, u in enumerate(uses)
+        if sum(u.values()) > len(classes[cl])
+    ]
     # An order the incumbent serves gets no "left out" variable: the incumbent
     # shows that covering all of them at once is possible, so the optimum is
     # unchanged, and the model loses the huge must-serve penalties that make
@@ -141,7 +153,17 @@ def solve_set_partitioning(
                     hint.add(lookup[key])
     if backend == "CP-SAT":
         chosen, status = _solve_cpsat(
-            c, cover, optional, by_type, shared, costs, hint, time_limit, deterministic, workers
+            c,
+            cover,
+            optional,
+            by_type,
+            shared,
+            costs,
+            hint,
+            time_limit,
+            deterministic,
+            workers,
+            linearization,
         )
     else:
         chosen, status = _solve_mip(
@@ -152,9 +174,15 @@ def solve_set_partitioning(
         return SpResult(None, None, status, seconds, len(keys), backend)
     routes = []
     served: set[int] = set()
+    spare = [list(members) for members in classes]
     for k in chosen:
         t, requests = keys[k]
-        routes.append(Route(t, list(pool.columns[keys[k]][1])))
+        # Give every chosen route its own copies of the reload stops it uses.
+        nodes = [
+            spare[class_of[n]].pop(0) if c.reload_of[n] >= 0 else n
+            for n in pool.columns[keys[k]][1]
+        ]
+        routes.append(Route(t, nodes))
         served.update(requests)
     unassigned = set(range(len(c.penalty))) - served
     sol = Solution(routes, unassigned)
@@ -167,12 +195,13 @@ def _solve_cpsat(
     cover: list[list[int]],
     optional: list[bool],
     by_type: list[list[int]],
-    shared: list[list[int]],
+    shared: list[tuple[list[tuple[int, int]], int]],
     costs: list[float],
     hint: set[int],
     time_limit: float,
     deterministic: bool,
     workers: int,
+    linearization: int,
 ) -> tuple[list[int] | None, str]:
     from ortools.sat.python import cp_model
 
@@ -190,8 +219,8 @@ def _solve_cpsat(
     for t, cols in enumerate(by_type):
         if cols and len(cols) > c.count[t]:
             model.add(sum(x[k] for k in cols) <= c.count[t])
-    for cols in shared:
-        model.add(sum(x[k] for k in cols) <= 1)
+    for used, size in shared:
+        model.add(sum(n * x[k] for k, n in used) <= size)
     model.minimize(
         sum(round(SCALE * costs[k]) * x[k] for k in range(len(costs)))
         + sum(round(SCALE * c.penalty[r]) * var for r, var in y.items())
@@ -200,6 +229,7 @@ def _solve_cpsat(
         model.add_hint(var, k in hint)
     solver = cp_model.CpSolver()
     solver.parameters.num_workers = workers
+    solver.parameters.linearization_level = linearization
     if deterministic:
         # About one deterministic unit per wall-clock second on one core.
         solver.parameters.max_deterministic_time = time_limit
@@ -217,7 +247,7 @@ def _solve_mip(
     cover: list[list[int]],
     optional: list[bool],
     by_type: list[list[int]],
-    shared: list[list[int]],
+    shared: list[tuple[list[tuple[int, int]], int]],
     costs: list[float],
     hint: set[int],
     time_limit: float,
@@ -242,8 +272,8 @@ def _solve_mip(
     for t, cols in enumerate(by_type):
         if cols and len(cols) > c.count[t]:
             solver.Add(sum(x[k] for k in cols) <= c.count[t])
-    for cols in shared:
-        solver.Add(sum(x[k] for k in cols) <= 1)
+    for used, size in shared:
+        solver.Add(sum(n * x[k] for k, n in used) <= size)
     solver.Minimize(
         sum(costs[k] * x[k] for k in range(len(costs)))
         + sum(c.penalty[r] * var for r, var in y.items())
@@ -263,7 +293,34 @@ def _solve_mip(
         pywraplp.Solver.INFEASIBLE: "INFEASIBLE",
         pywraplp.Solver.NOT_SOLVED: "NOT_SOLVED",
     }
-    status = names.get(code, str(code))
+    status = names.get(code, f"CODE_{code}")
     if code not in (pywraplp.Solver.OPTIMAL, pywraplp.Solver.FEASIBLE):
         return None, status
     return [k for k, var in enumerate(x) if var.solution_value() > 0.5], status
+
+
+def _reload_classes(c: Compiled) -> tuple[list[list[int]], dict[int, int]]:
+    """Reload stops grouped into interchangeable copies.
+
+    Two stops of one vehicle type are copies when they share opening hours,
+    service time and every travel time and cost to and from them
+    (:func:`~mobiroute.vrp.model.add_reload_stops` makes such copies); any
+    copy can then stand for any other in a route.
+    """
+    groups: dict[tuple[object, ...], list[int]] = {}
+    for n in range(c.n):
+        if c.reload_of[n] < 0:
+            continue
+        key: tuple[object, ...] = (
+            c.reload_of[n],
+            c.e[n],
+            c.l[n],
+            c.s[n],
+            tuple(m[n] for m in c.time),
+            tuple(tuple(row[n] for row in m) for m in c.time),
+            tuple(m[n] for m in c.cost),
+            tuple(tuple(row[n] for row in m) for m in c.cost),
+        )
+        groups.setdefault(key, []).append(n)
+    classes = list(groups.values())
+    return classes, {n: cl for cl, members in enumerate(classes) for n in members}
