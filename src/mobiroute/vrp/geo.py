@@ -99,6 +99,8 @@ class GeoInstance:
 
 def minutes(text: str) -> float:
     """``"HH:MM"`` to minutes after midnight (``"24:00"`` and later allowed)."""
+    if not isinstance(text, str):
+        raise ValueError(f"GEO_TIME_INVALID:{text!r}")
     try:
         hours, mins = text.strip().split(":")
         value = int(hours) * 60 + int(mins)
@@ -158,6 +160,8 @@ def osrm_source(
             body: bytes = resp.read()
             return body
 
+    if urllib.parse.urlsplit(base_url).scheme not in {"http", "https"}:
+        raise ValueError("GEO_OSRM_URL_INVALID")
     get = opener or fetch
 
     def source(
@@ -199,6 +203,8 @@ def osrm_source(
 
 
 def _stop(raw: Mapping[str, Any], where: str) -> tuple[float, float, float, float, float, str]:
+    if any(isinstance(raw.get(key), bool) for key in ("lat", "lon")):
+        raise ValueError(f"GEO_STOP_INVALID:{where}")
     try:
         lat, lon = float(raw["lat"]), float(raw["lon"])
     except (KeyError, TypeError, ValueError) as exc:
@@ -215,9 +221,24 @@ def build(
     *,
     source: MatrixSource = haversine_matrices,
 ) -> GeoInstance:
-    """Instance and places from a ``mobiroute.vrp.geo.v1`` document."""
-    if data.get("format") != FORMAT:
+    """Instance and places from a ``mobiroute.vrp.geo.v1`` document.
+
+    Every malformed document ends in a ``ValueError`` whose message starts
+    with a code: a missing field is ``GEO_FIELD_MISSING:<name>``, a field of
+    the wrong shape ``GEO_FIELD_INVALID:<detail>``; the model's own checks
+    follow (``VRP_...``).
+    """
+    if not isinstance(data, Mapping) or data.get("format") != FORMAT:
         raise ValueError("GEO_FORMAT")
+    try:
+        return _build(data, source)
+    except KeyError as exc:
+        raise ValueError(f"GEO_FIELD_MISSING:{exc.args[0]}") from exc
+    except (TypeError, IndexError, AttributeError) as exc:
+        raise ValueError(f"GEO_FIELD_INVALID:{exc}") from exc
+
+
+def _build(data: Mapping[str, Any], source: MatrixSource) -> GeoInstance:
     dims = tuple(str(d) for d in data.get("dimensions", ("load",)))
     points: list[tuple[float, float]] = []
     places: list[Place] = []

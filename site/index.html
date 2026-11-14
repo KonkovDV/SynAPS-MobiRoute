@@ -4,14 +4,14 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>SynAPS-MobiRoute — маршруты, которые можно доказать</title>
-<meta name="description" content="Движок маршрутизации для смешанного парка: VRPTW, PDPTW и DARP, вес, объём и паллеты, свои и наёмные машины, режим труда и отдыха, несколько рейсов, заявки в реальном времени. ALNS на ядре Rust, точные модели CP-SAT и MIP, сравнение с OR-Tools, координаты и OSRM на входе, путевые листы на выходе и независимая проверка каждого плана.">
+<meta name="description" content="Движок маршрутизации для смешанного парка: VRPTW, PDPTW и DARP, вес, объём и паллеты, свои и наёмные машины, режим труда и отдыха, несколько рейсов, заявки в реальном времени. ALNS на ядре Rust, точные модели CP-SAT и MIP, сравнение с OR-Tools, координаты и OSRM на входе, маршрутные листы на выходе и независимая проверка каждого плана.">
 <meta name="keywords" content="VRP, VRPTW, PDPTW, DARP, vehicle routing, pickup and delivery, time windows, heterogeneous fleet, multi-trip, driver rest rules, route sheets, OSRM, MIP, CP-SAT, OR-Tools, SCIP, HiGHS, ALNS, metaheuristics, Python, Rust">
 <meta name="author" content="Dmitrij Konkov">
 <meta property="og:type" content="website">
 <meta property="og:title" content="SynAPS-MobiRoute — маршруты, которые можно доказать">
 <meta property="og:locale" content="ru_RU">
 <meta property="og:locale:alternate" content="en_US">
-<meta property="og:description" content="Маршрутизация смешанного парка (VRPTW, PDPTW, DARP): ALNS на ядре Rust, точные модели CP-SAT и MIP, сравнение с OR-Tools, заявки в реальном времени, путевые листы и независимая проверка каждого плана.">
+<meta property="og:description" content="Маршрутизация смешанного парка (VRPTW, PDPTW, DARP): ALNS на ядре Rust, точные модели CP-SAT и MIP, сравнение с OR-Tools, заявки в реальном времени, маршрутные листы и независимая проверка каждого плана.">
 <meta property="og:image" content="https://konkovdv.github.io/SynAPS-MobiRoute/assets/og.png">
 <meta property="og:image:width" content="1200">
 <meta property="og:image:height" content="630">
@@ -37,7 +37,7 @@
     <a href="#fleet"><span lang="ru">Парк</span><span lang="en">Fleet</span></a>
     <a href="#dispatch"><span lang="ru">Диспетчеризация</span><span lang="en">Dispatch</span></a>
     <a href="#rules"><span lang="ru">Правила</span><span lang="en">Rules</span></a>
-    <a href="#sheets"><span lang="ru">Путевые листы</span><span lang="en">Route sheets</span></a>
+    <a href="#sheets"><span lang="ru">Маршрутные листы</span><span lang="en">Route sheets</span></a>
     <a href="#bench"><span lang="ru">Эталоны</span><span lang="en">Benchmarks</span></a>
     <a href="#lab"><span lang="ru">Попробовать</span><span lang="en">Try it</span></a>
   </div>
@@ -230,9 +230,9 @@ dropoff 1 cannot start before 402; dropoff 1 → dropoff 12 takes 3 + 15.68 min.
 
 <section id="sheets" class="sec alt">
   <div class="wrap">
-    <p class="kicker reveal"><span lang="ru">Путевые листы</span><span lang="en">Route sheets</span></p>
-    <h2 class="reveal"><span lang="ru">От координат — к путевому листу. Без часа простоя у ворот.</span><span lang="en">From coordinates to a route sheet. Without an hour idling at the gate.</span></h2>
-    <p class="sub reveal"><span lang="ru">Синтетический день в Набережных Челнах: склад, три поставщика, 45 заказов, свои и наёмные фургоны и грузовики, норма труда и отдыха, второй рейс для фургонов. Нажмите на маршрут или строку диаграммы — справа появится путевой лист машины, внизу — выбор времени выезда.</span><span lang="en">A synthetic day in Naberezhnye Chelny: a depot, three suppliers, 45 orders, own and hired vans and trucks, the driving-time rule, a second trip for vans. Click a route or a chart row to see that vehicle's route sheet and, below, the choice of its departure.</span></p>
+    <p class="kicker reveal"><span lang="ru">Маршрутные листы</span><span lang="en">Route sheets</span></p>
+    <h2 class="reveal"><span lang="ru">От координат — к маршрутному листу. Без часа простоя у ворот.</span><span lang="en">From coordinates to a route sheet. Without an hour idling at the gate.</span></h2>
+    <p class="sub reveal"><span lang="ru">Синтетический день в Набережных Челнах: склад, три поставщика, 45 заказов, свои и наёмные фургоны и грузовики, норма труда и отдыха, второй рейс для фургонов. Нажмите на маршрут или строку диаграммы — появятся маршрутный лист машины и выбор времени выезда.</span><span lang="en">A synthetic day in Naberezhnye Chelny: a depot, three suppliers, 45 orders, own and hired vans and trucks, the driving-time rule, a second trip for vans. Click a route or a chart row to see that vehicle's route sheet and the choice of its departure.</span></p>
     <div class="sheets reveal">
       <div class="card flush sheets-map"><svg id="sheets-map" viewBox="0 0 600 600" role="img" aria-label="Routes of the Naberezhnye Chelny day"></svg></div>
       <div class="card sheets-side">
@@ -248,7 +248,7 @@ dropoff 1 cannot start before 402; dropoff 1 → dropoff 12 takes 3 + 15.68 min.
       <div class="legend"><span><i></i><span lang="ru">в пути</span><span lang="en">driving</span></span><span><i class="box wait"></i><span lang="ru">ожидание окна</span><span lang="en">waiting for a window</span></span><span><i class="box svc"></i><span lang="ru">выгрузка (светлее — погрузка)</span><span lang="en">delivery (lighter: pickup)</span></span><span><i class="box reload"></i><span lang="ru">перезагрузка</span><span lang="en">reload</span></span><span><i class="box rest"></i><span lang="ru">перерыв</span><span lang="en">rest</span></span></div>
     </div>
     <div class="card sheet-card reveal">
-      <div class="card-head"><h3><span lang="ru">Путевой лист</span><span lang="en">Route sheet</span> · <span id="sheet-name">—</span></h3><span class="fine"><span lang="ru">как в route-sheets.md и route-sheets.csv</span><span lang="en">as in route-sheets.md and route-sheets.csv</span></span></div>
+      <div class="card-head"><h3><span lang="ru">Маршрутный лист</span><span lang="en">Route sheet</span> · <span id="sheet-name">—</span></h3><span class="fine"><span lang="ru">как в route-sheets.md и route-sheets.csv</span><span lang="en">as in route-sheets.md and route-sheets.csv</span></span></div>
       <div class="scroll-x" tabindex="0" role="region" aria-label="Route sheet"><table class="policy sheet" id="sheets-table"><thead></thead><tbody></tbody></table></div>
     </div>
     <div class="lemma reveal">
@@ -265,7 +265,7 @@ dropoff 1 cannot start before 402; dropoff 1 → dropoff 12 takes 3 + 15.68 min.
       </div>
       <div class="card flush curve-card"><svg id="dep-curve" viewBox="0 0 600 400" role="img" aria-label="Shift length as a function of the departure time"></svg></div>
     </div>
-    <p class="fine reveal"><span lang="ru">Повторить: <code>mobiroute vrp-solve --geo examples/chelny-day.geo.json --sheets</code>. Точки случайны в границах города, названия условные; данные не описывают ни одну компанию.</span><span lang="en">Reproduce: <code>mobiroute vrp-solve --geo examples/chelny-day.geo.json --sheets</code>. Points are random inside the city's bounds and names are made up; the data describe no company.</span></p>
+    <p class="fine reveal"><span lang="ru">Повторить: <code>mobiroute vrp-solve --geo examples/chelny-day.geo.json --sheets</code>. Точки случайны в границах города, названия условные; данные не описывают ни одну компанию. Маршрутный лист — план рейса для водителя, а не путевой лист: реквизиты путевого листа (медосмотры, техконтроль, одометр) ведёт учётная система.</span><span lang="en">Reproduce: <code>mobiroute vrp-solve --geo examples/chelny-day.geo.json --sheets</code>. Points are random inside the city's bounds and names are made up; the data describe no company. A route sheet is the driver's trip plan, not the statutory waybill: its required details (medical and technical checks, odometer) stay in the accounting system.</span></p>
   </div>
 </section>
 
@@ -368,7 +368,7 @@ dropoff 1 cannot start before 402; dropoff 1 → dropoff 12 takes 3 + 15.68 min.
         <tr><th scope="row"><span lang="ru">Заявки в реальном времени</span><span lang="en">Orders in real time</span></th><td><span class="pill ok"><span lang="ru">есть</span><span lang="en">done</span></span></td><td><span lang="ru">заморозка проеханного, вставка за доли мс, переоптимизация живого состояния</span><span lang="en">freeze what is driven, insert in a fraction of a ms, re-optimise the live state</span></td></tr>
         <tr><th scope="row"><span lang="ru">Опоздание вместо «мягких окон»</span><span lang="en">Lateness instead of soft windows</span></th><td><span class="pill ok"><span lang="ru">есть</span><span lang="en">done</span></span></td><td><span lang="ru">минимум максимального и суммарного опоздания (Беллман–Форд, LP)</span><span lang="en">least maximum and total lateness (Bellman–Ford, LP)</span></td></tr>
         <tr><th scope="row"><span lang="ru">Несколько рейсов, перерывы, время суток</span><span lang="en">Multi-trip, breaks, time of day</span></th><td><span class="pill ok"><span lang="ru">есть</span><span lang="en">done</span></span></td><td><span lang="ru">перезагрузка в депо (ёмкость по рейсам), норма 4,5 ч / 45 мин, скорость по часам суток (модель Ichoua–Gendreau–Potvin, FIFO); в ядре Rust — перерывы и рейсы</span><span lang="en">reloading at the depot (capacity per trip), the 4.5 h / 45 min rule, speeds by time of day (Ichoua–Gendreau–Potvin, FIFO); rests and trips in the Rust kernel</span></td></tr>
-        <tr><th scope="row"><span lang="ru">Координаты на входе, путевые листы на выходе</span><span lang="en">Coordinates in, route sheets out</span></th><td><span class="pill ok"><span lang="ru">есть</span><span lang="en">done</span></span></td><td><span lang="ru">JSON с широтой и долготой; матрицы офлайн или с сервера OSRM (<code>table</code>); путевые листы CSV, Markdown и диаграмма Ганта; выезд без простоя — кратчайшая смена по лемме 4</span><span lang="en">JSON with latitude and longitude; matrices offline or from an OSRM server (<code>table</code>); route sheets as CSV, Markdown and a Gantt chart; departure without idling, the shortest shift by Lemma 4</span></td></tr>
+        <tr><th scope="row"><span lang="ru">Координаты на входе, маршрутные листы на выходе</span><span lang="en">Coordinates in, route sheets out</span></th><td><span class="pill ok"><span lang="ru">есть</span><span lang="en">done</span></span></td><td><span lang="ru">JSON с широтой и долготой; матрицы офлайн или с сервера OSRM (<code>table</code>); маршрутные листы CSV, Markdown и диаграмма Ганта; выезд без простоя — кратчайшая смена по лемме 4</span><span lang="en">JSON with latitude and longitude; matrices offline or from an OSRM server (<code>table</code>); route sheets as CSV, Markdown and a Gantt chart; departure without idling, the shortest shift by Lemma 4</span></td></tr>
       </tbody></table></div></div>
 
     <div class="grid2 cargo">

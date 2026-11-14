@@ -496,7 +496,7 @@ def _vrp_solve(args: argparse.Namespace) -> int:
         (args.out_dir / "route-sheets.md").write_text(markdown, encoding="utf-8")
         gantt = sheets_svg(
             sheets,
-            title=f"{inst.name}: {'route sheets' if args.lang == 'en' else 'путевые листы'}",
+            title=f"{inst.name}: {'route sheets' if args.lang == 'en' else 'маршрутные листы'}",
             lang=args.lang,
             currency=geo_in.currency if geo_in else "",
         )
