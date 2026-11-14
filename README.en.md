@@ -307,6 +307,11 @@ one more van saves 641 and with one more truck 2,160. Details are in the
 
 ## Tests and code quality
 
+- The model is frozen dataclasses (`Instance`, `VehicleType`, `Request`), and
+  an instance is validated when it is built. The search is made of small
+  single-purpose classes: `Alns`, `LocalSearch`, `RouteMerger`,
+  `TypeAssigner`, `Dispatcher`. A result is a plan (`Solution`) and the
+  verifier's `Verdict`, which does not depend on the solver.
 - About 600 tests, 11 of them Hypothesis properties that check hundreds of
   random routes against the verifier. Coverage is 92%.
 - `mypy --strict`, `ruff`, `cargo clippy -D warnings` and `cargo fmt` in CI.
