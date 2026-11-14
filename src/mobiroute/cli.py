@@ -121,7 +121,15 @@ def main(argv: list[str] | None = None) -> int:
         action="store_true",
         help="also write route sheets: route-sheets.csv, .md and a Gantt chart .svg",
     )
-    v.add_argument("--lang", choices=["ru", "en"], default="ru", help="language of route sheets")
+    v.add_argument(
+        "--prices",
+        action="store_true",
+        help="also write prices.json and prices.md: what each order costs and what one more "
+        "vehicle of a type would save (LP duals over the ALNS route pool)",
+    )
+    v.add_argument(
+        "--lang", choices=["ru", "en"], default="ru", help="language of route sheets and prices"
+    )
     v.add_argument("--seed", type=int, default=7)
     v.add_argument("--orders", type=int, default=None, help="size of a generated day")
     v.add_argument("--solver", choices=["alns", "ortools", "exact"], default="alns")
@@ -435,8 +443,11 @@ def _vrp_solve(args: argparse.Namespace) -> int:
 
     inst, built = _vrp_instance(args)
     assert isinstance(inst, Instance)
+    if args.prices and args.solver != "alns":
+        raise ValueError("PRICES_NEED_THE_ALNS_ROUTE_POOL")
     started = time.perf_counter()
     verdict: Verdict
+    prices = None
     if args.solver == "ortools":
         run = solve_ortools(inst, time_limit=args.time_limit or 10.0)
         solution, verdict, label = run.solution, run.verdict, f"OR-Tools {run.status}"
@@ -444,15 +455,18 @@ def _vrp_solve(args: argparse.Namespace) -> int:
         ex = solve_exact(inst, time_limit=args.time_limit or 60.0)
         solution, verdict, label = ex.solution, ex.verdict, f"CP-SAT {ex.status}"
     else:
-        res = solve(
-            inst,
-            AlnsConfig(
-                iterations=args.iterations,
-                time_limit=args.time_limit,
-                seed=args.seed,
-                backend=args.backend,
-            ),
+        config = AlnsConfig(
+            iterations=args.iterations,
+            time_limit=args.time_limit,
+            seed=args.seed,
+            backend=args.backend,
         )
+        if args.prices:
+            from mobiroute.vrp.prices import solve_with_prices
+
+            res, prices = solve_with_prices(inst, config)
+        else:
+            res = solve(inst, config)
         solution, verdict, label = (
             res.solution,
             res.verdict,
@@ -511,6 +525,17 @@ def _vrp_solve(args: argparse.Namespace) -> int:
             currency=geo_in.currency if geo_in else "",
         )
         (args.out_dir / "route-sheets.svg").write_text(gantt, encoding="utf-8")
+    if prices is not None:
+        from mobiroute.vrp.geo import GeoInstance
+        from mobiroute.vrp.prices import prices_dict, prices_markdown
+
+        currency = built.currency if isinstance(built, GeoInstance) else ""
+        (args.out_dir / "prices.json").write_text(
+            json.dumps(prices_dict(prices), indent=2, ensure_ascii=False), encoding="utf-8"
+        )
+        (args.out_dir / "prices.md").write_text(
+            prices_markdown(prices, lang=args.lang, currency=currency), encoding="utf-8"
+        )
     print(log_safe(f"{inst.name}: {verdict.summary()} [{label}, {elapsed:.1f} s]"))
     return 0 if verdict.feasible else 2
 
