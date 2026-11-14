@@ -185,7 +185,8 @@
   67.6 s → 13.1 s; medium ALNS 10.1 s → 2.6 s (author's machine, single thread).
 
 ### Removed
-- Dependabot config and application documents for an accelerator programme.
+- The automatic dependency-update config (a weekly audit replaces it) and
+  application documents for an accelerator programme.
 
 ## Earlier versions
 

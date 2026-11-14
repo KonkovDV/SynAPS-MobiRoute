@@ -241,6 +241,28 @@ The verifier implements the lemma separately and returns, for an infeasible
 route, the certificate of the gap that misses by the fewest minutes (labels
 `TRAVEL+REST`) or a `DRIVING` certificate with the excess minutes.
 
+**Split break.** Art. 7 of the EU regulation and Order No. 424 let the break
+be taken as $b_1 \ge 15$ and then $b_2 \ge 30$ minutes; only the second part
+resets the driving counter.
+
+**Lemma 1a.** A route that fails Lemma 1 is feasible with a split break iff
+there are gaps $g_1 < g_2$ with $g_2$ admissible in the sense of Lemma 1 for
+which the system of section 4, with the travel arc of $g_1$ lengthened by
+$b_1$ and that of $g_2$ by $b_2$, has no negative cycle.
+
+*Proof.* The driving before the second part and after it must each stay
+within $D$, which is the admissibility of $g_2$ in Lemma 1 with the same
+"before or after the drive" argument. The first part has no driving
+condition of its own (it does not reset the counter) and must come before
+the second, so it lies in a gap $g_1 < g_2$ (in the same gap the two parts
+are one break, already covered by Lemma 1). For fixed $(g_1, g_2)$ both
+consequences are lengthened travel arcs, a system of difference
+constraints. $\square$
+
+Both the verifier and the search check try the single break first and then
+the $O(m \cdot |G_2|)$ pairs, $G_2$ the admissible gaps; a Hypothesis
+property holds the two to the same answers.
+
 ## 4b. Multi-trip days
 
 A multi-trip type lists reload stops: copies of its depot whose service time
