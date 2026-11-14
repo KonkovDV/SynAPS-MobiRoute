@@ -51,7 +51,7 @@ measurement that one command reproduces.
 | Heuristics and metaheuristics | regret-k, ALNS with annealing, guided ejection, route merging, local search with O(1) window checks | [40 of 40 optima](docs/benchmarks/exact-vs-alns.md) · [against OR-Tools](docs/benchmarks/ortools-vs-alns.md) |
 | LP/IP, graph theory, combinatorial optimization | difference constraints and Bellman–Ford with certificates, min-cost flow for vehicle types, set partitioning, four lemmas with proofs | [formulation](docs/mathematical-formulation.md) · [below](#the-mathematics-on-one-screen) |
 | Product code | CLI, input in coordinates, OSRM matrices, route sheets as CSV / Markdown / SVG, error codes, a Rust kernel | [coordinates to route sheets](#from-coordinates-to-route-sheets) |
-| Python: OOP, tests, profiling | immutable dataclass models, `mypy --strict`, 585 tests (9 Hypothesis properties), profiling → a Rust kernel 10–49× faster with the same plan | [tests](tests) · [acceleration](docs/native-acceleration.md) |
+| Python: OOP, tests, profiling | immutable dataclass models, `mypy --strict`, 590 tests (10 Hypothesis properties), profiling → a Rust kernel 10–49× faster with the same plan | [tests](tests) · [acceleration](docs/native-acceleration.md) |
 | Code review and documentation | review rules, CI (ruff, mypy, clippy, tests, CLI smoke runs), documentation in Russian and English, a changelog | [CONTRIBUTING](CONTRIBUTING.md) · [architecture](docs/architecture.md) · [CHANGELOG](CHANGELOG.md) |
 | Risk: synthetic data only | public benchmarks, some on real OSRM road times and with 1000 customers; an operator's data comes in as coordinates and the operator's router matrices (OSRM, Valhalla with a truck profile) | [scope](docs/limitations.md) · [Russian practice](docs/trucking-ru.md) |
 
@@ -70,7 +70,7 @@ measurement that one command reproduces.
 | Several trips per vehicle | DC → 60 stores in two delivery waves: with one trip per vehicle even 21 vehicles (12 hired) serve only 52–55 stores; with two or three trips, **all 60 on 12–15 vehicles** | same |
 | Rush hours | a plan made on free-flow speeds fails on **8–13 routes a day** in peak traffic (113–318 minutes late); the traffic-aware plan holds at 0–11% more | same |
 | Seeds and statistics | 19 Solomon R2/RC2 instances × 5 seeds: every run at the reference vehicle count, gap spread across seeds up to ±3 pp. Local search shortens the plan in 61 of 95 paired runs (median −0.32% of the best known), Wilcoxon **p = 0.006**; RC202 mean 8.3% → 6.3%, R211 6.5% → 3.9% | `python benchmark/seed_study.py` → [table](docs/benchmarks/seed-study.md) |
-| Engineering | 585 tests, 9 of them Hypothesis properties (hundreds of random routes: the search's checks and the route-sheet schedule against the independent verifier); `mypy --strict`, `ruff`, `clippy -D warnings`; Rust ↔ Python bit for bit | `pytest && ruff check . && mypy` |
+| Engineering | 590 tests, 10 of them Hypothesis properties (hundreds of random routes: the search's checks and the route-sheet schedule against the independent verifier); `mypy --strict`, `ruff`, `clippy -D warnings`; Rust ↔ Python bit for bit | `pytest && ruff check . && mypy` |
 
 Measured on one machine (Linux x86_64, Python 3.13, single thread); not an SLA.
 
