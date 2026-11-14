@@ -16,6 +16,12 @@ This operator makes the whole step at once:
   the scan repeats until no merge saves money;
 * the types of the result are then re-picked by the transportation model.
 
+On instances with multi-trip vehicles the same scan also *chains* trips:
+``A + reload + B`` on A's type keeps every trip's loads, so only the day's
+timing is checked, and B may be a hired vehicle's route moved onto an own
+vehicle's second trip (:meth:`RouteMerger._chains`). Routes that already
+reload keep their type and are only chained.
+
 Pairs are pruned before any insertion: the combined peak load must fit the
 largest admissible type, and only the ``neighbours`` routes nearest to a
 route (by the distance between their stop centroids) are tried with it.

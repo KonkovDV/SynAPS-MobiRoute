@@ -33,7 +33,7 @@ from typing import Any, Literal
 
 from mobiroute.vrp.fleet import route_money
 from mobiroute.vrp.insertion import Compiled
-from mobiroute.vrp.solution import Route, Solution
+from mobiroute.vrp.solution import MUST_SERVE_PENALTY, Route, Solution
 
 SpBackend = Literal["CP-SAT", "SCIP", "HIGHS", "CBC"]
 #: CP-SAT needs integer costs: money is scaled to thousandths.
@@ -91,6 +91,7 @@ def solve_set_partitioning(
     backend: SpBackend = "CP-SAT",
     time_limit: float = 5.0,
     deterministic: bool = True,
+    workers: int = 1,
 ) -> SpResult:
     """Best plan made of pool routes (see module docstring).
 
@@ -107,12 +108,29 @@ def solve_set_partitioning(
     cover: list[list[int]] = [[] for _ in range(len(c.penalty))]
     by_type: list[list[int]] = [[] for _ in range(c.n_types)]
     costs: list[float] = []
+    # A reload stop is a node like any other: one route may use it.
+    stops: dict[int, list[int]] = {}
     for k, key in enumerate(keys):
         t, requests = key
         costs.append(pool.columns[key][0])
         by_type[t].append(k)
         for r in requests:
             cover[r].append(k)
+        for n in pool.columns[key][1]:
+            if c.reload_of[n] >= 0:
+                stops.setdefault(n, []).append(k)
+    shared = [cols for cols in stops.values() if len(cols) > 1]
+    # An order the incumbent serves gets no "left out" variable: the incumbent
+    # shows that covering all of them at once is possible, so the optimum is
+    # unchanged, and the model loses the huge must-serve penalties that make
+    # its LP badly scaled. Orders the incumbent leaves out keep the variable.
+    optional = [
+        not cover[r]
+        or c.penalty[r] < MUST_SERVE_PENALTY
+        or incumbent is None
+        or r in incumbent.unassigned
+        for r in range(len(cover))
+    ]
     hint: set[int] = set()
     if incumbent is not None:
         lookup = {key: k for k, key in enumerate(keys)}
@@ -122,9 +140,13 @@ def solve_set_partitioning(
                 if key in lookup:
                     hint.add(lookup[key])
     if backend == "CP-SAT":
-        chosen, status = _solve_cpsat(c, cover, by_type, costs, hint, time_limit, deterministic)
+        chosen, status = _solve_cpsat(
+            c, cover, optional, by_type, shared, costs, hint, time_limit, deterministic, workers
+        )
     else:
-        chosen, status = _solve_mip(c, cover, by_type, costs, hint, time_limit, backend)
+        chosen, status = _solve_mip(
+            c, cover, optional, by_type, shared, costs, hint, time_limit, backend
+        )
     seconds = time.perf_counter() - started
     if chosen is None:
         return SpResult(None, None, status, seconds, len(keys), backend)
@@ -143,11 +165,14 @@ def solve_set_partitioning(
 def _solve_cpsat(
     c: Compiled,
     cover: list[list[int]],
+    optional: list[bool],
     by_type: list[list[int]],
+    shared: list[list[int]],
     costs: list[float],
     hint: set[int],
     time_limit: float,
     deterministic: bool,
+    workers: int,
 ) -> tuple[list[int] | None, str]:
     from ortools.sat.python import cp_model
 
@@ -155,12 +180,18 @@ def _solve_cpsat(
     x = [model.new_bool_var(f"x{k}") for k in range(len(costs))]
     y: dict[int, Any] = {}
     for r, cols in enumerate(cover):
-        if cols:
+        if not cols:
+            continue
+        if optional[r]:
             y[r] = model.new_bool_var(f"y{r}")
             model.add(sum(x[k] for k in cols) + y[r] == 1)
+        else:
+            model.add(sum(x[k] for k in cols) == 1)
     for t, cols in enumerate(by_type):
         if cols and len(cols) > c.count[t]:
             model.add(sum(x[k] for k in cols) <= c.count[t])
+    for cols in shared:
+        model.add(sum(x[k] for k in cols) <= 1)
     model.minimize(
         sum(round(SCALE * costs[k]) * x[k] for k in range(len(costs)))
         + sum(round(SCALE * c.penalty[r]) * var for r, var in y.items())
@@ -168,7 +199,7 @@ def _solve_cpsat(
     for k, var in enumerate(x):
         model.add_hint(var, k in hint)
     solver = cp_model.CpSolver()
-    solver.parameters.num_workers = 1
+    solver.parameters.num_workers = workers
     if deterministic:
         # About one deterministic unit per wall-clock second on one core.
         solver.parameters.max_deterministic_time = time_limit
@@ -184,7 +215,9 @@ def _solve_cpsat(
 def _solve_mip(
     c: Compiled,
     cover: list[list[int]],
+    optional: list[bool],
     by_type: list[list[int]],
+    shared: list[list[int]],
     costs: list[float],
     hint: set[int],
     time_limit: float,
@@ -199,20 +232,31 @@ def _solve_mip(
     x = [solver.BoolVar(f"x{k}") for k in range(len(costs))]
     y: dict[int, Any] = {}
     for r, cols in enumerate(cover):
-        if cols:
+        if not cols:
+            continue
+        if optional[r]:
             y[r] = solver.BoolVar(f"y{r}")
             solver.Add(sum(x[k] for k in cols) + y[r] == 1)
+        else:
+            solver.Add(sum(x[k] for k in cols) == 1)
     for t, cols in enumerate(by_type):
         if cols and len(cols) > c.count[t]:
             solver.Add(sum(x[k] for k in cols) <= c.count[t])
+    for cols in shared:
+        solver.Add(sum(x[k] for k in cols) <= 1)
     solver.Minimize(
         sum(costs[k] * x[k] for k in range(len(costs)))
         + sum(c.penalty[r] * var for r, var in y.items())
     )
-    if hint:
+    # OR-Tools 9.15 crashes when HiGHS is given a hint, so HiGHS starts cold.
+    if hint and backend != "HIGHS":
         solver.SetHint(x, [1.0 if k in hint else 0.0 for k in range(len(x))])
     solver.SetTimeLimit(int(time_limit * 1000))
-    code = solver.Solve()
+    # Prove optimality, not the default 0.01% relative gap: with a vehicle
+    # penalty in the costs that tolerance hides real differences.
+    params = pywraplp.MPSolverParameters()
+    params.SetDoubleParam(pywraplp.MPSolverParameters.RELATIVE_MIP_GAP, 0.0)
+    code = solver.Solve(params)
     names = {
         pywraplp.Solver.OPTIMAL: "OPTIMAL",
         pywraplp.Solver.FEASIBLE: "FEASIBLE",
