@@ -37,7 +37,8 @@
     <a href="#fleet"><span lang="ru">Парк</span><span lang="en">Fleet</span></a>
     <a href="#dispatch"><span lang="ru">Диспетчеризация</span><span lang="en">Dispatch</span></a>
     <a href="#rules"><span lang="ru">Правила</span><span lang="en">Rules</span></a>
-    <a href="#sheets"><span lang="ru">Маршрутные листы</span><span lang="en">Route sheets</span></a>
+    <a href="#sheets"><span lang="ru">Листы</span><span lang="en">Sheets</span></a>
+    <a href="#prices"><span lang="ru">Цены</span><span lang="en">Prices</span></a>
     <a href="#bench"><span lang="ru">Эталоны</span><span lang="en">Benchmarks</span></a>
     <a href="#compare"><span lang="ru">Сравнение</span><span lang="en">Compare</span></a>
     <a href="#lab"><span lang="ru">Попробовать</span><span lang="en">Try it</span></a>
@@ -209,7 +210,7 @@ dropoff 1 cannot start before 402; dropoff 1 → dropoff 12 takes 3 + 15.68 min.
       <div class="card">
         <div class="card-head"><h3><span lang="ru">Лента решений</span><span lang="en">Decision feed</span></h3></div>
         <ol class="feed" id="disp-feed" aria-live="polite"></ol>
-        <table class="policy" id="disp-policies"><thead><tr><th scope="col"><span lang="ru">Политика</span><span lang="en">Policy</span></th><th scope="col"><span lang="ru">Принято</span><span lang="en">Accepted</span></th><th scope="col"><span lang="ru">Подача</span><span lang="en">To pickup</span></th><th scope="col"><span lang="ru">Решение</span><span lang="en">Decision</span></th></tr></thead><tbody></tbody></table>
+        <div class="scroll-x" tabindex="0" role="region" aria-label="Dispatch policies"><table class="policy" id="disp-policies"><thead><tr><th scope="col"><span lang="ru">Политика</span><span lang="en">Policy</span></th><th scope="col"><span lang="ru">Принято</span><span lang="en">Accepted</span></th><th scope="col"><span lang="ru">Подача</span><span lang="en">To pickup</span></th><th scope="col"><span lang="ru">Решение</span><span lang="en">Decision</span></th></tr></thead><tbody></tbody></table></div>
       </div>
     </div>
   </div>
@@ -270,6 +271,39 @@ dropoff 1 cannot start before 402; dropoff 1 → dropoff 12 takes 3 + 15.68 min.
   </div>
 </section>
 
+<section id="prices" class="sec">
+  <div class="wrap">
+    <p class="kicker reveal"><span lang="ru">Цены</span><span lang="en">Prices</span></p>
+    <h2 class="reveal"><span lang="ru">Сколько стоит каждый заказ. И чего стоит нехватка своей машины.</span><span lang="en">What every order costs. And what running out of own vehicles costs.</span></h2>
+    <p class="sub reveal"><span lang="ru">Тот же день в Челнах. Маршруты, которые перебрал поиск, складываются в задачу линейного программирования; её двойственные оценки — цены: заказа и машины каждого типа. Круг тем больше, чем дороже заказ. Наведите или нажмите.</span><span lang="en">The same day in Chelny. The routes the search went through make a linear programme; its dual values are prices: of an order and of a vehicle of each type. The larger the circle, the dearer the order. Hover or tap.</span></p>
+    <div class="sheets reveal">
+      <div class="card flush sheets-map"><svg id="prices-map" viewBox="0 0 600 600" role="img" aria-label="Orders of the day sized by their price"></svg></div>
+      <div class="card sheets-side">
+        <div class="card-head"><h3 id="prices-order">—</h3><span class="tag"><span lang="ru">заказ</span><span lang="en">order</span></span></div>
+        <dl class="kpis" id="prices-kpis"></dl>
+        <p class="tag"><span lang="ru">Самые дорогие заказы</span><span lang="en">The dearest orders</span></p>
+        <div class="vs prices-top" id="prices-top"></div>
+        <div class="vs-key"><span><i style="background:var(--s1)"></i><span lang="ru">цена (цвет — машина)</span><span lang="en">price (colour: vehicle)</span></span><span><i style="background:var(--muted)"></i><span lang="ru">экономия при отказе</span><span lang="en">saving if dropped</span></span></div>
+      </div>
+    </div>
+    <div class="lemma reveal">
+      <div class="card">
+        <p class="tag warn"><span lang="ru">Двойственная задача · разбиение множества</span><span lang="en">The dual · set partitioning</span></p>
+        <p class="formula" aria-label="maximise the sum of u r plus the sum of n k v k subject to the sum of u r over the orders of a route plus v k being at most the cost of the route"><span class="nowrap">max Σ<i>u</i><sub>r</sub> + Σ<i>n</i><sub>k</sub><i>v</i><sub>k</sub>,</span> <span class="nowrap">Σ<sub>r∈ρ</sub> <i>u</i><sub>r</sub> + <i>v</i><sub>k</sub> ≤ <i>c</i><sub>ρ</sub>,</span> <span class="nowrap"><i>v</i><sub>k</sub> ≤ 0</span></p>
+        <p class="fine"><span lang="ru"><i>u</i><sub>r</sub> — цена заказа, −<i>v</i><sub>k</sub> — рента типа машины, <i>c</i><sub>ρ</sub> — стоимость маршрута ρ, <i>n</i><sub>k</sub> — число машин типа. Ни один маршрут пула не дешевле цен своих заказов; маршруты оптимального плана стоят ровно столько. Из всех оптимальных оценок берётся ближайшая к экономии при отказе: иначе вырожденная задача списывает весь рейс на один заказ.</span><span lang="en"><i>u</i><sub>r</sub> is the price of an order, −<i>v</i><sub>k</sub> the rent of a vehicle type, <i>c</i><sub>ρ</sub> the cost of route ρ, <i>n</i><sub>k</sub> the units of the type. No pool route is cheaper than the prices of its orders; the routes of an optimal plan cost exactly that. Among all optimal duals the one closest to the savings is taken: a degenerate LP would otherwise charge a whole trip to one order.</span></p>
+        <dl class="kpis" id="prices-summary"></dl>
+      </div>
+      <div class="card">
+        <p class="tag"><span lang="ru">Чего стоит ещё одна своя машина</span><span lang="en">What one more own vehicle is worth</span></p>
+        <div class="vs" id="prices-rents"></div>
+        <div class="vs-key"><span><i style="background:var(--s1)"></i><span lang="ru">LP-рента</span><span lang="en">LP rent</span></span><span><i style="background:var(--muted)"></i><span lang="ru">день пересчитан с ещё одной машиной</span><span lang="en">the day solved again with one more</span></span></div>
+        <p class="fine"><span lang="ru">Рента — предельная оценка релаксации: ставка за долю машины при тех маршрутах, что уже в пуле. Пересчёт — целая машина и новый поиск. Рента называет дефицитные типы, пересчёт — сумму; расхождение между ними — цена целочисленности.</span><span lang="en">The rent is a marginal value of the relaxation: a rate per fraction of a vehicle on the routes already in the pool. Solving again is a whole vehicle and a new search. The rent names the scarce types, solving again gives the amount; the difference between them is the price of integrality.</span></p>
+      </div>
+    </div>
+    <p class="fine reveal"><span lang="ru">Повторить: <code>mobiroute vrp-solve --geo examples/chelny-day.geo.json --prices</code> — рядом с планом появятся <code>prices.md</code> и <code>prices.json</code>. Это цены ограниченной мастер-задачи: точные для пула маршрутов, оценка для задачи в целом.</span><span lang="en">Reproduce: <code>mobiroute vrp-solve --geo examples/chelny-day.geo.json --prices</code> writes <code>prices.md</code> and <code>prices.json</code> next to the plan. These are prices of a restricted master problem: exact for the route pool, an estimate for the whole problem.</span></p>
+  </div>
+</section>
+
 <section id="bench" class="sec">
   <div class="wrap">
     <p class="kicker reveal"><span lang="ru">Эталоны</span><span lang="en">Benchmarks</span></p>
@@ -300,12 +334,22 @@ dropoff 1 cannot start before 402; dropoff 1 → dropoff 12 takes 3 + 15.68 min.
   <div class="wrap">
     <p class="kicker reveal"><span lang="ru">Сравнение</span><span lang="en">Comparison</span></p>
     <h2 class="reveal"><span lang="ru">Чем отличается от OR-Tools, VROOM, PyVRP и готовых сервисов.</span><span lang="en">How it differs from OR-Tools, VROOM, PyVRP and finished services.</span></h2>
-    <p class="sub reveal"><span lang="ru">Возможности сверены по документации проектов 14.11.2026. Замер — против OR-Tools: 18 задач, по 10 секунд, один поток, оба плана проверены одним верификатором.</span><span lang="en">Capabilities checked against each project's documentation on 2026-11-14. Measured against OR-Tools: 18 instances, 10 seconds each, one thread, both plans checked by the same verifier.</span></p>
+    <p class="sub reveal"><span lang="ru">Возможности сверены по документации проектов 14.11.2026. Замеры — при равном времени на один поток, каждый план проверен одним верификатором: против OR-Tools на 18 задачах по 10 секунд, против PyVRP, VROOM и jsprit на 56 задачах Solomon и на задачах в 1000 клиентов.</span><span lang="en">Capabilities checked against each project's documentation on 2026-11-14. Measured at equal time on one thread, every plan checked by the same verifier: against OR-Tools on 18 instances at 10 seconds each, against PyVRP, VROOM and jsprit on the 56 Solomon instances and on 1000-customer instances.</span></p>
     <div class="vs-stats reveal">
-      <div class="good"><b>15 / 18</b><span><span lang="ru">задач: план ALNS лучше, чем у OR-Tools</span><span lang="en">instances where the ALNS plan beats OR-Tools</span></span></div>
-      <div><b>0</b><span><span lang="ru">задач, где OR-Tools лучше; на 3 — одинаково</span><span lang="en">instances where OR-Tools is better; 3 are ties</span></span></div>
-      <div class="good"><b>−18%</b><span><span lang="ru">стоимость грузового дня со смешанным парком, на две машины меньше</span><span lang="en">cost of a mixed-fleet freight day, two vehicles fewer</span></span></div>
+      <div class="good"><b>12 / 18</b><span><span lang="ru">задач: план ALNS лучше, чем у OR-Tools; на остальных шести — одинаково, хуже — ни на одной</span><span lang="en">instances where the ALNS plan beats OR-Tools; the other six are ties, none is worse</span></span></div>
+      <div class="good"><b>56 / 56</b><span><span lang="ru">задач Solomon с числом машин лучшего известного решения; у PyVRP 50, VROOM 32, jsprit 30</span><span lang="en">Solomon instances at the best-known vehicle count; PyVRP 50, VROOM 32, jsprit 30</span></span></div>
+      <div class="good"><b>−17%</b><span><span lang="ru">стоимость грузового дня со смешанным парком против OR-Tools, до трёх машин меньше</span><span lang="en">cost of a mixed-fleet freight day against OR-Tools, up to three vehicles fewer</span></span></div>
     </div>
+    <div class="card reveal flush" style="margin-top:16px"><div class="scroll-x" tabindex="0" role="region" aria-label="Solvers at equal time"><table class="scope compare">
+      <caption class="fine" style="caption-side:bottom;text-align:left;padding:14px 18px"><span lang="ru">Один поток, настройки по умолчанию: 10 с на задачу Solomon, 60 с на задачу в 1000 клиентов. В Solomon сначала сравнивают число машин, в остальных наборах — только расстояние; там впереди PyVRP, этот движок второй. </span><span lang="en">One thread, default settings: 10 s per Solomon instance, 60 s per 1000-customer instance. Solomon ranks vehicles first, the other sets distance only; there PyVRP leads and this engine is second. </span><a class="link" href="https://github.com/KonkovDV/SynAPS-MobiRoute/blob/main/docs/benchmarks/solvers.md"><span lang="ru">Все 256 прогонов</span><span lang="en">All 256 runs</span> →</a></caption>
+      <thead><tr><th scope="col"><span lang="ru">Равное время, один верификатор</span><span lang="en">Equal time, one verifier</span></th><th scope="col"><span lang="ru">Этот движок</span><span lang="en">This engine</span></th><th scope="col">PyVRP 0.14</th><th scope="col">VROOM 1.15</th><th scope="col">jsprit 2.0</th></tr></thead>
+      <tbody>
+        <tr><th scope="row"><span lang="ru">Solomon: число машин лучшего известного решения</span><span lang="en">Solomon: at the best-known vehicle count</span></th><td><b>56 / 56</b></td><td>50 / 56</td><td>32 / 56</td><td>30 / 56</td></tr>
+        <tr><th scope="row"><span lang="ru">Solomon: лучший из четырёх (машины, затем расстояние)</span><span lang="en">Solomon: best of the four (vehicles, then distance)</span></th><td><b>38</b></td><td>36</td><td>17</td><td>11</td></tr>
+        <tr><th scope="row"><span lang="ru">Gehring–Homberger, 1000 клиентов: разрыв по расстоянию</span><span lang="en">Gehring–Homberger, 1000 customers: distance gap</span></th><td><span lang="ru">+2,9%</span><span lang="en">+2.9%</span></td><td><b><span lang="ru">+1,2%</span><span lang="en">+1.2%</span></b></td><td><span lang="ru">+15,2%</span><span lang="en">+15.2%</span></td><td><span lang="ru">+20,9%</span><span lang="en">+20.9%</span></td></tr>
+        <tr><th scope="row"><span lang="ru">Uchoa X, 500 и 1000 клиентов: разрыв по расстоянию</span><span lang="en">Uchoa X, 500 and 1000 customers: distance gap</span></th><td><span lang="ru">+2,4%</span><span lang="en">+2.4%</span></td><td><b><span lang="ru">+0,9%</span><span lang="en">+0.9%</span></b></td><td><span lang="ru">+3,5%</span><span lang="en">+3.5%</span></td><td><span lang="ru">+19,0%</span><span lang="en">+19.0%</span></td></tr>
+      </tbody>
+    </table></div></div>
     <div class="card reveal flush" style="margin-top:16px"><div class="scroll-x" tabindex="0" role="region" aria-label="Comparison"><table class="scope compare">
       <thead><tr><th scope="col"><span lang="ru">Возможность</span><span lang="en">Capability</span></th><th scope="col"><span lang="ru">Этот движок</span><span lang="en">This engine</span></th><th scope="col">OR-Tools</th><th scope="col">VROOM</th><th scope="col">PyVRP</th><th scope="col">jsprit</th><th scope="col"><span lang="ru">Яндекс Маршрутизация</span><span lang="en">Yandex Routing</span></th></tr></thead>
       <tbody>
@@ -332,7 +376,7 @@ dropoff 1 cannot start before 402; dropoff 1 → dropoff 12 takes 3 + 15.68 min.
       <article class="card reveal">
         <div class="card-head"><h3><span lang="ru">Гонка до доказанного оптимума</span><span lang="en">Race to a proven optimum</span></h3><button class="pill-btn" id="race-run" type="button"><span lang="ru">Повторить</span><span lang="en">Replay</span></button></div>
         <div class="bars race" id="race"></div>
-        <p class="fine"><span lang="ru">Анимация в 12 раз быстрее реального времени. ✓ — оптимум доказан; = — эвристика нашла опубликованный оптимум, но не доказывает его; +% — разрыв к оптимуму за отведённое время; 15/16 — план теряет заявку, поэтому он дешевле оптимума и ответом не считается. Оранжевым — оптимальность не доказана.</span><span lang="en">Animation runs 12× faster than real time. ✓ optimum proven; = a heuristic found the published optimum but proves nothing; +% the gap to the optimum when time ran out; 15/16 the plan drops a request, which is why it is cheaper than the optimum and does not count as an answer. Orange: optimality not proven.</span></p>
+        <p class="fine"><span lang="ru">Анимация в 12 раз быстрее реального времени. ✓ — оптимум доказан; = — эвристика нашла опубликованный оптимум, но не доказывает его; +% — разрыв к оптимуму за отведённое время. Оранжевым — оптимальность не доказана.</span><span lang="en">Animation runs 12× faster than real time. ✓ optimum proven; = a heuristic found the published optimum but proves nothing; +% the gap to the optimum when time ran out. Orange: optimality not proven.</span></p>
       </article>
       <article class="card reveal flush">
         <div class="scroll-x" tabindex="0" role="region" aria-label="Solver results"><table id="lab-table"><thead><tr><th scope="col"><span lang="ru">Решатель</span><span lang="en">Solver</span></th><th scope="col"><span lang="ru">Статус</span><span lang="en">Status</span></th><th scope="col" class="num"><span lang="ru">Стоимость</span><span lang="en">Cost</span></th><th scope="col" class="num"><span lang="ru">Время, с</span><span lang="en">Time, s</span></th></tr></thead><tbody></tbody></table></div>
@@ -393,6 +437,9 @@ dropoff 1 cannot start before 402; dropoff 1 → dropoff 12 takes 3 + 15.68 min.
         <tr><th scope="row"><span lang="ru">Стоимость по типам ТС</span><span lang="en">Cost by vehicle type</span></th><td><span class="pill ok"><span lang="ru">есть</span><span lang="en">done</span></span></td><td><span lang="ru">плата за выход + руб/км + руб/ч; разные профили скорости</span><span lang="en">fixed fee + per km + per hour; separate speed profiles</span></td></tr>
         <tr><th scope="row"><span lang="ru">Эталоны Solomon, Li &amp; Lim, Sartori–Buriol, Cordeau</span><span lang="en">Solomon, Li &amp; Lim, Sartori–Buriol, Cordeau</span></th><td><span class="pill ok"><span lang="ru">есть</span><span lang="en">done</span></span></td><td><span lang="ru">130 инстансов с SHA-256, разрыв к лучшим известным решениям</span><span lang="en">130 instances pinned by SHA-256, gaps to best known solutions</span></td></tr>
         <tr><th scope="row"><span lang="ru">Сравнение с OR-Tools Routing</span><span lang="en">Head-to-head with OR-Tools Routing</span></th><td><span class="pill ok"><span lang="ru">есть</span><span lang="en">done</span></span></td><td><span lang="ru">та же модель, равное время, тот же верификатор</span><span lang="en">same model, equal time, same verifier</span></td></tr>
+        <tr><th scope="row"><span lang="ru">Сравнение с PyVRP, VROOM, jsprit</span><span lang="en">Head-to-head with PyVRP, VROOM, jsprit</span></th><td><span class="pill ok"><span lang="ru">есть</span><span lang="en">done</span></span></td><td><span lang="ru">Solomon и задачи в 1000 клиентов, равное время, один поток, тот же верификатор</span><span lang="en">Solomon and 1000-customer instances, equal time, one thread, same verifier</span></td></tr>
+        <tr><th scope="row"><span lang="ru">Цены заказов и рента машин</span><span lang="en">Order prices and vehicle rents</span></th><td><span class="pill ok"><span lang="ru">есть</span><span lang="en">done</span></span></td><td><span lang="ru">двойственная задача LP по пулу маршрутов; из вырожденного множества решений — ближайшее к экономии при отказе</span><span lang="en">the dual of the LP over the route pool; among degenerate optima, the one closest to the removal savings</span></td></tr>
+        <tr><th scope="row"><span lang="ru">Заказы, от которых можно отказаться</span><span lang="en">Orders that may be refused</span></th><td><span class="pill ok"><span lang="ru">есть</span><span lang="en">done</span></span></td><td><span lang="ru">заказ со штрафом обслуживается, пока это дешевле отказа; оптимум CP-SAT в 87 задачах из 90</span><span lang="en">an order with a penalty is served while that is cheaper than refusing it; the CP-SAT optimum on 87 of 90 instances</span></td></tr>
         <tr><th scope="row"><span lang="ru">Заявки в реальном времени</span><span lang="en">Orders in real time</span></th><td><span class="pill ok"><span lang="ru">есть</span><span lang="en">done</span></span></td><td><span lang="ru">заморозка проеханного, вставка за доли мс, переоптимизация живого состояния</span><span lang="en">freeze what is driven, insert in a fraction of a ms, re-optimise the live state</span></td></tr>
         <tr><th scope="row"><span lang="ru">Опоздание вместо «мягких окон»</span><span lang="en">Lateness instead of soft windows</span></th><td><span class="pill ok"><span lang="ru">есть</span><span lang="en">done</span></span></td><td><span lang="ru">минимум максимального и суммарного опоздания (Беллман–Форд, LP)</span><span lang="en">least maximum and total lateness (Bellman–Ford, LP)</span></td></tr>
         <tr><th scope="row"><span lang="ru">Несколько рейсов, перерывы, время суток</span><span lang="en">Multi-trip, breaks, time of day</span></th><td><span class="pill ok"><span lang="ru">есть</span><span lang="en">done</span></span></td><td><span lang="ru">повторная загрузка на складе (ёмкость по рейсам), норма 4,5 ч / 45 мин, скорость по часам суток (модель Ichoua–Gendreau–Potvin, FIFO); в ядре Rust — перерывы и рейсы</span><span lang="en">reloading at the depot (capacity per trip), the 4.5 h / 45 min rule, speeds by time of day (Ichoua–Gendreau–Potvin, FIFO); rests and trips in the Rust kernel</span></td></tr>

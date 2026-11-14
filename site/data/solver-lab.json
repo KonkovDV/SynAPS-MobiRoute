@@ -6,7 +6,7 @@
     "published_source": "Cordeau (2006), Operations Research 54(3):573-586, proven optimum; tabulated in Ho et al. (2018), Transp. Res. Part B 111:395-421"
   },
   "host": {
-    "platform": "Linux-6.18.44-fc-v445-x86_64-with-glibc2.39",
+    "platform": "Linux-6.18.44-fc-v470-x86_64-with-glibc2.39",
     "python": "3.13.18",
     "mobiroute": "0.5.0"
   },
@@ -21,7 +21,7 @@
       "cost": 294.248,
       "bound": 294.249,
       "gap_to_published_pct": -0.0007,
-      "seconds": 0.678
+      "seconds": 0.646
     },
     {
       "lane": "literature",
@@ -33,7 +33,7 @@
       "cost": 294.248,
       "bound": 294.248,
       "gap_to_published_pct": -0.0007,
-      "seconds": 26.185
+      "seconds": 25.899
     },
     {
       "lane": "literature",
@@ -45,7 +45,7 @@
       "cost": 294.248,
       "bound": 294.248,
       "gap_to_published_pct": -0.0007,
-      "seconds": 41.28
+      "seconds": 40.444
     },
     {
       "lane": "literature",
@@ -57,7 +57,7 @@
       "cost": 353.8365,
       "bound": 225.8941,
       "gap_to_published_pct": 20.2503,
-      "seconds": 59.352
+      "seconds": 58.974
     },
     {
       "lane": "literature",
@@ -69,18 +69,18 @@
       "cost": 294.248,
       "bound": null,
       "gap_to_published_pct": -0.0007,
-      "seconds": 3.029
+      "seconds": 2.744
     },
     {
       "lane": "literature",
       "solver": "OR-Tools Routing PCI+GLS (10 s)",
       "status": "SUCCESS",
-      "verified": false,
+      "verified": true,
       "feasible": true,
-      "served": "15/16",
-      "cost": 258.1265,
+      "served": "16/16",
+      "cost": 294.248,
       "bound": null,
-      "gap_to_published_pct": null,
+      "gap_to_published_pct": -0.0007,
       "seconds": 10.0
     },
     {
@@ -91,7 +91,7 @@
       "cost": null,
       "bound": 85.2731,
       "gap_to_published_pct": null,
-      "seconds": 0.092
+      "seconds": 0.074
     }
   ],
   "operator": [
@@ -104,7 +104,7 @@
       "kernel_distance": 386.0,
       "literature_feasible": false,
       "feasible_with_lobby_slack_30": true,
-      "seconds": 0.006
+      "seconds": 0.012
     },
     {
       "lane": "operator",
@@ -126,7 +126,7 @@
       "kernel_distance": 386.0,
       "literature_feasible": false,
       "feasible_with_lobby_slack_30": true,
-      "seconds": 0.067
+      "seconds": 0.049
     },
     {
       "lane": "operator",
@@ -137,7 +137,7 @@
       "kernel_distance": 386.0,
       "literature_feasible": false,
       "feasible_with_lobby_slack_30": true,
-      "seconds": 0.015
+      "seconds": 0.012
     },
     {
       "lane": "operator",
@@ -148,7 +148,7 @@
       "kernel_distance": 377.0,
       "literature_feasible": false,
       "feasible_with_lobby_slack_30": true,
-      "seconds": 0.062
+      "seconds": 0.053
     }
   ]
 }

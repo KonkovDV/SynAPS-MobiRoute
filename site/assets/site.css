@@ -55,7 +55,8 @@ img, svg { max-width: 100%; }
 .pill-btn:hover { background: color-mix(in srgb, var(--ink) 8%, transparent); }
 .pill-btn.icon { width: 34px; padding: 0; }
 .pill-btn.solid { background: var(--ink); color: var(--bg); border-color: var(--ink); }
-@media (max-width: 900px) { .links { display: none; } .nav-act { margin-left: auto; } }
+@media (max-width: 1240px) { .nav-in { gap: 16px; } .links { gap: 16px; font-size: 13.5px; } }
+@media (max-width: 1080px) { .links { display: none; } .nav-act { margin-left: auto; } }
 
 /* hero: always dark, like a stage */
 .hero {
@@ -398,6 +399,20 @@ td.num { color: var(--ink); }
 .curve-card { display: flex; align-items: center; padding: 12px; }
 .curve-card svg { display: block; width: 100%; height: auto; }
 @media (max-width: 980px) { .sheets, .lemma { grid-template-columns: minmax(0, 1fr); } }
+
+/* ---------- prices ---------- */
+.price-dot { cursor: pointer; outline: none; }
+.price-dot circle { transition: fill-opacity .15s ease, stroke-width .15s ease; }
+.price-dot:focus-visible circle { stroke: var(--ink); stroke-width: 3; }
+.prices-top .vs-row { cursor: pointer; border-radius: 10px; padding: 4px 8px; margin: 0 -8px; outline: none; }
+.prices-top .vs-row.on, .prices-top .vs-row:focus-visible { background: color-mix(in srgb, var(--ink) 7%, transparent); }
+.vs-row small { color: var(--muted); font-size: 12.5px; font-variant-numeric: tabular-nums; }
+.vs-row small b { color: var(--ink); font-weight: 600; }
+.nowrap { white-space: nowrap; }
+#prices .lemma { grid-template-columns: minmax(0, 1.05fr) minmax(0, .95fr); }
+#prices .sheets { align-items: start; }
+#prices > .wrap > .fine { margin-top: 18px; }
+@media (max-width: 980px) { #prices .lemma { grid-template-columns: minmax(0, 1fr); } }
 
 /* ---------- comparison ---------- */
 .vs-stats { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; margin-top: 44px; }
