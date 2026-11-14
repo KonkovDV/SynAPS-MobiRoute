@@ -31,6 +31,7 @@ Modules
 ``merge``        two routes onto one vehicle; trips chained through a reload
 ``local_search`` relocate, swap, 2-opt*, 2-opt with time-window segments
 ``setpart``      set partitioning over the route pool (CP-SAT, SCIP, HiGHS, CBC)
+``prices``       LP duals of that model: the price of an order, the rent of a vehicle type
 ``exact``        CP-SAT model for proven optima on small instances
 ``ortools_lane`` OR-Tools Routing baseline on the same model
 ``lateness``     minimal-lateness schedules (bisection and LP)
@@ -54,6 +55,7 @@ from mobiroute.vrp.io import (
     parse_solomon,
 )
 from mobiroute.vrp.model import Instance, Node, Profile, Request, VehicleType
+from mobiroute.vrp.prices import Prices, prices_markdown, shadow_prices, solve_with_prices
 from mobiroute.vrp.sheets import RouteSheet, route_sheets, sheets_csv, sheets_markdown
 from mobiroute.vrp.solution import CostBreakdown, Route, Solution, evaluate
 from mobiroute.vrp.verify import Verdict, verify
@@ -65,6 +67,7 @@ __all__ = [
     "Instance",
     "Node",
     "Place",
+    "Prices",
     "Profile",
     "Request",
     "Route",
@@ -82,10 +85,13 @@ __all__ = [
     "parse_lilim",
     "parse_sartori_buriol",
     "parse_solomon",
+    "prices_markdown",
     "route_sheets",
     "search_objective",
+    "shadow_prices",
     "sheets_csv",
     "sheets_markdown",
     "solve",
+    "solve_with_prices",
     "verify",
 ]
