@@ -86,10 +86,13 @@ def reading(rows: list[dict[str, Any]]) -> list[str]:
     out: list[str] = []
     fast = [r for r in rows if r["policy"] != "ortools-resolve"]
     if fast:
+        p95 = max(r["decision_ms_p95"] for r in fast)
         worst = max(r["decision_ms_max"] for r in fast)
         out.append(
-            f"* Insertion answers every order in at most {worst:.2f} ms on every day, "
-            "background passes excluded."
+            f"* Insertion answers 95% of orders within {p95:.2f} ms on every day (background "
+            f"passes excluded); the slowest single answer took {worst:.2f} ms. Wall-clock "
+            "maxima of a Python process include rare runtime pauses (garbage collection), so "
+            "the p95 is the figure to plan with."
         )
     for day in dict.fromkeys(r["day"] for r in rows):
         ins, alns = by.get((day, "insertion")), by.get((day, "insertion+alns"))
@@ -125,7 +128,7 @@ def render(rows: list[dict[str, Any]], limit: float) -> str:
         "Plant: pallet moves between workshops, tow tractors, flatbeds with a crane and a",
         "covered van; pickup within 40 min of release, delivery within 90, 12-hour shifts.",
         "",
-        "| Day | Policy | Accepted | Call to pickup, mean / p95 (min) | Ride, mean (min) | Distance | Cost | Vehicles | Decision, mean / max (ms) | Verified |",
+        "| Day | Policy | Accepted | Call to pickup, mean / p95 (min) | Ride, mean (min) | Distance | Cost | Vehicles | Decision, mean / p95 / max (ms) | Verified |",
         "| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | :---: |",
     ]
     for r in rows:
@@ -133,7 +136,8 @@ def render(rows: list[dict[str, Any]], limit: float) -> str:
             f"| {r['day']} | {r['policy']} | {100 * r['acceptance_rate']:.1f}% "
             f"| {r['response_mean_min']:.1f} / {r['response_p95_min']:.1f} | {r['ride_mean_min']:.1f} "
             f"| {r['distance']:.1f} | {r['cost']:.0f} | {r['vehicles_used']:.0f} "
-            f"| {r['decision_ms_mean']:.2f} / {r['decision_ms_max']:.2f} | {'yes' if r['verified'] else 'NO'} |"
+            f"| {r['decision_ms_mean']:.2f} / {r['decision_ms_p95']:.2f} / {r['decision_ms_max']:.2f} "
+            f"| {'yes' if r['verified'] else 'NO'} |"
         )
     lines += [
         "",

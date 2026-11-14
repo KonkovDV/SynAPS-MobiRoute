@@ -12,6 +12,9 @@ table to `docs/benchmarks/`. Rules: [docs/benchmark-protocol.md](../docs/benchma
 | `realtime_dispatch.py` | live dispatch policies on shuttle and plant days | `docs/benchmarks/realtime-dispatch.md` |
 | `measure_vrp_speed.py` | cost of an ALNS iteration, Python reference vs Rust kernel | `docs/benchmarks/vrp-speed.md` |
 | `solver_lab.py` | Cordeau a2-16 through CP-SAT, MIP (SCIP, HiGHS, CBC), LP bound, ALNS and OR-Tools | `docs/benchmarks/solver-lab-a2-16.md` |
+| `rules_study.py` | driver rests, multi-trip days and rush hours on synthetic days | `docs/benchmarks/rules.md` |
+| `seed_study.py` | five seeds on Solomon R2/RC2, with and without local search, Wilcoxon test | `docs/benchmarks/seed-study.md` |
+| `setpart_study.py` | set partitioning over ALNS route pools: CP-SAT, SCIP, HiGHS, CBC, LP bound | `docs/benchmarks/setpart-solvers.md` |
 | `export_site_data.py`, `export_vrp_site_data.py` | data and figures for the site | `site/data/`, `docs/img/` |
 | `run_stress_day.py`, `measure_day_speed.py`, `run_ops_benchmark.py`, `run_benchmark.py`, `generate_day.py`, `generate_moscow_day.py` | paratransit kernel: stress day, speed, synthetic operator scenarios | `benchmark/results/` |
 
@@ -25,5 +28,8 @@ python benchmark/ortools_vs_alns.py --time-limit 10
 python benchmark/realtime_dispatch.py --with-ortools
 python benchmark/measure_vrp_speed.py
 python benchmark/solver_lab.py
+python benchmark/rules_study.py
+python benchmark/seed_study.py
+python benchmark/setpart_study.py
 python benchmark/export_vrp_site_data.py
 ```
