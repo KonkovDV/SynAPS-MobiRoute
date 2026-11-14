@@ -13,26 +13,38 @@ What the code does not do yet, and what its numbers do not mean.
 
 ## Rich VRP model
 
-* One tour per vehicle: no multi-trip days (reloading at the depot).
-* No breaks inside a route: a shift cap and windows, not the full working-
-  and rest-time rules for drivers.
-* Static travel times: no time-dependent speeds (rush hours).
+* Driver rests: one rest per route, so at most twice the driving limit per
+  day (the 9-hour daily limit for the 4.5 h rule); the rest is not split
+  (15 + 30 min), and daily and weekly rest between shifts is out of scope.
+* Multi-trip days need reload stops created up front
+  (`model.add_reload_stops`); a stop is a copy of the depot, and reloading
+  takes a fixed time whatever the load.
+* Time-dependent travel: one speed profile per road profile (every arc slows
+  down by the same factor); the search tests the shift cap soundly but not
+  completely (it may reject a feasible route), time costs are charged on
+  free-flow minutes, and it runs on the Python reference, not the Rust
+  kernel. It is not combined with ride limits or rest rules.
 * Cost per time is charged on driving and service, not on waiting.
 * Every vehicle returns to its end depot; open routes need a zero-cost return.
-* In the live dispatcher, ride limits have to be written as delivery
-  deadlines, and vehicles idle where they finish instead of repositioning.
+* The OR-Tools lane, the exact CP-SAT model and the live dispatcher do not
+  model rests, multi-trip days or time-dependent travel; they refuse such
+  instances with an explicit error. In the dispatcher, ride limits have to be
+  written as delivery deadlines, and vehicles idle where they finish instead
+  of repositioning.
 
 ## Algorithms
 
-* ALNS, regret insertion, guided ejection and the dispatcher are heuristics.
-  Gaps to best-known solutions are reported per instance and vary between
-  seeds; route elimination in particular is stochastic.
+* ALNS, regret insertion, guided ejection, the merge operator, the local
+  search and the dispatcher are heuristics. Gaps to best-known solutions vary
+  between seeds; the spread on Solomon's type-2 classes is measured in
+  [benchmarks/seed-study.md](benchmarks/seed-study.md).
+* The local search applies to instances whose orders are all deliveries from
+  the depot (VRPTW) without reload stops, rest rules or traffic.
+* Set partitioning over the route pool is off by default: on long-route
+  instances the pool rarely holds routes that partition the orders anew.
 * The exact CP-SAT model proves optima on small instances (about ten orders).
   `OPTIMAL` refers to its integer model with travel rounded up to 0.01 min;
   the verifier re-prices the plan in real numbers.
-* Insertion keeps a route's vehicle type; types are re-chosen only for finished
-  routes. Merging two routes onto a different type in one move is not covered
-  (both ALNS misses in the CP-SAT study are of this kind).
 * The OR-Tools lane is the common configuration (PCI + GLS, integer time grid,
   disjunctions), not a tuned setup; the comparison says how far the default
   gets in the same time, not what OR-Tools can do with tuning.

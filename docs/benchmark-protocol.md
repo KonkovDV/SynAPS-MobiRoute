@@ -18,7 +18,10 @@ Rules every number in this repository follows.
 6. **No filtering.** Failed or incomplete runs stay in the tables.
 7. **Synthetic is labelled synthetic.** Generated days have no reference;
    they are compared solver against solver.
-8. **Two algebras on Cordeau.** The paratransit kernel uses operator rules
+8. **Seeds and tests for method comparisons.** A change to the search is
+   judged on several seeds per instance and paired runs, with the
+   Wilcoxon signed-rank test; one seed is one draw.
+9. **Two algebras on Cordeau.** The paratransit kernel uses operator rules
    (integer minutes, curb dwell, alighting slack) and is never compared with the
    literature; the claim gate in `benchmarks/academic.py` blocks such a gap.
    The rich-VRP engine and `benchmarks/cordeau_exact.py` use the published
@@ -34,6 +37,9 @@ Rules every number in this repository follows.
 | Live dispatch policies | `python benchmark/realtime_dispatch.py --with-ortools` | [benchmarks/realtime-dispatch.md](benchmarks/realtime-dispatch.md) |
 | Python vs Rust kernel | `python benchmark/measure_vrp_speed.py` | [benchmarks/vrp-speed.md](benchmarks/vrp-speed.md) |
 | Solvers on a2-16 (CP-SAT, MIP, LP bound) | `python benchmark/solver_lab.py` | [benchmarks/solver-lab-a2-16.md](benchmarks/solver-lab-a2-16.md) |
+| Rests, trips, rush hours on synthetic days | `python benchmark/rules_study.py` | [benchmarks/rules.md](benchmarks/rules.md) |
+| Five seeds on Solomon R2/RC2, Wilcoxon test | `python benchmark/seed_study.py` | [benchmarks/seed-study.md](benchmarks/seed-study.md) |
+| Set partitioning: CP-SAT vs SCIP / HiGHS / CBC | `python benchmark/setpart_study.py` | [benchmarks/setpart-solvers.md](benchmarks/setpart-solvers.md) |
 | Paratransit stress day | `python benchmark/run_stress_day.py` | `benchmark/results/` |
 
 Raw JSON goes to `benchmark/results/` (not committed); the Markdown tables in

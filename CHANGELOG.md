@@ -1,5 +1,51 @@
 # Changelog
 
+## 0.5.0 — 2026-11-13
+
+### Added
+- Driver rests (`BreakRule`, 4.5 h of driving / 45 min by default, daily
+  driving within twice the limit): the rest's place is chosen per route; a
+  fixed place keeps the schedule a system of difference constraints, so the
+  verifier still returns certificates (`TRAVEL+REST`, `DRIVING`).
+- Multi-trip days: reload stops inside a route (`add_reload_stops`),
+  capacity per trip, windows, shift cap and rests per day; trips are chained
+  by the merge operator, which can move a hired vehicle's route onto an own
+  vehicle's second trip.
+- Time-dependent travel (`SpeedProfile`, Ichoua-Gendreau-Potvin model,
+  FIFO): exact window tests with the arrival function and its inverse, exact
+  shortest duration in the verifier, a sound shift-cap test in the search.
+- Merge operator: two routes onto one vehicle, possibly of another type.
+  Both instances ALNS missed in the CP-SAT study are now solved optimally.
+- Local search for VRPTW (relocate, swap, 2-opt*, 2-opt) with time-window
+  segment concatenation on granular neighbourhoods, on every new best plan.
+- Set partitioning over the route pool (CP-SAT, SCIP, HiGHS, CBC), optional.
+  CP-SAT runs with `linearization_level = 2`: on one worker it then proves a
+  Solomon pool optimum in 0.13 s instead of not at all in 10 s.
+- Studies: `rules_study.py` (rests, trips, rush hours), `seed_study.py`
+  (five seeds on Solomon R2/RC2 with a Wilcoxon signed-rank test),
+  `setpart_study.py` (solver choice for set partitioning).
+- `dc_day` generator: store deliveries from a DC in two waves.
+- Property-based tests (Hypothesis) hold the search's checks to the verifier.
+
+### Changed
+- Kernel and ABI 0.5: rests and reload stops in Rust, bit-identical to the
+  Python reference; a kernel of another version is ignored, not trusted.
+- The OR-Tools lane, the exact model and the dispatcher refuse instances
+  with rests, reload stops or speed profiles with an explicit error.
+- The live-dispatch table reports the 95th percentile of decision time next
+  to the mean and the maximum (a single maximum can be a runtime pause).
+
+### Results
+- ALNS reaches the CP-SAT optimum on 40 of 40 random instances (was 38).
+- Solomon: all 56 instances at the best-known vehicle count (was 54); worst
+  gap 7.0% (was 11.4%, RC202 now 6.1%).
+- Rest rule: plans made without it leave 4-6 routes a day with no room for
+  a rest; compliant plans cost 2.0-5.5% more.
+- Two trips per vehicle cover a 60-store, two-wave day with 12-15
+  vehicles; one trip leaves 5-8 stores unserved with 21.
+- Rush hours: free-flow plans fail on 8-13 routes a day; traffic-aware
+  plans hold at 0-11% more.
+
 ## 0.4.0 — 2026-11-13
 
 ### Added
