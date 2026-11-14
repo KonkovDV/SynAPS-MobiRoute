@@ -4,12 +4,14 @@ Two hot paths are compiled with PyO3 (`native/mobiroute_native`):
 
 | Kernel | Used by | Python reference | Parity tests |
 | --- | --- | --- | --- |
-| `VrpKernel` (`src/vrp.rs`) | `mobiroute.vrp`: regret repair, insertion tests, exact route timing, guided ejection | `vrp/insertion.py`, `Alns._eject_insert` | `tests/test_vrp_native.py` — identical plans, identical ALNS trajectories |
+| `VrpKernel` (`src/vrp.rs`) | `mobiroute.vrp`: regret repair, insertion tests, exact route timing (rests, reload stops), guided ejection | `vrp/insertion.py`, `Alns._eject_insert` | `tests/test_vrp_native.py` — identical plans, identical ALNS trajectories, with and without rests and reloads |
 | `InsertionEngine` (`src/lib.rs`) | paratransit kernel: greedy, beam, ALNS, online insertion | `solvers/insertion_kernel.py` (structure-of-arrays oracle) | `tests/test_insertion_kernel.py`, `test_native_*` |
 
 Without the extension the rich-VRP engine falls back to Python and gives the
-same plans, only slower. `MOBIROUTE_DISABLE_NATIVE=1` forces the fallback. The
-paratransit solvers require the extension.
+same plans, only slower. `MOBIROUTE_DISABLE_NATIVE=1` forces the fallback;
+an extension whose version does not match the bridge (`KERNEL_ABI`) is
+ignored rather than trusted. Instances with time-dependent travel always run
+on the Python reference. The paratransit solvers require the extension.
 
 ```bash
 python -m pip install maturin
@@ -43,11 +45,12 @@ guess.
    step, same choice as the Python reference.
 
 Current cost per iteration ([benchmarks/vrp-speed.md](benchmarks/vrp-speed.md),
-`python benchmark/measure_vrp_speed.py`): Rust is 12× faster on Solomon R101,
-14× on a Sartori–Buriol PDPTW, 42× on Cordeau DARP (exact ride checks), with
-identical plans. On the 8-type cargo day it is 4.4×: there the per-route
-vehicle-type assignment, still in Python, is the next bottleneck — the obvious
-next candidate for the kernel.
+`python benchmark/measure_vrp_speed.py`): Rust is 10× faster on Solomon R101,
+17× on a Sartori–Buriol PDPTW, 49× on Cordeau DARP (exact ride checks), with
+identical plans. On the 8-type cargo day it is 5.4×: there the operators that
+still run in Python (vehicle-type assignment, route merges) are the next
+bottleneck — the obvious next candidates for the kernel. On R101 the local
+search, also Python, costs about 10% of an iteration.
 
 ## How the paratransit kernel got fast
 
