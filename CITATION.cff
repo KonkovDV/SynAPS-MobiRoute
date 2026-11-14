@@ -12,12 +12,16 @@ repository-code: https://github.com/KonkovDV/SynAPS-MobiRoute
 url: https://github.com/KonkovDV/SynAPS-MobiRoute
 abstract: >-
   Vehicle routing engine for heterogeneous fleets: VRPTW, PDPTW and DARP with
-  capacity vectors, skills, shift caps and own/hired units. Adaptive large
-  neighbourhood search with guided ejection on a Rust kernel that reproduces
-  its Python reference exactly, an exact CP-SAT model, the compact two-index
-  MIP, an OR-Tools Routing baseline, a live dispatch simulator and an
-  independent Bellman-Ford verifier with why-not certificates. Evaluated on
-  the Solomon, Li & Lim, Sartori-Buriol and Cordeau benchmarks.
+  capacity vectors, skills, shift caps, own/hired units, driver rest rules,
+  multi-trip days and time-dependent travel. Adaptive large neighbourhood
+  search with guided ejection, a merge operator, VRPTW local search and set
+  partitioning over the route pool, on a Rust kernel that reproduces its
+  Python reference exactly; an exact CP-SAT model, the compact two-index MIP,
+  an OR-Tools Routing baseline, a live dispatch simulator and an independent
+  Bellman-Ford verifier with why-not certificates. Input in coordinates with
+  offline or OSRM road matrices; route sheets with a shortest driver
+  schedule. Evaluated on the Solomon, Li & Lim, Sartori-Buriol and Cordeau
+  benchmarks.
 keywords:
   - vehicle routing
   - pickup and delivery
@@ -26,6 +30,9 @@ keywords:
   - adaptive large neighbourhood search
   - constraint programming
   - mixed-integer programming
+  - set partitioning
+  - driver rest rules
+  - time-dependent travel times
 license: MIT
 version: "0.5.0"
-date-released: "2026-11-13"
+date-released: "2026-11-14"

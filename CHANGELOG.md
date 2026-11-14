@@ -1,8 +1,29 @@
 # Changelog
 
-## 0.5.0 — 2026-11-13
+## 0.5.0 — 2026-11-14
 
 ### Added
+- Input in coordinates (`mobiroute.vrp.geo`, format `mobiroute.vrp.geo.v1`):
+  depots with opening hours, orders with `"HH:MM"` windows, pickups at a
+  supplier or loads at the depot, collections, demand vectors, skills,
+  vehicle types with shifts, prices per km and per hour, rest rules and
+  trips, rush-hour profiles. Road matrices offline (great circle times a
+  detour factor) or from the OSRM `table` service in blocks of 100 points;
+  input errors are codes (`GEO_UNKNOWN_DEPOT:van`, `GEO_OSRM_NO_ROUTE:i->j`).
+- Route sheets (`mobiroute.vrp.sheets`): one per vehicle with arrival, start
+  and end of work, load per dimension and trip, reloads and the driver's
+  rest; CSV for an ERP, Markdown in Russian or English and an SVG Gantt
+  chart of the day. `vrp-solve --geo FILE [--osrm URL] --sheets [--lang en]`.
+- The driver's schedule (`schedule.compact_schedule`): the latest departure
+  that still returns earliest, a shortest-duration schedule (Lemma 4 in the
+  formulation, two Hypothesis properties).
+- `examples/chelny-day.geo.json`, a synthetic day in Naberezhnye Chelny, and
+  its generator.
+- Site: a route-sheets section with the day's map, a Gantt chart of every
+  vehicle, the sheet and load profile of the selected one, and a departure
+  slider that plots the shift length $D(t_0) = \max(E - t_0, c)$ of Lemma 4.
+- README (RU, EN): a table from the tasks of the role to code and
+  measurements, and the key formulas on one screen.
 - Driver rests (`BreakRule`, 4.5 h of driving / 45 min by default, daily
   driving within twice the limit): the rest's place is chosen per route; a
   fixed place keeps the schedule a system of difference constraints, so the
@@ -30,6 +51,9 @@
 ### Changed
 - Kernel and ABI 0.5: rests and reload stops in Rust, bit-identical to the
   Python reference; a kernel of another version is ignored, not trusted.
+- CLI input errors go to stderr (still one line, exit status 2).
+- `mobiroute.vrp` exports `geo`, `route_sheets`, `sheets_csv` and
+  `sheets_markdown`; CI lints the examples and smoke-tests a geo day.
 - The OR-Tools lane, the exact model and the dispatcher refuse instances
   with rests, reload stops or speed profiles with an explicit error.
 - The live-dispatch table reports the 95th percentile of decision time next

@@ -126,6 +126,72 @@
 больше 45 минут, микроавтобусы на 8 мест. Ограничение «ожидание + поездка»
 записывается точно — как крайний срок высадки.
 
+## Данные из координат и путевые листы
+
+**Вход.** `mobiroute.vrp.geo` читает заказы и парк в координатах (JSON,
+формат `mobiroute.vrp.geo.v1`, полный пример — в docstring модуля). Время —
+строки «ЧЧ:ММ», длительности — минуты, расстояния — километры.
+
+| Поле | Что задаёт |
+| --- | --- |
+| `depots[]` | склады: `lat`, `lon`, часы работы `open` / `close` |
+| `orders[].pickup`, `orders[].delivery` | точки погрузки и выгрузки: координаты, окно `from` / `to`, `service_min`, название. Без `pickup` груз берётся на складе, без `delivery` — везётся на склад |
+| `orders[].demand`, `skills`, `penalty`, `max_ride_min` | груз по измерениям `dimensions`, требования к машине, штраф за отказ (без штрафа заказ обязателен), лимит времени в пути |
+| `vehicle_types[]` | число машин, ёмкость, склад выезда и возврата, смена, лимит длительности, плата за выход, цена километра и часа, навыки, профиль, `hired` |
+| `vehicle_types[].rests` | норма отдыха: `max_driving_min`, `duration_min` |
+| `vehicle_types[].trips` | рейсы: `max` и время перезагрузки `reload_min` |
+| `profiles` | `speed_kmh` и коэффициент извилистости `detour` для офлайн-матриц; `osrm_time_factor` — замедление грузовика на матрицах OSRM |
+| `traffic` | пробки: начала периодов и доли скорости свободного потока |
+| `currency` | подпись к стоимости в путевых листах (`RUB` → ₽) |
+
+Ошибка входа называется кодом: `GEO_DUPLICATE_ORDER:A17`,
+`GEO_COORDINATES_INVALID:A17.delivery`, `GEO_UNKNOWN_DEPOT:van`; дальше модель
+проверяет себя сама (`VRP_CAPACITY_INVALID:van`). CLI печатает такую ошибку
+одной строкой в stderr и завершается с кодом 2.
+
+**Матрицы.** Офлайн: расстояние по дуге большого круга (гаверсинус),
+умноженное на коэффициент извилистости, время — по средней скорости профиля.
+Этого хватает, чтобы попробовать движок на реальных адресах. С сервером OSRM
+(`--osrm URL`) работает сервис `table` (Luxen & Vetter 2011): длительности и
+расстояния запрашиваются блоками до 100 × 100 точек (предел
+`--max-table-size` по умолчанию), секунды и метры переводятся в минуты и
+километры. Пара точек без маршрута — ошибка `GEO_OSRM_NO_ROUTE:i->j`, а не
+молчаливый ноль.
+
+**Расписание для водителя.** Самое раннее расписание, по которому верификатор
+проверяет окна, выезжает в начале смены и может час простоять у первого
+клиента. В путевом листе выезд назначается на момент «самое раннее
+возвращение минус кратчайшая длительность», дальше — самое раннее расписание
+от этого выезда (`schedule.compact_schedule`). Почему оно допустимо и
+кратчайшее: проекция системы разностных ограничений на пару «выезд,
+возвращение» — снова система разностных ограничений:
+`L₀ ≤ t₀ ≤ U₀`, `Lₑ ≤ tₑ ≤ Uₑ`, `c ≤ tₑ − t₀ ≤ C`, где `c` — кратчайшая
+длительность. Самое раннее возвращение `E = max(Lₑ, L₀ + c)`, и точка
+`(E − c, E)` проекции принадлежит: `E − c ≤ U₀`, потому что путь
+«возвращение → ноль часов → выезд» даёт `c ≥ Lₑ − U₀`. При пробках выезд
+выбирается среди точек излома функции длительности, как в верификаторе.
+Тесты на Hypothesis сверяют такое расписание с каждым ограничением на сотнях
+случайных маршрутов, с перерывами, лимитами поездки и пробками.
+
+**Путевой лист.** На машину: выезд, прибытие, начало и конец работ на каждой
+точке, загрузка после неё по каждому измерению и рейсу, перезагрузка между
+рейсами, перерыв водителя там, где его поставил верификатор, возвращение;
+пробег, время за рулём, ожидание и стоимость (сумма по листам равна стоимости
+плана). `route-sheets.csv` — строка на событие, для учётной или
+диспетчерской системы; `route-sheets.md` — таблица на машину, по-русски или
+по-английски (`--lang en`); `route-sheets.svg` — диаграмма Ганта всего дня:
+в пути, ожидание окна, работа на точке, перезагрузка, перерыв.
+
+**Пример** — синтетический день в Набережных Челнах
+([examples/chelny-day.geo.json](../examples/chelny-day.geo.json)): склад, три
+поставщика, 45 заказов в утренних, дневных и вечерних слотах, четыре своих
+фургона с правом второго рейса, два своих грузовика, наёмные фургоны и
+грузовики с платой за выход, норма отдыха у всех. Точки случайны внутри
+границ города, названия помечены «условн.»: данные не описывают ни одну
+компанию, их пишет [генератор](../examples/make_chelny_day.py). ALNS за 2.2 с
+закрывает день семью машинами: все четыре фургона — в два рейса, из наёмных —
+один грузовик.
+
 ## Запуск
 
 ```bash
@@ -133,22 +199,29 @@ mobiroute vrp-solve --generate cargo --orders 120 --out-dir out-cargo --svg
 mobiroute vrp-solve --instance benchmark/instances/sartori-buriol/n100/bar-n100-1.txt --time-limit 10 --out-dir out-sb --svg
 mobiroute vrp-solve --generate cargo --orders 60 --solver ortools --time-limit 10 --out-dir out-ortools
 mobiroute vrp-dispatch --day plant --policy insertion+alns --out-dir out-plant
+mobiroute vrp-solve --geo examples/chelny-day.geo.json --sheets --out-dir out-chelny
+mobiroute vrp-solve --geo examples/chelny-day.geo.json --osrm http://localhost:5000 --sheets --out-dir out-osrm
 ```
 
 ```python
-from mobiroute.vrp import AlnsConfig, solve
+from mobiroute.vrp import AlnsConfig, geo, route_sheets, sheets_markdown, solve
 from mobiroute.vrp.generators import cargo_day
 
 day = cargo_day(7, n_orders=120)
 result = solve(day, AlnsConfig(time_limit=10, seed=1))
 print(result.verdict.summary(), result.verdict.cost.vehicles_by_type)
+
+city = geo.load("examples/chelny-day.geo.json")  # osrm="http://localhost:5000"
+plan = solve(city.instance, AlnsConfig(time_limit=10, seed=1))
+sheets = route_sheets(city.instance, plan.solution, plan.verdict, city.places)
+print(sheets_markdown(sheets, city.instance.dimensions, currency=city.currency))
 ```
 
 ## Что дальше
 
 | Шаг | Зачем |
 | --- | --- |
-| Матрицы из OSRM / Valhalla с ограничениями для грузовиков | реальные дороги вместо прямой × коэффициент |
+| Грузовой профиль дорог (Valhalla или OSRM с запретами по массе и высоте) | сейчас матрицы OSRM — автомобильные, грузовик лишь замедляется коэффициентом |
 | Пробки по дугам (разные профили скорости для разных классов дорог) и в ядре Rust | точнее и быстрее, чем один профиль на всю сеть |
 | Перерыв, разделённый на 15 + 30 мин; суточный и недельный отдых | полная норма вместо одного перерыва за смену |
 | Перемещение свободных машин к ожидаемому спросу | шаттл и заводская логистика |
@@ -169,6 +242,11 @@ Insertion tests run in constant time (forward/backward slack, a closed-form
 shortest duration); ALNS with five ruin operators, regret repair and guided
 ejection does the search; the repair runs in a Rust kernel that reproduces the
 Python reference bit for bit. Every plan is checked by an independent verifier
-that returns why-not certificates. Results: public benchmarks, ALNS against
-CP-SAT proven optima, OR-Tools Routing at equal time, and live dispatch on
-synthetic plant, shuttle and freight days — see `docs/benchmarks/`.
+that returns why-not certificates. Orders and fleet can also come as
+coordinates (`mobiroute.vrp.geo`: offline great-circle matrices or the OSRM
+`table` service), and a verified plan becomes route sheets (CSV, Markdown)
+whose schedule leaves the depot as late as the earliest return allows, which
+is a shortest feasible schedule (proof above, property-tested). Results:
+public benchmarks, ALNS against CP-SAT proven optima, OR-Tools Routing at
+equal time, and live dispatch on synthetic plant, shuttle and freight days —
+see `docs/benchmarks/`.

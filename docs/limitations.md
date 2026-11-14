@@ -8,8 +8,16 @@ What the code does not do yet, and what its numbers do not mean.
   pilot, so nothing here is a claim about savings at an operator.
 * Synthetic cargo, shuttle and plant days use straight-line distance times a
   detour factor and a fixed speed per profile. The model accepts any matrix:
-  the Sartori–Buriol set already runs on real road times (OSRM), and a
-  production setup would feed matrices from OSRM, Valhalla or GraphHopper.
+  the Sartori–Buriol set already runs on real road times (OSRM).
+* Input in coordinates (`vrp.geo`): offline matrices are great-circle
+  distance times a detour factor at a mean speed, symmetric and blind to
+  one-way streets; OSRM matrices come from whatever profile the server runs
+  (usually a car), and a truck is only slowed down by a factor. Truck
+  restrictions (weight, height, bans) need a truck-aware engine such as
+  Valhalla or GraphHopper behind the same matrix-source function. Matrices
+  are fetched once per profile; there is no cache and no retry.
+* The Naberezhnye Chelny example is synthetic: random points inside the
+  city's bounding box, made-up names, no company's orders.
 
 ## Rich VRP model
 
@@ -25,6 +33,10 @@ What the code does not do yet, and what its numbers do not mean.
   free-flow minutes, and it runs on the Python reference, not the Rust
   kernel. It is not combined with ride limits or rest rules.
 * Cost per time is charged on driving and service, not on waiting.
+* Route sheets: the schedule is the shortest one that returns earliest (no
+  traffic) or the shortest one (traffic); a dispatcher who prefers an early
+  start or a fixed departure has to shift it by hand, and the rest's place is
+  the first admissible gap the verifier finds, not a driver's preference.
 * Every vehicle returns to its end depot; open routes need a zero-cost return.
 * The OR-Tools lane, the exact CP-SAT model and the live dispatcher do not
   model rests, multi-trip days or time-dependent travel; they refuse such
