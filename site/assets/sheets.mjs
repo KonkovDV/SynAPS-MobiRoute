@@ -9,7 +9,8 @@ const KIND = {
   pickup: ["погрузка", "pickup"],
   delivery: ["выгрузка", "delivery"],
   reload: ["загрузка на складе", "reload"],
-  rest: ["перерыв", "rest"],
+  rest: ["перерыв", "break"],
+  rest_first: ["перерыв, 1-я часть", "break, first part"],
   return: ["возврат", "return"],
 };
 const EPS = 1e-6;
@@ -152,7 +153,7 @@ function sheets({ $, tr, lang, svgEl, reduce, rerender }, data) {
           svgEl("rect", { x: gx(r.a), y: y - 8, width: gx(r.s) - gx(r.a), height: 16, rx: 3, fill: "var(--muted)", opacity: 0.18 }, bars);
         }
         if (r.e > r.s + EPS) {
-          const fill = r.k === "rest" ? "#eda100" : r.k === "reload" ? "var(--ink2)" : color(i);
+          const fill = r.k === "rest" || r.k === "rest_first" ? "#eda100" : r.k === "reload" ? "var(--ink2)" : color(i);
           const bar = svgEl("rect", { x: gx(r.s), y: y - 8, width: Math.max(gx(r.e) - gx(r.s), 2), height: 16, rx: 3, fill, opacity: r.k === "pickup" ? 0.55 : 1 }, bars);
           svgEl("title", {}, bar).textContent = `${tr(...KIND[r.k])} ${r.o} · ${r.p} · ${hhmm(r.s)}–${hhmm(r.e)}`;
         }

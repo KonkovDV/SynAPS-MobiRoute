@@ -120,6 +120,8 @@ class Compiled:
                     )
             self.cost.append(cost_cache[key])
         self.svc_rate = [vt.cost_per_time for vt in types]
+        #: Waiting priced at the time rate per route, for ``time_cost == "duty"``.
+        self.duty_extra: dict[tuple[int, tuple[int, ...]], float] = {}
         self.open_cost = [vt.fixed_cost + inst.vehicle_penalty for vt in types]
         self.cap = [vt.capacity for vt in types]
         self.count = [vt.count for vt in types]
@@ -157,6 +159,9 @@ class Compiled:
         #: Rest rule per type: most driving between rests (inf: no rule), rest length.
         self.brk_drive = [math.inf if vt.breaks is None else vt.breaks.max_driving for vt in types]
         self.brk_len = [0.0 if vt.breaks is None else vt.breaks.duration for vt in types]
+        #: Parts of a split break per type (``None``: the break is not split).
+        self.brk_split = [None if vt.breaks is None else vt.breaks.split for vt in types]
+        self.has_split = any(sp is not None for sp in self.brk_split)
         #: Speed by time of day per type (``None``: static travel times).
         self.speed = [inst.profiles[vt.profile].speed for vt in types]
         self.has_traffic = any(sp is not None for sp in self.speed)
@@ -472,7 +477,14 @@ def _min_duration_ok(
 
 
 def exact_feasible(
-    c: Compiled, t: int, nodes: Sequence[int], *, rest_arc: int = -1, rest: float = 0.0
+    c: Compiled,
+    t: int,
+    nodes: Sequence[int],
+    *,
+    rest_arc: int = -1,
+    rest: float = 0.0,
+    first_arc: int = -1,
+    first: float = 0.0,
 ) -> bool:
     """Exact timing test of a fixed sequence, ride and shift limits included.
 
@@ -511,7 +523,12 @@ def exact_feasible(
         a, b = seq[k], seq[k + 1]
         tails.append(k + 1)
         heads.append(k)
-        weights.append(-(s[a] + time[a][b] + rest) if k == rest_arc else -(s[a] + time[a][b]))
+        if k == rest_arc:
+            weights.append(-(s[a] + time[a][b] + rest))
+        elif k == first_arc:
+            weights.append(-(s[a] + time[a][b] + first))
+        else:
+            weights.append(-(s[a] + time[a][b]))
     where = {node: k for k, node in enumerate(seq) if 0 < k < last}
     for k in range(1, last):
         node = seq[k]
@@ -641,13 +658,22 @@ def route_exact(c: Compiled, t: int, nodes: Sequence[int]) -> bool:
     low = total - limit - EPS
     high = limit + EPS
     done = 0.0
+    admissible: list[int] = []
     for k, leg in enumerate(legs):
         after = done + leg
-        if (low <= done <= high or low <= after <= high) and exact_feasible(
-            c, t, nodes, rest_arc=k, rest=c.brk_len[t]
-        ):
-            return True
+        if low <= done <= high or low <= after <= high:
+            admissible.append(k)
+            if exact_feasible(c, t, nodes, rest_arc=k, rest=c.brk_len[t]):
+                return True
         done = after
+    split = c.brk_split[t]
+    if split is not None:
+        for k in admissible:
+            for first in range(k):
+                if exact_feasible(
+                    c, t, nodes, rest_arc=k, rest=split[1], first_arc=first, first=split[0]
+                ):
+                    return True
     return False
 
 

@@ -121,6 +121,9 @@ class RouteTiming:
     #: Departure of a shortest schedule (``nan`` when infeasible). Without
     #: traffic it also reaches the end depot at the earliest possible time.
     departure: float = math.nan
+    #: With a split break: the gap of its first part (``rest_gap`` then holds
+    #: the second part); ``None`` for a single break or none.
+    first_gap: int | None = None
 
 
 def route_arcs(
@@ -130,6 +133,7 @@ def route_arcs(
     *,
     slack: float = 0.0,
     rest_gap: int | None = None,
+    first_gap: int | None = None,
 ) -> tuple[int, list[Arc]]:
     """Constraint graph of ``start depot + nodes + end depot``.
 
@@ -157,8 +161,15 @@ def route_arcs(
     for k in range(m - 1):
         a, b = seq[k], seq[k + 1]
         gap = inst.nodes[a].service + profile.time[a][b]
-        if k == rest_gap and vt.breaks is not None:
-            arcs.append(Arc(k + 1, k, -(gap + vt.breaks.duration), f"TRAVEL+REST:{a}->{b}"))
+        rule = vt.breaks
+        if rule is not None and k in (rest_gap, first_gap):
+            # A split break puts its first part in first_gap, its second in
+            # rest_gap; a single break puts the whole rest in rest_gap.
+            if first_gap is None or rule.split is None:
+                pause = rule.duration
+            else:
+                pause = rule.split[1] if k == rest_gap else rule.split[0]
+            arcs.append(Arc(k + 1, k, -(gap + pause), f"TRAVEL+REST:{a}->{b}"))
         else:
             arcs.append(Arc(k + 1, k, -gap, f"TRAVEL:{a}->{b}"))
     position = {node: k for k, node in enumerate(seq) if 0 < k < m - 1}
@@ -176,14 +187,20 @@ def route_arcs(
 
 
 def _timing_with(
-    inst: Instance, vehicle_type: int, nodes: Sequence[int], rest_gap: int | None, driving: float
+    inst: Instance,
+    vehicle_type: int,
+    nodes: Sequence[int],
+    rest_gap: int | None,
+    driving: float,
+    first_gap: int | None = None,
 ) -> RouteTiming:
-    z, arcs = route_arcs(inst, vehicle_type, nodes, rest_gap=rest_gap)
+    z, arcs = route_arcs(inst, vehicle_type, nodes, rest_gap=rest_gap, first_gap=first_gap)
     m = z
     n_vertices = m + 1
     to_zero, cycle = shortest_paths(n_vertices, arcs, z, to_root=True)
     if to_zero is None:
-        return RouteTiming(False, (), (), math.inf, certificate(cycle), rest_gap, driving)
+        cert = certificate(cycle)
+        return RouteTiming(False, (), (), math.inf, cert, rest_gap, driving, math.nan, first_gap)
     from_zero, _ = shortest_paths(n_vertices, arcs, z, to_root=False)
     from_end, _ = shortest_paths(n_vertices, arcs, m - 1, to_root=False)
     assert from_zero is not None and from_end is not None
@@ -193,7 +210,9 @@ def _timing_with(
     # Projected onto (t_0, t_end) the system keeps its difference form, so the
     # earliest finish minus the shortest duration is an admissible departure.
     departure = min(max(earliest[-1] - shortest, earliest[0]), latest[0])
-    return RouteTiming(True, earliest, latest, shortest, None, rest_gap, driving, departure)
+    return RouteTiming(
+        True, earliest, latest, shortest, None, rest_gap, driving, departure, first_gap
+    )
 
 
 def _timing_traffic(inst: Instance, vehicle_type: int, nodes: Sequence[int]) -> RouteTiming:
@@ -267,7 +286,9 @@ def compact_schedule(inst: Instance, vehicle_type: int, nodes: Sequence[int]) ->
         s_all = [nd.service for nd in inst.nodes]
         starts = forward(profile.speed, seq, timing.departure, e_all, s_all, profile.time)
         return replace(timing, earliest=tuple(starts))
-    z, arcs = route_arcs(inst, vehicle_type, nodes, rest_gap=timing.rest_gap)
+    z, arcs = route_arcs(
+        inst, vehicle_type, nodes, rest_gap=timing.rest_gap, first_gap=timing.first_gap
+    )
     arcs.append(Arc(0, z, -timing.departure, "DEPARTURE"))
     to_zero, _cycle = shortest_paths(z + 1, arcs, z, to_root=True)
     if to_zero is None:  # rounding at the boundary; the earliest schedule stays valid
@@ -298,6 +319,7 @@ def route_timing(inst: Instance, vehicle_type: int, nodes: Sequence[int]) -> Rou
         short = Infeasibility(round(driving - 2 * rule.max_driving, 6), ("DRIVING",))
         return RouteTiming(False, (), (), math.inf, short, None, driving)
     best: RouteTiming | None = None
+    admissible: list[int] = []
     done = 0.0
     for k, leg in enumerate(legs):
         before, after = done, done + leg
@@ -307,6 +329,7 @@ def route_timing(inst: Instance, vehicle_type: int, nodes: Sequence[int]) -> Rou
             for x in (before, after)
         ):
             continue
+        admissible.append(k)
         timing = _timing_with(inst, vehicle_type, nodes, k, driving)
         if timing.feasible:
             return timing
@@ -319,6 +342,14 @@ def route_timing(inst: Instance, vehicle_type: int, nodes: Sequence[int]) -> Rou
     if best is None:  # no gap splits the driving (a single leg longer than the limit)
         short = Infeasibility(round(max(legs) - rule.max_driving, 6), ("DRIVING",))
         return RouteTiming(False, (), (), math.inf, short, None, driving)
+    if rule.split is not None:
+        # Two parts: the second goes where a whole break could go (the driving
+        # counter resets only after it), the first in any earlier gap.
+        for k in admissible:
+            for first in range(k):
+                timing = _timing_with(inst, vehicle_type, nodes, k, driving, first)
+                if timing.feasible:
+                    return timing
     return best
 
 

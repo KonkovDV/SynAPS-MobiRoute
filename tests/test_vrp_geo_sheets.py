@@ -655,3 +655,147 @@ def test_cli_reports_a_bad_geo_file_in_one_line(
     assert main(["vrp-solve", "--geo", str(bad), "--out-dir", str(tmp_path)]) == 2
     err = capsys.readouterr().err
     assert "GEO_FORMAT" in err and "Traceback" not in err
+
+
+# -- truck restrictions and truck-aware matrices -------------------------------
+
+
+def _zoned_doc() -> dict[str, Any]:
+    """The tiny day with a centre zone closed to vehicles over 3.5 t or 3 m."""
+    doc = _doc()
+    doc["zones"] = [
+        {"id": "centre", "polygon": [[55.765, 52.42], [55.775, 52.42], [55.775, 52.44],
+                                     [55.765, 52.44]],
+         "max_gross_weight_t": 3.5, "max_height_m": 3.0}
+    ]  # fmt: skip
+    van = doc["vehicle_types"][0] | {"id": "van", "gross_weight_t": 3.5, "height_m": 2.7}
+    truck = van | {"id": "truck", "gross_weight_t": 12.0, "height_m": 3.8, "capacity": [5000, 30]}
+    doc["vehicle_types"] = [van, truck]
+    return doc
+
+
+def test_zones_close_stops_to_vehicles_over_the_limits() -> None:
+    built = geo.build(_zoned_doc())
+    inst = built.instance
+    a = inst.requests[0]  # its drop (55.77, 52.43) lies inside the centre
+    assert "zone:centre" in a.skills
+    assert all("zone:centre" not in r.skills for r in inst.requests[1:])
+    van, truck = inst.vehicle_types
+    assert "zone:centre" in van.skills and "zone:centre" not in truck.skills
+    result = solve(inst, AlnsConfig(iterations=200, seed=1))
+    assert result.verdict.feasible and not result.verdict.unassigned
+    serving = next(r for r in result.solution.routes if a.delivery in r.nodes)
+    assert inst.vehicle_types[serving.vehicle_type].id == "van"
+
+
+def test_zone_shapes_limits_and_errors() -> None:
+    circle = geo.Zone.parse({"id": "c", "center": [55.75, 52.40], "radius_km": 1.0,
+                             "max_axle_load_t": 6, "banned_types": ["tractor"]})  # fmt: skip
+    assert circle.contains(55.755, 52.40) and not circle.contains(55.77, 52.40)
+    assert circle.admits("van", {"axle_load_t": 3})
+    assert not circle.admits("truck", {"axle_load_t": 10})
+    assert not circle.admits("tractor", {"axle_load_t": 3})
+    with pytest.raises(ValueError, match="GEO_VEHICLE_ATTRIBUTE_MISSING:van:axle_load_t:c"):
+        circle.admits("van", {})
+    with pytest.raises(ValueError, match="GEO_ZONE_INVALID:x:polygon_or_circle"):
+        geo.Zone.parse({"id": "x", "polygon": [[0, 0], [1, 1]]})
+
+
+def test_valhalla_matrices_in_both_answer_shapes() -> None:
+    pts = [(55.75 + 0.01 * k, 52.40) for k in range(3)]
+    bodies: list[dict[str, Any]] = []
+
+    def verbose(url: str, body: bytes, timeout: float) -> bytes:
+        req = json.loads(body)
+        bodies.append(req)
+        assert url == "http://valhalla.test/sources_to_targets"
+        n, m = len(req["sources"]), len(req["targets"])
+        rows = [[{"time": 60.0 * abs(i - j), "distance": 1.0 * abs(i - j)} for j in range(m)]
+                for i in range(n)]  # fmt: skip
+        return json.dumps({"sources_to_targets": rows}).encode()
+
+    profile = {"valhalla": {"costing": "truck", "options": {"weight": 12, "height": 3.8}}}
+    mins, km = geo.valhalla_source("http://valhalla.test/", opener=verbose)(pts, profile)
+    assert mins[0][2] == pytest.approx(2.0) and km[2][0] == pytest.approx(2.0)
+    assert bodies[0]["costing"] == "truck"
+    assert bodies[0]["costing_options"] == {"truck": {"weight": 12, "height": 3.8}}
+
+    def concise(url: str, body: bytes, timeout: float) -> bytes:
+        req = json.loads(body)
+        n, m = len(req["sources"]), len(req["targets"])
+        table = {"durations": [[120.0] * m for _ in range(n)],
+                 "distances": [[3.0] * m for _ in range(n)]}  # fmt: skip
+        return json.dumps({"sources_to_targets": table}).encode()
+
+    mins, km = geo.valhalla_source("http://valhalla.test", block=2, opener=concise)(pts, {})
+    assert mins[1][0] == pytest.approx(2.0) and km[0][1] == pytest.approx(3.0)
+
+    def refuse(url: str, body: bytes, timeout: float) -> bytes:
+        return json.dumps({"error_code": 171, "error": "No suitable edges"}).encode()
+
+    with pytest.raises(ValueError, match="GEO_VALHALLA_171"):
+        geo.valhalla_source("http://valhalla.test", opener=refuse)(pts, {})
+    with pytest.raises(ValueError, match="GEO_VALHALLA_URL_INVALID"):
+        geo.valhalla_source("file:///etc")
+
+
+VRPLIB_TINY = "\n".join(
+    [
+        "NAME : tiny", "TYPE : VRPTW", "DIMENSION : 3", "VEHICLES : 2", "CAPACITY : 10",
+        "SERVICE_TIME : 5", "EDGE_WEIGHT_TYPE : EUC_2D", "NODE_COORD_SECTION",
+        "1 0 0", "2 3 4", "3 1 1", "DEMAND_SECTION", "1 0", "2 4", "3 5",
+        "TIME_WINDOW_SECTION", "1 0 100", "2 10 20", "3 0 50", "DEPOT_SECTION", "1", "-1",
+        "EOF",
+    ]
+)  # fmt: skip
+
+
+def test_vrplib_reader_follows_each_rounding_convention() -> None:
+    from mobiroute.vrp.io import load_benchmark, parse_vrplib
+
+    exact = parse_vrplib(VRPLIB_TINY)
+    dimacs = parse_vrplib(VRPLIB_TINY, rounding="dimacs")
+    rounded = parse_vrplib(VRPLIB_TINY, rounding="round")
+
+    def dist(inst: Instance) -> Any:
+        return inst.profiles["default"].distance
+
+    assert dist(exact)[0][2] == pytest.approx(2**0.5)
+    assert dist(dimacs)[0][2] == 1.4 and dist(rounded)[0][2] == 1.0
+    assert dist(rounded)[0][1] == 5.0
+    assert exact.nodes[1].service == 5.0 and exact.nodes[0].service == 0.0
+    assert (exact.nodes[1].earliest, exact.nodes[1].latest) == (10.0, 20.0)
+    assert exact.vehicle_types[0].count == 2 and exact.vehicle_penalty == 0.0
+    with pytest.raises(ValueError, match="VRPLIB_ROUNDING"):
+        parse_vrplib(VRPLIB_TINY, rounding="ceil")
+    path = ROOT / "benchmark" / "instances" / "uchoa-x" / "X-n502-k39.vrp"
+    inst, digest = load_benchmark(path)
+    assert inst.n_requests == 501 and inst.source == "vrplib:round" and len(digest) == 64
+
+
+def test_duty_time_prices_the_waiting_everywhere() -> None:
+    from mobiroute.vrp.fleet import route_money
+    from mobiroute.vrp.insertion import Compiled
+    from mobiroute.vrp.solution import evaluate, route_cost
+
+    doc = _doc()
+    doc["time_cost"] = "duty"
+    duty = geo.build(doc).instance
+    plain = geo.build(_doc()).instance
+    nodes = [1, 2, 3, 4, 5]
+    plan = Solution([Route(0, nodes)], set())
+    _dist, driving, service = route_cost(plain, 0, nodes)
+    wait = route_timing(duty, 0, nodes).min_duration - driving - service
+    assert wait > 30.0  # the route waits for E's afternoon window
+    rate = duty.vehicle_types[0].cost_per_time
+    assert evaluate(duty, plan).total == pytest.approx(evaluate(plain, plan).total + rate * wait)
+    assert route_money(Compiled(duty), 0, nodes) == pytest.approx(evaluate(duty, plan).total)
+    verdict = verify(duty, plan)
+    (sheet,) = route_sheets(duty, plan, verdict)
+    assert sheet.cost == pytest.approx(verdict.cost.total)
+    result = solve(duty, AlnsConfig(iterations=200, seed=1))
+    assert result.verdict.feasible
+    sheets = route_sheets(duty, result.solution, result.verdict)
+    assert sum(s.cost for s in sheets) == pytest.approx(result.verdict.cost.total)
+    with pytest.raises(ValueError, match="VRP_TIME_COST_INVALID"):
+        geo.build(_doc() | {"time_cost": "hourly"})

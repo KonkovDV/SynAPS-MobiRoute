@@ -98,19 +98,63 @@ def route_cost(
     return distance, driving, service
 
 
-def evaluate(inst: Instance, solution: Solution) -> CostBreakdown:
+#: Memo of route costs keyed by vehicle type and stop sequence: distance,
+#: driving, service and the minutes charged at the time rate.
+RouteCosts = dict[tuple[int, tuple[int, ...]], tuple[float, float, float, float]]
+
+
+def _route_charge(
+    inst: Instance, vehicle_type: int, nodes: Sequence[int]
+) -> tuple[float, float, float, float]:
+    d, t, s = route_cost(inst, vehicle_type, nodes)
+    paid = t + s if inst.time_cost != "duty" else charged_time(inst, vehicle_type, nodes)
+    return d, t, s, paid
+
+
+def charged_time(inst: Instance, vehicle_type: int, nodes: Sequence[int]) -> float:
+    """Minutes ``cost_per_time`` pays for on this route.
+
+    ``operating``: driving plus service. ``duty``: the shortest feasible
+    duration from departure to return (waiting included), the shift of the
+    route sheet; a route with no feasible schedule falls back to operating
+    time (the verifier reports it anyway).
+    """
+    _d, driving, service = route_cost(inst, vehicle_type, nodes)
+    if inst.time_cost != "duty":
+        return driving + service
+    from mobiroute.vrp.schedule import route_timing
+
+    timing = route_timing(inst, vehicle_type, nodes)
+    return timing.min_duration if timing.feasible else driving + service
+
+
+def evaluate(
+    inst: Instance, solution: Solution, *, costs: RouteCosts | None = None
+) -> CostBreakdown:
+    """Cost of a plan. ``costs`` memoizes route costs between calls (the search
+    changes two or three routes per iteration); the sums and their order are
+    the same with or without it."""
     by_type: dict[str, int] = {}
     distance = driving = service = fixed = variable = 0.0
     for route in solution.routes:
         if not route.nodes:
             continue
         vt = inst.vehicle_types[route.vehicle_type]
-        d, t, s = route_cost(inst, route.vehicle_type, route.nodes)
+        if costs is None:
+            d, t, s, paid = _route_charge(inst, route.vehicle_type, route.nodes)
+        else:
+            key = (route.vehicle_type, tuple(route.nodes))
+            hit = costs.get(key)
+            if hit is None:
+                if len(costs) > 200_000:
+                    costs.clear()
+                hit = costs[key] = _route_charge(inst, route.vehicle_type, route.nodes)
+            d, t, s, paid = hit
         distance += d
         driving += t
         service += s
         fixed += vt.fixed_cost
-        variable += vt.cost_per_distance * d + vt.cost_per_time * (t + s)
+        variable += vt.cost_per_distance * d + vt.cost_per_time * paid
         by_type[vt.id] = by_type.get(vt.id, 0) + 1
     penalty = 0.0
     for r in solution.unassigned:

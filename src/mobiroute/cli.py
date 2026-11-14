@@ -112,6 +112,11 @@ def main(argv: list[str] | None = None) -> int:
     )
     v.add_argument("--osrm-profile", default="driving")
     v.add_argument(
+        "--valhalla",
+        default=None,
+        help="Valhalla server URL for --geo: truck-aware matrices (weight, height, axle load)",
+    )
+    v.add_argument(
         "--sheets",
         action="store_true",
         help="also write route sheets: route-sheets.csv, .md and a Gantt chart .svg",
@@ -404,7 +409,12 @@ def _vrp_instance(args: argparse.Namespace) -> tuple[object, object]:
     if args.geo is not None:
         from mobiroute.vrp import geo
 
-        built = geo.load(str(args.geo), osrm=args.osrm, osrm_profile=args.osrm_profile)
+        built = geo.load(
+            str(args.geo),
+            osrm=args.osrm,
+            osrm_profile=args.osrm_profile,
+            valhalla=args.valhalla,
+        )
         return built.instance, built
     if args.instance is not None:
         inst, _digest = load_benchmark(args.instance)

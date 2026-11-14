@@ -24,19 +24,32 @@ from collections.abc import Callable, Sequence
 from itertools import pairwise
 
 from mobiroute.vrp.insertion import EPS, Compiled, route_loads
-from mobiroute.vrp.solution import Route, Solution
+from mobiroute.vrp.solution import Route, Solution, charged_time, route_cost
 
 RouteCheck = Callable[[int, list[int]], bool]
 
 
 def route_money(c: Compiled, t: int, nodes: Sequence[int]) -> float:
-    """What the search pays for this route on type ``t`` (fee, arcs, service)."""
+    """What the search pays for this route on type ``t`` (fee, arcs, service).
+
+    With ``time_cost == "duty"`` the waiting of the shortest schedule is
+    added at the time rate, so the plan is priced as ``evaluate`` prices it.
+    """
     cost = c.cost[t]
     seq = [c.start[t], *nodes, c.end[t]]
     total = c.open_cost[t]
     for a, b in pairwise(seq):
         total += cost[a][b]
-    return total + c.svc_rate[t] * sum(c.s[n] for n in nodes)
+    total += c.svc_rate[t] * sum(c.s[n] for n in nodes)
+    if c.inst.time_cost == "duty" and nodes:
+        key = (t, tuple(nodes))
+        extra = c.duty_extra.get(key)
+        if extra is None:
+            _d, driving, service = route_cost(c.inst, t, nodes)
+            extra = c.svc_rate[t] * (charged_time(c.inst, t, nodes) - driving - service)
+            c.duty_extra[key] = extra
+        total += extra
+    return total
 
 
 def _peak(c: Compiled, nodes: Sequence[int]) -> list[float]:

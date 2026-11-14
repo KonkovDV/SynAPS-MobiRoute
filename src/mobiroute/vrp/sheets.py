@@ -30,7 +30,7 @@ from mobiroute.vrp.geo import Place, clock
 from mobiroute.vrp.insertion import Compiled, route_loads
 from mobiroute.vrp.model import Instance
 from mobiroute.vrp.schedule import compact_schedule
-from mobiroute.vrp.solution import Solution, route_cost
+from mobiroute.vrp.solution import Solution, charged_time, route_cost
 from mobiroute.vrp.verify import Verdict
 
 #: Signs for ISO 4217 codes; any other label is printed as given.
@@ -41,7 +41,8 @@ KINDS = {
     "pickup": ("погрузка", "pickup"),
     "delivery": ("выгрузка", "delivery"),
     "reload": ("загрузка на складе", "reload"),
-    "rest": ("перерыв", "rest"),
+    "rest": ("перерыв", "break"),
+    "rest_first": ("перерыв, 1-я часть", "break, first part"),
     "return": ("возврат", "return"),
 }
 
@@ -139,11 +140,23 @@ def route_sheets(
         starts = timing.earliest
         gap = timing.rest_gap
         rest_first = gap is None or _rest_before_drive(inst, route.vehicle_type, seq, gap)
+        first_gap = timing.first_gap
+        rule = vt.breaks
+        split = rule.split if rule is not None and first_gap is not None else None
+        rest = 0.0 if rule is None else (rule.duration if split is None else split[1])
+        first_len = 0.0 if split is None else split[0]
         arrivals, driving = arrival_times(
-            inst, route.vehicle_type, seq, starts, gap, rest_first=rest_first
+            inst,
+            route.vehicle_type,
+            seq,
+            starts,
+            gap,
+            rest_first=rest_first,
+            rest_len=rest,
+            first_gap=first_gap,
+            first_len=first_len,
         )
         loads = route_loads(c, route.nodes)
-        rest = vt.breaks.duration if vt.breaks is not None else 0.0
         rows: list[SheetRow] = []
         trip = 1
         last = len(seq) - 1
@@ -178,17 +191,46 @@ def route_sheets(
             rows.append(
                 SheetRow(trip, kind, order, label, lat, lon, window, arrive, starts[k], end, load)
             )
-            if k == gap and rest_first:
+            if k == first_gap:
+                # The first part of a split break, before the drive: it does
+                # not reset the driving counter, the second part does.
                 rows.append(
-                    SheetRow(trip, "rest", "", label, lat, lon, None, end, end, end + rest, load)
+                    SheetRow(
+                        trip,
+                        "rest_first",
+                        "",
+                        label,
+                        lat,
+                        lon,
+                        None,
+                        end,
+                        end,
+                        end + first_len,
+                        load,
+                    )
                 )
-        # Cost as the plan was priced (free-flow times), so sheets add up to the verdict.
-        distance, free_flow, service = route_cost(inst, route.vehicle_type, route.nodes)
-        money = (
-            vt.fixed_cost
-            + vt.cost_per_distance * distance
-            + vt.cost_per_time * (free_flow + service)
-        )
+            if k == gap and rest_first:
+                pause_at = end + first_len if k == first_gap else end
+                rows.append(
+                    SheetRow(
+                        trip,
+                        "rest",
+                        "",
+                        label,
+                        lat,
+                        lon,
+                        None,
+                        pause_at,
+                        pause_at,
+                        pause_at + rest,
+                        load,
+                    )
+                )
+        # Cost as the plan was priced (free-flow times, or the shift with
+        # time_cost == "duty"), so sheets add up to the verdict.
+        distance, _free_flow, _service = route_cost(inst, route.vehicle_type, route.nodes)
+        paid = charged_time(inst, route.vehicle_type, route.nodes)
+        money = vt.fixed_cost + vt.cost_per_distance * distance + vt.cost_per_time * paid
         waiting = math.fsum(max(0.0, row.start - row.arrive) for row in rows)
         # Continuous driving between breaks: legs add up until a rest row.
         stint = longest = 0.0
@@ -240,6 +282,9 @@ def arrival_times(
     rest_gap: int | None,
     *,
     rest_first: bool = True,
+    rest_len: float | None = None,
+    first_gap: int | None = None,
+    first_len: float = 0.0,
 ) -> tuple[list[float], float]:
     """Arrival at every stop of ``seq`` given its service starts, and driving minutes.
 
@@ -252,12 +297,14 @@ def arrival_times(
 
     vt = inst.vehicle_types[vehicle_type]
     profile = inst.profiles[vt.profile]
-    rest = vt.breaks.duration if vt.breaks is not None else 0.0
+    rest = rest_len if rest_len is not None else (vt.breaks.duration if vt.breaks else 0.0)
     out = [starts[0]]
     legs: list[float] = []
     for k in range(1, len(seq)):
         a, b = seq[k - 1], seq[k]
         pause = rest if k - 1 == rest_gap and rest_first else 0.0
+        if k - 1 == first_gap:
+            pause += first_len
         leave = starts[k - 1] + inst.nodes[a].service + pause
         free = profile.time[a][b]
         reach = leave + free if profile.speed is None else arrive(profile.speed, leave, free)
@@ -515,9 +562,12 @@ def sheets_svg(
                     f'width="{x(row.start) - x(row.arrive):.1f}" height="16" rx="2"/>'
                 )
             if row.end > row.start + 1e-6:
-                cls = {"rest": "rest", "reload": "reload", "pickup": f"f{r} pick"}.get(
-                    row.kind, f"f{r}"
-                )
+                cls = {
+                    "rest": "rest",
+                    "rest_first": "rest",
+                    "reload": "reload",
+                    "pickup": f"f{r} pick",
+                }.get(row.kind, f"f{r}")
                 tip = f"{KINDS[row.kind][k]} {row.order} {row.place} {clock(row.start)}-"
                 tip += clock(row.end)
                 out.append(

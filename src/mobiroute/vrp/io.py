@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import math
 from collections.abc import Mapping
 from pathlib import Path
 from typing import Any
@@ -242,6 +243,92 @@ def parse_cordeau_vrp(text: str, *, name: str) -> Instance:
     )
 
 
+#: Distance conventions of the VRPLIB literature: exact Euclidean, the DIMACS
+#: VRPTW challenge (truncated to one decimal) and TSPLIB's nearest integer
+#: (CVRPLIB, the X instances of Uchoa et al. 2017).
+VRPLIB_ROUNDING = ("exact", "dimacs", "round")
+
+
+def parse_vrplib(text: str, *, name: str | None = None, rounding: str = "exact") -> Instance:
+    """CVRP or VRPTW in the VRPLIB format (CVRPLIB, PyVRP's Gehring-Homberger set).
+
+    Sections: ``NODE_COORD_SECTION``, ``DEMAND_SECTION``, ``DEPOT_SECTION``
+    and, for VRPTW, ``TIME_WINDOW_SECTION`` and a global ``SERVICE_TIME`` or a
+    ``SERVICE_TIME_SECTION``. Travel times equal distances. The objective is
+    distance, as in CVRPLIB and the DIMACS challenge, so there is no vehicle
+    penalty; ``VEHICLES`` caps the fleet when given.
+    """
+    if rounding not in VRPLIB_ROUNDING:
+        raise ValueError(f"VRPLIB_ROUNDING:{rounding}")
+    head: dict[str, str] = {}
+    sections: dict[str, list[list[float]]] = {}
+    current: str | None = None
+    for raw in text.splitlines():
+        line = raw.strip()
+        if not line or line == "EOF":
+            continue
+        if line.endswith("SECTION"):
+            current = line
+            sections[current] = []
+            continue
+        if ":" in line and not (line[0].isdigit() or line[0] == "-"):
+            key, _, value = line.partition(":")
+            head[key.strip().upper()] = value.strip()
+            current = None
+            continue
+        if current is None:
+            raise ValueError(f"VRPLIB_LINE_OUTSIDE_SECTION:{line[:30]}")
+        sections[current].append(_numbers(line))
+    if head.get("EDGE_WEIGHT_TYPE", "EUC_2D") != "EUC_2D":
+        raise ValueError("VRPLIB_ONLY_EUC_2D")
+    try:
+        coords = sections["NODE_COORD_SECTION"]
+        demands = {int(row[0]): row[1] for row in sections["DEMAND_SECTION"]}
+        depots = [int(row[0]) for row in sections["DEPOT_SECTION"] if row[0] > 0]
+        capacity = float(head["CAPACITY"])
+    except (KeyError, IndexError) as exc:
+        raise ValueError(f"VRPLIB_MISSING:{exc}") from exc
+    if depots != [int(coords[0][0])] or len(coords) != int(head.get("DIMENSION", len(coords))):
+        raise ValueError("VRPLIB_ONE_DEPOT_FIRST")
+    windows = {int(row[0]): (row[1], row[2]) for row in sections.get("TIME_WINDOW_SECTION", [])}
+    services = {int(row[0]): row[1] for row in sections.get("SERVICE_TIME_SECTION", [])}
+    default_service = float(head.get("SERVICE_TIME", 0.0))
+    nodes: list[Node] = []
+    points: list[tuple[float, float]] = []
+    for k, (nid, x, y) in enumerate(row[:3] for row in coords):
+        lo, hi = windows.get(int(nid), (0.0, math.inf))
+        service = 0.0 if k == 0 else services.get(int(nid), default_service)
+        nodes.append(Node(k, lo, hi, service, x, y, name=str(k) if k else "depot"))
+        points.append((x, y))
+    exact = euclidean_matrix(points)
+    if rounding == "dimacs":
+        matrix = tuple(tuple(math.floor(d * 10.0) / 10.0 for d in row) for row in exact)
+    elif rounding == "round":
+        matrix = tuple(tuple(float(math.floor(d + 0.5)) for d in row) for row in exact)
+    else:
+        matrix = exact
+    requests = tuple(
+        Request(str(k), None, k, (demands[int(coords[k][0])],)) for k in range(1, len(coords))
+    )
+    fleet = int(head.get("VEHICLES", len(requests)))
+    vtype = VehicleType(
+        id="vehicle",
+        capacity=(capacity,),
+        count=fleet,
+        shift_start=nodes[0].earliest,
+        shift_end=nodes[0].latest,
+    )
+    return Instance(
+        name=name or head.get("NAME", "vrplib"),
+        nodes=tuple(nodes),
+        requests=requests,
+        vehicle_types=(vtype,),
+        profiles=single_profile(matrix),
+        vehicle_penalty=0.0,
+        source=f"vrplib:{rounding}",
+    )
+
+
 def load_benchmark(path: str | Path) -> tuple[Instance, str]:
     """Read any vendored benchmark file; return the instance and its SHA-256."""
     path = Path(path)
@@ -258,6 +345,9 @@ def load_benchmark(path: str | Path) -> tuple[Instance, str]:
         return parse_sartori_buriol(text), digest
     if family == "cordeau":
         return parse_cordeau_vrp(text, name=stem), digest
+    if path.suffix == ".vrp":
+        rounding = {"gehring-homberger": "dimacs", "uchoa-x": "round"}.get(family, "exact")
+        return parse_vrplib(text, name=stem, rounding=rounding), digest
     if path.suffix == ".json":
         return instance_from_json(text), digest
     raise ValueError(f"UNKNOWN_BENCHMARK_FAMILY:{family}")
@@ -275,6 +365,7 @@ def instance_to_dict(inst: Instance) -> dict[str, Any]:
         "source": inst.source,
         "dimensions": list(inst.dimensions),
         "vehicle_penalty": inst.vehicle_penalty,
+        "time_cost": inst.time_cost,
         "nodes": [
             {
                 "id": nd.id,
@@ -318,7 +409,11 @@ def instance_to_dict(inst: Instance) -> dict[str, Any]:
                 "hired": vt.hired,
                 "breaks": None
                 if vt.breaks is None
-                else {"max_driving": vt.breaks.max_driving, "duration": vt.breaks.duration},
+                else {
+                    "max_driving": vt.breaks.max_driving,
+                    "duration": vt.breaks.duration,
+                    "split": None if vt.breaks.split is None else list(vt.breaks.split),
+                },
                 "reload_nodes": list(vt.reload_nodes),
                 "max_trips": vt.max_trips,
             }
@@ -363,6 +458,7 @@ def instance_from_dict(data: Mapping[str, Any]) -> Instance:
         source=str(data.get("source", "")),
         dimensions=tuple(data["dimensions"]),
         vehicle_penalty=float(data.get("vehicle_penalty", 0.0)),
+        time_cost=str(data.get("time_cost", "operating")),
         nodes=tuple(
             Node(
                 int(nd["id"]),
@@ -406,7 +502,13 @@ def instance_from_dict(data: Mapping[str, Any]) -> Instance:
                 hired=bool(vt.get("hired", False)),
                 breaks=None
                 if vt.get("breaks") is None
-                else BreakRule(float(vt["breaks"]["max_driving"]), float(vt["breaks"]["duration"])),
+                else BreakRule(
+                    float(vt["breaks"]["max_driving"]),
+                    float(vt["breaks"]["duration"]),
+                    None
+                    if vt["breaks"].get("split") is None
+                    else (float(vt["breaks"]["split"][0]), float(vt["breaks"]["split"][1])),
+                ),
                 reload_nodes=tuple(int(x) for x in vt.get("reload_nodes", ())),
                 max_trips=int(vt.get("max_trips", 1)),
             )
