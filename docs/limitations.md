@@ -1,6 +1,8 @@
-# Limitations
+# Scope and roadmap
 
-What the code does not do yet, and what its numbers do not mean.
+What the engine covers, what it leaves to adjacent systems (the accounting
+system, the operator's router), how to read its numbers, and what comes
+next.
 
 ## Data
 

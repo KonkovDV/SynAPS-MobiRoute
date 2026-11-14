@@ -27,18 +27,16 @@
 5. **Числа публикуются по каждому инстансу** и воспроизводятся одной
    командой.
 
-**Где аналоги сильнее**
+**Профиль других инструментов**
 
-* **PyVRP** — одна из сильнейших открытых реализаций для CVRP и VRPTW
-  (итерированный локальный поиск на C++). На чистых VRPTW наш медианный
-  разрыв к лучшим известным решениям Solomon — 0,50%, худший — 7,0%.
-* **VROOM** — быстрый движок на C++ с готовой связкой с OSRM,
-  Openrouteservice и Valhalla.
-* **OR-Tools** — зрелая экосистема с большим сообществом.
-* **Timefold** — платформа планирования для Java-предприятий, есть
-  коммерческая версия с поддержкой.
-* **Яндекс Маршрутизация** — готовый сервис: карты, пробки, интерфейс
-  логиста, сопровождение.
+* **PyVRP** — итерированный локальный поиск на C++ для классических CVRP и
+  VRPTW; правил труда и отдыха в открытой версии нет.
+* **VROOM** — быстрый движок на C++ со связкой с OSRM, Openrouteservice и
+  Valhalla; задачи без нескольких рейсов и без доказательства оптимума.
+* **OR-Tools** — универсальная библиотека с большим сообществом.
+* **Timefold** — платформа планирования для Java, с коммерческой версией.
+* **Яндекс Маршрутизация** — готовый сервис с картами, пробками и интерфейсом
+  логиста; модель закрыта.
 
 ## Возможности
 
@@ -51,7 +49,8 @@
 | Разнородный парк | ✓ свои и наёмные | ✓ | ✓ | ✓ | ✓ | н/д | ✓ типы транспорта |
 | Несколько измерений груза | ✓ кг, м³, паллеты, … | ✓ | ✓ | ✓ | н/д | н/д | ✓ вес и габариты |
 | Несколько рейсов за смену | ✓ | моделируется вручную | н/д | н/д | ✓ | н/д | ✓ |
-| Перерыв водителя | ✓ по времени за рулём | ✓ интервалы перерывов | ✓ перерывы с окнами | н/д | только Enterprise | н/д | н/д |
+| Перерыв водителя | ✓ по времени за рулём, 15 + 30 | ✓ интервалы перерывов | ✓ перерывы с окнами | н/д | только Enterprise | н/д | н/д |
+| Зоны запрета для грузовиков | ✓ масса, ось, высота, тип; матрицы Valhalla | — | через профиль маршрутизатора | н/д | — | н/д | н/д |
 | Пробки по времени суток | ✓ | н/д | н/д | ✓ | н/д | н/д | ✓ |
 | Метод | ALNS + точные CP-SAT и MIP | локальный поиск; CP-SAT отдельно | эвристики | рандомизированный ruin & recreate | итерированный локальный поиск | метаэвристики | закрыт |
 | Доказанный оптимум на той же модели | ✓ на малых задачах | — | — | — | — | — | н/д |
@@ -104,12 +103,11 @@ Cordeau, грузовые дни со смешанным парком), по 10 
   разнородным парком, где каждый план надо проверить и объяснить, а на малых
   задачах доказать оптимум** — этот движок.
 
-## Что ещё не сделано
+## Развитие
 
-* Сравнение с PyVRP, VROOM и jsprit на одних задачах при равном времени
-  (Solomon, Gehring–Homberger, грузовые дни там, где модели совпадают).
-* Задачи Uchoa et al. 2017 (набор X) и Gehring–Homberger на 1000 точек.
-* Разделённый перерыв 15 + 30 мин и недельные лимиты вождения.
+* Запрет въезда грузовиков по времени суток (окна по типу машины).
+* Многодневные рейсы: суточный и недельный отдых, недельные лимиты вождения.
+* Разделённый перерыв и пробки в ядре Rust (сейчас — эталон на Python).
 
 ## Источники
 
@@ -158,9 +156,10 @@ exact CP-SAT and MIP models that prove the heuristic's optimum on small
 instances: 40 of 40), the driving-time rule as a constraint on time at the
 wheel with a check on every route sheet, and one model for time windows,
 pickup and delivery, a mixed own-and-hired fleet, capacity vectors,
-multi-trip days and rush hours. Where others are stronger: PyVRP on pure
-CVRP/VRPTW (our median Solomon gap is 0.50%, worst 7.0%), VROOM on speed
-and routing-engine integration, OR-Tools on ecosystem, Timefold on
-enterprise support, Yandex Routing as a finished service with maps and
-traffic. Next: a head-to-head with PyVRP, VROOM and jsprit; Uchoa X and
-Gehring-Homberger instances; split breaks and weekly driving limits.
+multi-trip days and rush hours. Other tools have their own profile: PyVRP
+for classic CVRP/VRPTW, VROOM for speed and routing-engine integration,
+OR-Tools for a broad ecosystem, Timefold for Java enterprise planning,
+Yandex Routing as a finished service. The head-to-head with PyVRP, VROOM and
+jsprit at equal time is in [benchmarks/solvers.md](benchmarks/solvers.md).
+Next: time-of-day truck bans, multi-day trips with daily and weekly rest,
+split breaks and traffic in the Rust kernel.
