@@ -22,8 +22,8 @@ has the dual
 :math:`u_r` is the price of order :math:`r`: no route of the pool is cheaper
 than the prices of the orders it serves (plus the rent of its vehicle type),
 and the routes of an optimal plan cost exactly that. :math:`-v_k` is the rent
-of vehicle type :math:`k`: what one more unit of a type that ran out would
-save. By strong duality the prices add up to the value of the relaxation plus
+of vehicle type :math:`k`: the most the LP value can fall with one more unit
+of a type that ran out. By strong duality the prices add up to the value of the relaxation plus
 the rents, so when the plan attains that value (:attr:`Prices.tight`) they
 split its cost among the orders to the last kopeck.
 
@@ -85,7 +85,9 @@ class Prices:
     #: Optimum of the LP relaxation over the pool (a lower bound for any plan made of it).
     lp_value: float | None
     orders: tuple[OrderPrice, ...]
-    #: Rent per vehicle type: what one more unit would save (0 unless the type ran out).
+    #: Rent per vehicle type: the LP's marginal value of one more unit, 0 unless
+    #: the type ran out. A rate on the pool's routes, not a forecast for a
+    #: whole vehicle: solve again with one more unit to get the amount.
     vehicles: tuple[tuple[str, float], ...]
     #: All scarcity rents together: fleet rows and shared reload stops.
     rents: float
@@ -324,7 +326,7 @@ _TEXT = {
         "lp": "LP-оценка по пулу из {n} маршрутов",
         "tight": "план достигает оценки: цены заказов минус рента в сумме дают стоимость плана",
         "loose": "перекомбинация маршрутов пула может дать ещё не больше {gap}",
-        "rent": "Рента дефицитных машин (сколько сэкономит ещё одна)",
+        "rent": "Рента дефицитных машин (предельная LP-оценка ещё одной)",
         "none": "нет: машин каждого типа хватает",
         "head": "| Заказ | Цена | Экономия при отказе | Обслужен |",
         "yes": "да",
@@ -341,7 +343,7 @@ _TEXT = {
         "lp": "LP bound over a pool of {n} routes",
         "tight": "the plan attains the bound: order prices minus rents add up to its cost",
         "loose": "recombining pool routes can save at most {gap} more",
-        "rent": "Rent of scarce vehicles (what one more would save)",
+        "rent": "Rent of scarce vehicles (the LP's marginal value of one more)",
         "none": "none: no vehicle type ran out",
         "head": "| Order | Price | Saving if dropped | Served |",
         "yes": "yes",
