@@ -359,3 +359,43 @@ td.num { color: var(--ink); }
 .big-stat { font-size: clamp(54px, 7vw, 84px); font-weight: 700; letter-spacing: -.04em; line-height: 1; margin: 12px 0 6px; font-variant-numeric: tabular-nums; }
 .big-stat small { font-size: .42em; color: var(--muted); letter-spacing: 0; }
 .card .rule-num { margin: 14px 0 0; font: 700 44px/1 var(--font); letter-spacing: -.02em; color: var(--ink); font-variant-numeric: tabular-nums; }
+
+/* ---------- route sheets ---------- */
+.sheets { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 16px; margin-top: 44px; align-items: stretch; }
+.sheets-map svg { display: block; width: 100%; height: auto; aspect-ratio: 1; }
+.sheets-side { display: flex; flex-direction: column; gap: 16px; }
+.sheet-route { cursor: pointer; transition: opacity .25s ease; outline: none; }
+.sheet-route:focus-visible path { stroke-width: 4.5; }
+.sheet { margin-top: 0; font-size: 14px; }
+.sheet th, .sheet td { padding: 7px 6px; }
+.sheet td.txt { text-align: left; }
+.sheet th { text-align: left; }
+#sheets-load { display: block; width: 100%; height: auto; }
+.sheet-card { margin-top: 16px; padding: 20px; }
+.sheet td.waits { color: var(--accent); font-weight: 700; }
+.sheet tr.k-reload td, .sheet tr.k-rest td { background: color-mix(in srgb, var(--ink) 5%, transparent); }
+.gantt-card { margin-top: 16px; padding: 20px 20px 16px; }
+.gantt-card svg { display: block; width: 100%; height: auto; margin-bottom: 12px; }
+.gantt-row { cursor: pointer; outline: none; }
+.gantt-row .bg { fill: transparent; transition: fill .2s ease; }
+.gantt-row:hover .bg, .gantt-row:focus-visible .bg { fill: color-mix(in srgb, var(--ink) 5%, transparent); }
+.gantt-row.on .bg { fill: color-mix(in srgb, var(--ink) 9%, transparent); }
+.legend i.box { height: 12px; width: 18px; border: 0; border-radius: 3px; }
+.legend i.box.wait { background: color-mix(in srgb, var(--muted) 30%, transparent); }
+.legend i.box.svc { background: var(--c0); }
+.legend i.box.reload { background: var(--ink2); }
+.legend i.box.rest { background: #eda100; }
+.lemma { display: grid; grid-template-columns: minmax(0, .95fr) minmax(0, 1.05fr); gap: 16px; margin-top: 16px; align-items: stretch; }
+.lemma .card { display: flex; flex-direction: column; gap: 14px; }
+.lemma .formula { margin: 4px 0 0; font: 400 clamp(20px, 2.2vw, 26px)/1.35 "STIX Two Math", "Cambria Math", "Latin Modern Math", Georgia, serif; color: var(--ink); letter-spacing: .01em; }
+.lemma .formula sub { font-size: .62em; }
+.lemma .dep-text { min-height: 4.6em; color: var(--ink2); font-size: 15.5px; }
+.dep-text .bad { color: var(--bad); }
+.dep-text .fine { display: block; margin-top: 6px; }
+.saved { display: flex; align-items: baseline; gap: 12px; padding: 14px 16px; border-radius: 14px; background: color-mix(in srgb, var(--good) 10%, transparent); }
+.saved b { font: 700 34px/1 var(--font); letter-spacing: -.02em; color: var(--good); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.saved span { color: var(--ink2); font-size: 14px; }
+.curve-card { display: flex; align-items: center; padding: 12px; }
+.curve-card svg { display: block; width: 100%; height: auto; }
+@media (max-width: 980px) { .sheets, .lemma { grid-template-columns: minmax(0, 1fr); } }
+

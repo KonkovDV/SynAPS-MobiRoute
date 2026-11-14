@@ -2,6 +2,7 @@
 // this file adds motion and the interactive notary.
 import { nodeName, phrase, verifyRoute } from "./notary.mjs";
 import { initVrp } from "./vrp.mjs";
+import { initSheets } from "./sheets.mjs";
 
 const root = document.documentElement;
 const $ = (id) => document.getElementById(id);
@@ -532,3 +533,4 @@ setLang(new URLSearchParams(location.search).get("lang") || store.get("mr-lang")
 load("data/a2-16.json").then((inst) => { hero(inst); laboratory(inst); }).catch((err) => console.error(err));
 load("data/solver-lab.json").then(race).catch((err) => console.error(err));
 initVrp({ $, tr, lang, svgEl, reduce, rerender, onReveal, load });
+initSheets({ $, tr, lang, svgEl, reduce, rerender, onReveal, load });

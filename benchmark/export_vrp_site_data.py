@@ -5,7 +5,11 @@
 * ``site/data/dispatch.json`` - a plant day replayed through the live
   dispatcher: every decision and every vehicle's executed plan;
 * ``site/data/benchmarks.json`` and ``site/data/comparisons.json`` - copied
-  from the result files of the benchmark scripts.
+  from the result files of the benchmark scripts;
+* ``site/data/route-sheets.json`` - the synthetic Naberezhnye Chelny day
+  (``examples/chelny-day.geo.json``) solved as ``vrp-solve --geo`` does: the
+  route sheets of every vehicle and, per route, the windows and travel times
+  the page needs to replay the departure choice of Lemma 4.
 
 Usage (after the benchmark scripts):
   python benchmark/export_vrp_site_data.py
@@ -14,14 +18,19 @@ Usage (after the benchmark scripts):
 from __future__ import annotations
 
 import json
+import math
 from dataclasses import replace
+from itertools import pairwise
 from pathlib import Path
 from typing import Any
 
+from mobiroute.vrp import geo
 from mobiroute.vrp.alns import AlnsConfig, solve
 from mobiroute.vrp.generators import cargo_day, plant_day
 from mobiroute.vrp.model import Instance
 from mobiroute.vrp.realtime import simulate
+from mobiroute.vrp.schedule import compact_schedule, route_timing
+from mobiroute.vrp.sheets import CURRENCY_SIGNS, route_sheets
 
 ROOT = Path(__file__).resolve().parents[1]
 DATA = ROOT / "site" / "data"
@@ -142,6 +151,95 @@ def dispatch() -> dict[str, Any]:
     }
 
 
+def _num(value: float) -> float | None:
+    """Minutes rounded for the page; an open bound becomes ``null``."""
+    return round(value, 2) if math.isfinite(value) else None
+
+
+def sheets_day() -> dict[str, Any]:
+    """Route sheets of the Chelny example with the data behind Lemma 4."""
+    built = geo.load(str(ROOT / "examples" / "chelny-day.geo.json"))
+    inst = built.instance
+    result = solve(inst, AlnsConfig(iterations=5000, seed=7))
+    assert result.verdict.feasible and not result.verdict.unassigned
+    sheets = route_sheets(inst, result.solution, result.verdict, built.places)
+    used = [r for r in result.solution.routes if r.nodes]
+    vehicles = []
+    for sheet, route in zip(sheets, used, strict=True):
+        vt = inst.vehicle_types[route.vehicle_type]
+        time = inst.profiles[vt.profile].time
+        seq = [vt.start_depot, *route.nodes, vt.end_depot]
+        timing = route_timing(inst, route.vehicle_type, route.nodes)
+        tight = compact_schedule(inst, route.vehicle_type, route.nodes)
+        early = [inst.nodes[n].earliest for n in seq]
+        late = [inst.nodes[n].latest for n in seq]
+        early[0] = max(early[0], vt.shift_start)
+        late[0] = min(late[0], vt.shift_end)
+        late[-1] = min(late[-1], vt.shift_end)
+        vehicles.append(
+            {
+                "id": sheet.vehicle,
+                "type": sheet.vehicle_type,
+                "hired": sheet.hired,
+                "trips": sheet.trips,
+                "capacity": list(vt.capacity),
+                "distance": round(sheet.distance, 2),
+                "driving": round(sheet.driving, 1),
+                "waiting": round(sheet.waiting, 1),
+                "cost": round(sheet.cost, 2),
+                "rows": [
+                    {
+                        "k": row.kind,
+                        "t": row.trip,
+                        "o": row.order,
+                        "p": row.place,
+                        "lat": row.lat,
+                        "lon": row.lon,
+                        "w": None if row.window is None else [_num(v) for v in row.window],
+                        "a": round(row.arrive, 2),
+                        "s": round(row.start, 2),
+                        "e": round(row.end, 2),
+                        "q": list(row.load),
+                    }
+                    for row in sheet.rows
+                ],
+                # One forward pass per departure reproduces the verifier's
+                # schedules on this route (no ride limits, no traffic here).
+                "lemma": {
+                    "lo": _num(early[0]),
+                    "hi": _num(timing.latest[0]),
+                    "E": round(timing.earliest[-1], 2),
+                    "c": round(timing.min_duration, 2),
+                    "best": round(tight.earliest[0], 2),
+                    "e": [_num(v) for v in early],
+                    "l": [_num(v) for v in late],
+                    "svc": [inst.nodes[n].service for n in seq],
+                    "tt": [round(time[a][b], 3) for a, b in pairwise(seq)],
+                    "gap": -1 if timing.rest_gap is None else timing.rest_gap,
+                    "rest": 0.0 if vt.breaks is None else vt.breaks.duration,
+                    "cap": vt.max_duration,
+                    "names": [built.places[n].label for n in seq],
+                },
+            }
+        )
+    suppliers = sorted(
+        {(p.lat, p.lon, p.label) for p in built.places if p.role == "pickup"},
+        key=lambda x: x[2],
+    )
+    depot = built.places[inst.vehicle_types[0].start_depot]
+    return {
+        "name": inst.name,
+        "currency": CURRENCY_SIGNS.get(built.currency, built.currency),
+        "dimensions": list(inst.dimensions),
+        "orders": inst.n_requests,
+        "cost": round(result.verdict.cost.total, 2),
+        "distance": round(result.verdict.cost.distance, 2),
+        "depot": {"lat": depot.lat, "lon": depot.lon, "label": depot.label},
+        "suppliers": [{"lat": a, "lon": b, "label": c} for a, b, c in suppliers],
+        "vehicles": vehicles,
+    }
+
+
 def _read(name: str) -> Any:
     path = RESULTS / name
     return json.loads(path.read_text()) if path.exists() else None
@@ -151,6 +249,10 @@ def main() -> None:
     DATA.mkdir(parents=True, exist_ok=True)
     (DATA / "fleet-mix.json").write_text(json.dumps(fleet_mix(), separators=(",", ":")) + "\n")
     (DATA / "dispatch.json").write_text(json.dumps(dispatch(), separators=(",", ":")) + "\n")
+    (DATA / "route-sheets.json").write_text(
+        json.dumps(sheets_day(), ensure_ascii=False, separators=(",", ":")) + "\n",
+        encoding="utf-8",
+    )
     bench = _read("vrp/vrp_benchmark.json")
     if bench is not None:
         keep = (
