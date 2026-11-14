@@ -383,3 +383,21 @@ def test_set_partitioning_returns_a_verified_plan_no_worse(backend: str) -> None
     assert sp.solution is not None, sp.status
     assert verify(inst, sp.solution).feasible
     assert search_objective(inst, sp.solution) <= search_objective(inst, res.solution) + 1e-6
+
+
+def test_set_partitioning_renumbers_reload_copies() -> None:
+    from mobiroute.vrp.alns import Alns
+    from mobiroute.vrp.generators import dc_day
+    from mobiroute.vrp.setpart import solve_set_partitioning
+
+    inst = dc_day(1, n_stores=24, trips=2)
+    cfg = AlnsConfig(iterations=400, seed=1, setpart=True, sp_every=10**9, sp_final=False)
+    alns = Alns(inst, cfg)
+    res = alns.solve()
+    assert alns.pool is not None
+    sp = solve_set_partitioning(alns.pool, res.solution, backend="CBC", time_limit=5.0)
+    assert sp.solution is not None
+    stops = [n for r in sp.solution.routes for n in r.nodes if inst.reload_type_of(n) >= 0]
+    assert len(stops) == len(set(stops))
+    assert verify(inst, sp.solution).feasible
+    assert search_objective(inst, sp.solution) <= search_objective(inst, res.solution) + 1e-6
