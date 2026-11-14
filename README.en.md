@@ -369,7 +369,6 @@ implementation, with the same results, only slower.
 | [docs/benchmarks/](docs/benchmarks) | tables of every experiment |
 | [docs/darp-kernel.md](docs/darp-kernel.md) | paratransit DARP kernel: rules, dispatch, checks |
 | [docs/trucking-ru.md](docs/trucking-ru.md) | Russian freight practice: driving-time rules, the waybill, road signs and zones, Platon tolls, ADR, and how each maps onto the model (RU, English summary) |
-| [docs/benchmarks/solvers.md](docs/benchmarks/solvers.md) | ALNS, PyVRP, VROOM and jsprit on the same instances at equal time |
 | [docs/limitations.md](docs/limitations.md) | scope and roadmap |
 | [benchmark/instances/README.md](benchmark/instances/README.md) | provenance and citations of the instances |
 | [examples/README.md](examples/README.md) | example inputs and how they were made |
