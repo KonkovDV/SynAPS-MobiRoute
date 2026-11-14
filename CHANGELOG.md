@@ -3,6 +3,26 @@
 ## 0.5.0 — 2026-11-14
 
 ### Added
+- Prices from LP duality (`mobiroute.vrp.prices`, `vrp-solve --prices`): the
+  dual of the set-partitioning relaxation over the ALNS route pool prices
+  every order and puts a rent on every vehicle type that ran out. The pool is
+  enlarged by the plan's routes with one order taken out and on every other
+  type that can run them, so an LP-optimal plan prices an order at no less
+  than the saving of dropping it (Lemma 5); among the many optimal duals of
+  the degenerate LP the one closest to those savings is returned by a second
+  LP over the optimal face. `prices.json`, `prices.md` (RU, EN); on the site,
+  a map of the Chelny day with orders sized by price and each rent next to
+  the day solved again with one more vehicle.
+- Orders that may be refused: an order with a finite `penalty` is left out
+  when serving it costs more than refusing it, one order at a time and then
+  whole routes of optional orders. Before, the repair served whatever fit:
+  on 90 small instances with cheap refusals ALNS matched the CP-SAT optimum
+  on 16 and cost twice the optimum on average; now it matches on 87, mean gap
+  0.3% (`docs/benchmarks/exact-vs-alns.md`, second table).
+- `benchmark/profile_vrp.py`: a `cProfile` ranking by own time of one ALNS run
+  on the Python reference and on the Rust kernel
+  (`docs/benchmarks/vrp-profile.md`), the table every optimisation in
+  `docs/native-acceleration.md` started from.
 - Split driver break 15 + 30 min (EU Regulation 561/2006 art. 7, Order
   No. 424): the second part where a whole break could go, the first in an
   earlier gap (Lemma 1a); exact in the verifier and the search check; route
@@ -19,7 +39,12 @@
   solutions.
 - `benchmark/solvers_study.py`: ALNS, PyVRP 0.14, VROOM 1.15 and jsprit 2.0
   on the same instances at equal time, one thread, every plan re-checked by
-  the verifier (`docs/benchmarks/solvers.md`).
+  the verifier (`docs/benchmarks/solvers.md`). Solomon, vehicles first, 10 s:
+  ALNS at the best-known vehicle count on 56 of 56 (PyVRP 50, VROOM 32,
+  jsprit 30). 1000 customers, distance only, 60 s: PyVRP leads at +1.2% to
+  the best known, ALNS is second at +2.9%, VROOM +15%, jsprit +21%. The
+  harness took `SHA256SUMS.txt` for an instance and crashed after its last
+  run; it now skips the checksum file.
 - `docs/trucking-ru.md`: Russian freight rules and practice mapped onto the
   model.
 - Input in coordinates (`mobiroute.vrp.geo`, format `mobiroute.vrp.geo.v1`):
@@ -45,7 +70,7 @@
   last drop first; decimal commas in Russian sheets.
 - `docs/comparison.md`: OR-Tools, VROOM, jsprit, PyVRP, Timefold and Yandex
   Routing checked against their documentation, the measured head-to-head
-  with OR-Tools (better on 15 of 18 instances, worse on none), and the
+  with OR-Tools (better on 12 of 18 instances, worse on none), and the
   research behind the engine with what is taken and what is next.
 - The driver's schedule (`schedule.compact_schedule`): the latest departure
   that still returns earliest, a shortest-duration schedule (Lemma 4 in the
@@ -95,6 +120,18 @@
   instances under 400 requests keep their published trajectories.
 
 ### Fixed
+- A multi-trip day lost its rush hours: `add_reload_stops` rebuilt every
+  road profile without its speed profile, so a geo file with both `trips`
+  and `traffic` was planned and verified on free-flow times. The profile is
+  now kept, with a regression test through the verifier.
+- The OR-Tools lane fed Routing its matrices through Python callbacks. The
+  search spent its wall-clock budget in the interpreter, which handicapped
+  the baseline of every equal-time comparison (and made one test fail under
+  the coverage tracer, as CI runs it). Matrices are now registered on the
+  C++ side; the baseline reaches the C101 optimum in half the time, and the
+  comparison tables are rerun: ALNS is better on 12 of 18 instances and equal
+  on 6 (was 15 and 3 against the slow baseline), and OR-Tools no longer drops
+  an order of Cordeau a2-16.
 - Route sheets put the driver's rest before the drive of its gap even where
   Lemma 1 admits it only after the drive, on arrival at the next stop; such
   sheets showed a stint over the limit (the verifier's schedule was right).

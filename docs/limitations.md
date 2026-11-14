@@ -91,7 +91,27 @@ next.
   the verifier re-prices the plan in real numbers.
 * The OR-Tools lane is the common configuration (PCI + GLS, integer time grid,
   disjunctions), not a tuned setup; the comparison says how far the default
-  gets in the same time, not what OR-Tools can do with tuning.
+  gets in the same time, not what OR-Tools can do with tuning. Its matrices
+  are registered on the C++ side, so the time limit is spent on the search.
+* The comparison with PyVRP, VROOM and jsprit covers classic VRPTW and CVRP
+  only (those solvers do not share the rich model), with default settings and
+  wall-clock budgets on a shared machine. On Solomon the hierarchical
+  objective reaches the other solvers as a fixed vehicle cost, which is not
+  what they are built for; where distance alone ranks, PyVRP is ahead of
+  this engine at 1000 customers (+1.2% against +2.9% to the best known).
+* Orders that may be refused are dropped by a rule on the plan as it stands:
+  single orders first, then whole routes of optional orders. A cluster inside
+  a longer route that is unprofitable only as a group is not found; against
+  CP-SAT the rule is optimal on 87 of 90 small instances, worst gap 13%.
+* Prices and rents (`vrp.prices`) are duals of a restricted master problem:
+  exact for the routes the search visited, an estimate for the full problem.
+  No pricing subproblem is solved, so a route outside the pool can change
+  them, and the LP value over the pool is not a lower bound for the problem.
+  A rent is a marginal rate of the relaxation, not a forecast: on the Chelny
+  day the rents of own vans and trucks are 2,104 and 5,378 while solving
+  again with one more unit saves 641 and 2,160. Degenerate LPs have many
+  optimal duals; the one closest to the removal savings is a convention,
+  stated in the formulation, not the only valid price list.
 
 ## Paratransit kernel
 

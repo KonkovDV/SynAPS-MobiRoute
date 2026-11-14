@@ -4,8 +4,8 @@
 
 Возможности сверены по документации проектов 14.11.2026 (ссылки в конце).
 «н/д» — функцию не нашли в просмотренной документации; это не значит, что её
-нет. Замеры есть только против OR-Tools: остальные решатели на одних задачах
-мы ещё не запускали, и оценок «лучше / хуже» для них здесь нет.
+нет. Замеры при равном времени есть против OR-Tools, PyVRP, VROOM и jsprit;
+для Timefold и Яндекс Маршрутизации оценок «лучше / хуже» здесь нет.
 
 ## Коротко
 
@@ -55,7 +55,7 @@
 | Метод | ALNS + точные CP-SAT и MIP | локальный поиск; CP-SAT отдельно | эвристики | рандомизированный ruin & recreate | итерированный локальный поиск | метаэвристики | закрыт |
 | Доказанный оптимум на той же модели | ✓ на малых задачах | — | — | — | — | — | н/д |
 | Независимая проверка и сертификат «почему нельзя» | ✓ | н/д | н/д | н/д | н/д | н/д | н/д |
-| Матрицы по координатам | ✓ офлайн и OSRM | на входе | ✓ OSRM, ORS, Valhalla | н/д | на входе | н/д | ✓ свои карты |
+| Матрицы по координатам | ✓ офлайн, OSRM, Valhalla | на входе | ✓ OSRM, ORS, Valhalla | н/д | на входе | н/д | ✓ свои карты |
 
 ## Измерено: против OR-Tools при равном времени
 
@@ -66,14 +66,46 @@ Cordeau, грузовые дни со смешанным парком), по 10 
 
 | Итог | Задач |
 | --- | ---: |
-| ALNS лучше | 15 |
-| Одинаково | 3 |
+| ALNS лучше | 12 |
+| Одинаково | 6 |
 | OR-Tools лучше | 0 |
 
-На грузовых днях со смешанным парком: 110 308 → 90 151 (−18,3%) при 12 → 10
-машинах и 186 822 → 155 516 (−16,8%) при 19 → 17 машинах. Полная таблица —
+На грузовых днях со смешанным парком: 104 411 → 87 115 (−16,6%) при 11 → 10
+машинах и 181 480 → 155 318 (−14,4%) при 19 → 16 машинах. Шесть ничьих — задачи,
+где оба решателя приходят к оптимуму или лучшему известному решению (C101,
+C201, LC101, a2-16, a4-24, b4-32). Полная таблица —
 [benchmarks/ortools-vs-alns.md](benchmarks/ortools-vs-alns.md),
 воспроизведение — `python benchmark/ortools_vs_alns.py`.
+
+OR-Tools получает матрицы времени и стоимости на стороне C++
+(`RegisterTransitMatrix`), а не через колбэки Python. С колбэками его время
+уходило в интерпретатор, и счёт выглядел как 15 : 3 : 0; такое сравнение
+измеряло привязку к Python, а не решатель.
+
+## Измерено: против PyVRP, VROOM и jsprit
+
+Те же задачи и то же время на один поток: 10 с на задачу Solomon (100
+клиентов), 60 с на задачу в 1000 клиентов (Gehring–Homberger, Uchoa X).
+Настройки поиска у всех по умолчанию. Каждый план перепроверяет верификатор
+этого репозитория на исходных расстояниях задачи.
+
+| | Этот движок | PyVRP 0.14 | VROOM 1.15 | jsprit 2.0 |
+| --- | ---: | ---: | ---: | ---: |
+| Solomon: планы проверены | 56 / 56 | 56 / 56 | 56 / 56 | 56 / 56 |
+| Solomon: число машин лучшего известного решения | **56** | 50 | 32 | 30 |
+| Solomon: лучший из четырёх (машины, затем расстояние) | **38** | 36 | 17 | 11 |
+| Gehring–Homberger, 1000 клиентов: разрыв по расстоянию | +2,88% | **+1,18%** | +15,17% | +20,90% |
+| Uchoa X, 500 и 1000 клиентов: разрыв по расстоянию | +2,40% | **+0,90%** | +3,47% | +19,03% |
+
+Как читать. В эталоне Solomon сначала сравнивают число машин, потом
+расстояние. Остальным решателям эта цель передана ценой машины 10⁵; у ALNS
+для неё есть отдельная фаза (guided ejection), и это видно во второй строке.
+Там, где считается только расстояние, впереди PyVRP: его итерированный
+локальный поиск на C++ на тысяче клиентов сильнее. Этот движок
+второй, впереди VROOM и jsprit. Замер шёл на общей четырёхъядерной машине,
+поэтому повторный прогон сдвинет отдельные строки, но не картину. Полная
+таблица — [benchmarks/solvers.md](benchmarks/solvers.md), воспроизведение —
+`python benchmark/solvers_study.py`.
 
 ## Мировая практика → что взято в движок
 
@@ -85,11 +117,11 @@ Cordeau, грузовые дни со смешанным парком), по 10 
 | Nagata & Bräysy 2009 | guided ejection search для сокращения парка | ✓ |
 | Vidal et al. 2013 | склейка временных сегментов: окна за O(1) в локальном поиске | ✓ |
 | Ichoua, Gendreau & Potvin 2003 | скорости по периодам суток, свойство FIFO | ✓ |
-| Goel 2009; Kok et al. 2010; Goel & Vidal 2014 | маршрутизация с правилами рабочего времени ЕС | ◐ один перерыв 45 мин; разделение 15 + 30 и недельные лимиты — следующий шаг |
+| Goel 2009; Kok et al. 2010; Goel & Vidal 2014 | маршрутизация с правилами рабочего времени ЕС | ◐ перерыв 45 мин, в том числе разделённый 15 + 30; суточный отдых и недельные лимиты — следующий шаг |
 | Furtado, Munari & Morabito 2017 | компактная MIP-модель для PDPTW / DARP | ✓ |
 | Wouda, Lan & Kool 2024 (PyVRP) | несколько рейсов через точки повторной загрузки | ✓ та же идея: копии склада в маршруте |
 | Vidal 2022 (HGS, SWAP*) | гибридный генетический поиск, окрестность SWAP* | — следующий шаг для чистых VRPTW |
-| Pessoa et al. 2020 (VRPSolver) | branch-cut-and-price для точных решений | — точная ветка у нас на CP-SAT и MIP |
+| Pessoa et al. 2020 (VRPSolver) | branch-cut-and-price для точных решений | ◐ из этой схемы взята ограниченная мастер-задача: LP по пулу маршрутов и его двойственные цены; подзадача ценообразования не решается, точная ветка — на CP-SAT и MIP |
 | Holland et al. 2017 (UPS ORION) | внедрение: водитель должен понимать и принимать маршрут | ✓ маршрутные листы, сертификаты с объяснением |
 | Amazon Last Mile Routing Challenge 2021 | водители отклоняются от плана; учиться на фактических маршрутах | — нужны реальные треки |
 | Kool et al. 2019; Zhou et al. 2024 (MVMoE) | нейросетевые решатели многих вариантов VRP | — классические методы остаются эталоном на богатых ограничениях; верификатор может проверять и такие планы |
@@ -146,11 +178,18 @@ Cordeau, грузовые дни со смешанным парком), по 10 
 ## English summary
 
 Capabilities were checked against each project's documentation on
-2026-11-14; "н/д" means "not found there", not "absent". Only OR-Tools was
-measured head to head: on 18 instances at equal time (10 s, one thread,
-one verifier) ALNS is better on 15, equal on 3 and worse on none (served
-orders, then vehicles, then cost); on the mixed-fleet freight days it costs
-16.8-18.3% less with two vehicles fewer. What sets the engine apart is
+2026-11-14; "н/д" means "not found there", not "absent". Measured at equal
+time, one thread, one verifier. Against OR-Tools Routing on 18 instances
+(10 s): ALNS is better on 12, equal on 6 and worse on none (served orders,
+then vehicles, then cost); on the mixed-fleet freight days it costs
+14.4-16.6% less with one to three vehicles fewer. The baseline reads its
+matrices in C++; with Python callbacks it lost wall clock to the
+interpreter and the tally read 15 : 3 : 0. Against PyVRP 0.14, VROOM 1.15
+and jsprit 2.0: on Solomon (vehicles first) this engine alone is at the
+best-known vehicle count on all 56 instances (PyVRP 50, VROOM 32, jsprit
+30); on 1000-customer instances ranked by distance PyVRP leads (+1.2% to
+the best known), this engine is second (+2.9%), then VROOM (+15%) and
+jsprit (+21%). What sets the engine apart is
 verification (an independent verifier with infeasibility certificates, and
 exact CP-SAT and MIP models that prove the heuristic's optimum on small
 instances: 40 of 40), the driving-time rule as a constraint on time at the
@@ -159,7 +198,7 @@ pickup and delivery, a mixed own-and-hired fleet, capacity vectors,
 multi-trip days and rush hours. Other tools have their own profile: PyVRP
 for classic CVRP/VRPTW, VROOM for speed and routing-engine integration,
 OR-Tools for a broad ecosystem, Timefold for Java enterprise planning,
-Yandex Routing as a finished service. The head-to-head harness for PyVRP, VROOM and
-jsprit at equal time is `benchmark/solvers_study.py`.
+Yandex Routing as a finished service. Tables:
+`docs/benchmarks/ortools-vs-alns.md`, `docs/benchmarks/solvers.md`.
 Next: time-of-day truck bans, multi-day trips with daily and weekly rest,
 split breaks and traffic in the Rust kernel.

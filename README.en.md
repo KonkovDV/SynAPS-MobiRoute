@@ -12,9 +12,11 @@ independent check of every plan.
 > own and hired: delivery windows, weight, volume and pallets, drivers'
 > working-time rules (the 15 + 30 min split break included), several trips a
 > shift, zones closed to heavy vehicles. An independent program checks every
-> plan, and each driver gets a route sheet. Against Google OR-Tools at equal
-> time: better on 15 of 18 instances, worse on none; freight days 17–18%
-> cheaper with two vehicles fewer. Python and Rust, about 600 tests, docs in
+> plan, each driver gets a route sheet and each order a price. Against Google
+> OR-Tools at equal time: better on 12 of 18 instances, worse on none; freight
+> days 14–17% cheaper. Against PyVRP, VROOM and jsprit it is the only one at
+> the best-known vehicle count on all 56 Solomon instances. Python and Rust,
+> 604 tests, docs in
 > Russian and English, an interactive [site](https://konkovdv.github.io/SynAPS-MobiRoute/).
 > Author: Dmitrij Konkov ([GitHub](https://github.com/KonkovDV)).
 
@@ -36,7 +38,7 @@ missing**.
 
 ![Verified optimal plan for Cordeau a2-16](docs/img/a2-16-routes.svg)
 
-## The job's tasks → where they are in the repository
+## An algorithm developer's tasks → where they are in the repository
 
 The repository is built around the tasks of an algorithm developer in freight
 logistics: VRP with time windows, pickup and delivery and a heterogeneous
@@ -48,12 +50,12 @@ measurement that one command reproduces.
 | --- | --- | --- |
 | VRP with time windows, pickup and delivery, heterogeneous fleet | one model for VRPTW, PDPTW and DARP: capacity vector, skills, shifts, own and hired vehicles, driving-time rules with the 15 + 30 split, several trips, rush hours, truck access zones | [model](src/mobiroute/vrp/model.py) · [Solomon 56 of 56](docs/benchmarks/vrp-public-benchmarks.md) |
 | Choosing a MIP/CP solver | the same model on CP-SAT, SCIP, HiGHS and CBC, an LP bound; the solver is chosen by measuring on one's own problem class | [Cordeau a2-16](docs/benchmarks/solver-lab-a2-16.md) · [set partitioning](docs/benchmarks/setpart-solvers.md) |
-| Heuristics and metaheuristics | regret-k, ALNS with annealing, guided ejection, route merging, local search with O(1) window checks | [40 of 40 optima](docs/benchmarks/exact-vs-alns.md) · [against OR-Tools](docs/benchmarks/ortools-vs-alns.md) |
-| LP/IP, graph theory, combinatorial optimization | difference constraints and Bellman–Ford with certificates, min-cost flow for vehicle types, set partitioning, four lemmas with proofs | [formulation](docs/mathematical-formulation.md) · [below](#the-mathematics-on-one-screen) |
-| Product code | CLI, input in coordinates, OSRM matrices, route sheets as CSV / Markdown / SVG, error codes, a Rust kernel | [coordinates to route sheets](#from-coordinates-to-route-sheets) |
-| Python: OOP, tests, profiling | immutable dataclass models, `mypy --strict`, 590 tests (10 Hypothesis properties), profiling → a Rust kernel 10–49× faster with the same plan | [tests](tests) · [acceleration](docs/native-acceleration.md) |
+| Heuristics and metaheuristics, picked by measurement | regret-k, ALNS with annealing, guided ejection, route merging, local search with O(1) window checks, a granular mode for 1000+ customers; each held to proven optima and to four open solvers | [40 of 40 optima](docs/benchmarks/exact-vs-alns.md) · [OR-Tools](docs/benchmarks/ortools-vs-alns.md) · [PyVRP, VROOM, jsprit](docs/benchmarks/solvers.md) |
+| LP/IP, graph theory, combinatorial optimization | difference constraints and Bellman–Ford with certificates, min-cost flow for vehicle types, set partitioning and its dual (order prices, vehicle rents), six lemmas with proofs | [formulation](docs/mathematical-formulation.md) · [below](#the-mathematics-on-one-screen) |
+| Product code | CLI, input in coordinates, OSRM and Valhalla matrices, VRPLIB, route sheets as CSV / Markdown / SVG, error codes, a Rust kernel | [coordinates to route sheets](#from-coordinates-to-route-sheets) |
+| Python: OOP, tests, profiling | immutable dataclass models, `mypy --strict`, 604 tests (11 Hypothesis properties), 92% coverage; a `cProfile` table by one command → 2.9× more iterations a minute and a Rust kernel 10–49× faster with the same plan | [tests](tests) · [profile](docs/benchmarks/vrp-profile.md) · [acceleration](docs/native-acceleration.md) |
 | Code review and documentation | review rules, CI (ruff, mypy, clippy, tests, CLI smoke runs), documentation in Russian and English, a changelog | [CONTRIBUTING](CONTRIBUTING.md) · [architecture](docs/architecture.md) · [CHANGELOG](CHANGELOG.md) |
-| Risk: synthetic data only | public benchmarks, some on real OSRM road times and with 1000 customers; an operator's data comes in as coordinates and the operator's router matrices (OSRM, Valhalla with a truck profile) | [scope](docs/limitations.md) · [Russian practice](docs/trucking-ru.md) |
+| Customer data | public benchmarks, some on real OSRM road times and with 1000 customers; an operator's data comes in as coordinates and the operator's router matrices (OSRM, Valhalla with a truck profile) | [scope](docs/limitations.md) · [Russian practice](docs/trucking-ru.md) |
 
 ## Results
 
@@ -62,17 +64,19 @@ measurement that one command reproduces.
 | Claim | Result | Reproduce |
 | --- | --- | --- |
 | 130 public instances: Solomon (VRPTW), Li & Lim and Sartori–Buriol (PDPTW, real OSRM road times), Cordeau (DARP) | all 130 plans verified, every order served. Solomon: **56 of 56** at the best-known vehicle count, median gap 0.50%, 20 matches, worst 7.0%. Sartori–Buriol: 22 of 25, median 0.92%. Cordeau: 19 of 48 at the published optimum, mean gap 0.50% | `python benchmark/vrp_benchmark.py` → [table](docs/benchmarks/vrp-public-benchmarks.md) |
-| ALNS against proven optima | CP-SAT proved the optimum of 40 of 40 random instances of the full model (2–3 vehicle types, capacity vector, skills, ride limits, shifts); ALNS finds it on **40 of 40** in 0.15 s (CP-SAT 1.1 s). The two former misses were closed by the operator that merges two routes onto a vehicle of another type | `python benchmark/exact_vs_alns.py` → [table](docs/benchmarks/exact-vs-alns.md) |
-| OR-Tools Routing (PCI + GLS) at equal time | 18 instances, 10 s each, one verifier: ALNS is never worse. RC201 +0.79% vs +7.81%; bar-n100-1 (OSRM roads) +0.14% vs +8.61%; one or two vehicles fewer on RC101 and ber-, nyc-, poa-n100-1; on a2-16 OR-Tools drops an order; mixed-fleet cargo days **17–18%** cheaper with two vehicles fewer | `python benchmark/ortools_vs_alns.py` → [table](docs/benchmarks/ortools-vs-alns.md) |
-| Orders in real time | an answer in **0.1 ms** on average (95% within 0.22 ms): insertion into the part of a plan not yet driven; an ALNS pass every 30 minutes lowers cost (plant, 140 moves: −1.2%). Re-solving everything with OR-Tools for every order (3 s) accepts 86.4% against 83.6% and is 1.6% cheaper, but answers in 2.9 s — tens of thousands of times slower — and its vehicles arrive 5 minutes later on average. Every final plan verified | `python benchmark/realtime_dispatch.py --with-ortools` → [table](docs/benchmarks/realtime-dispatch.md) |
+| ALNS against proven optima | CP-SAT proved the optimum of 40 of 40 random instances of the full model (2–3 vehicle types, capacity vector, skills, ride limits, shifts); ALNS finds it on **40 of 40** in 0.17 s (CP-SAT 1.1 s). The two former misses were closed by the operator that merges two routes onto a vehicle of another type. Where refusing an order is cheap, the optimum leaves orders out on purpose: ALNS matches it on **87 of 90** | `python benchmark/exact_vs_alns.py` → [table](docs/benchmarks/exact-vs-alns.md) |
+| OR-Tools Routing (PCI + GLS) at equal time | 18 instances, 10 s each, one verifier: ALNS is better on **12**, equal on 6 (both at the optimum or best known), never worse. RC201 +2.55% vs +5.37%; bar-n100-1 (OSRM roads) +0.55% vs +5.74%; one or two vehicles fewer on RC101, ber-n100-1 and poa-n100-1; mixed-fleet cargo days **14–17%** cheaper with one to three vehicles fewer. The baseline reads its matrices in C++, not through Python callbacks | `python benchmark/ortools_vs_alns.py` → [table](docs/benchmarks/ortools-vs-alns.md) |
+| PyVRP, VROOM, jsprit at equal time | one thread, default settings, every plan re-checked by this verifier. Solomon, vehicles first, 10 s: at the best-known vehicle count on **56 of 56** (PyVRP 50, VROOM 32, jsprit 30); best of the four on 38 (PyVRP 36). 1000 customers, distance only, 60 s: PyVRP leads at +1.2% to the best known, this engine is second at +2.9%, VROOM +15%, jsprit +21% | `python benchmark/solvers_study.py` → [table](docs/benchmarks/solvers.md) |
+| Prices from LP duality | the dual of the set-partitioning relaxation over the route pool prices every order and puts a rent on each vehicle type that ran out; strong duality and dual feasibility hold to 10⁻⁶ on 1,200 random instances; on the Chelny day the rent names own vans and trucks as scarce, and solving again with one more unit saves 641 and 2,160 | `mobiroute vrp-solve --geo examples/chelny-day.geo.json --prices` → [formulation](docs/mathematical-formulation.md#prices-the-dual-of-the-pools-lp) |
+| Orders in real time | an answer in **0.1 ms** on average (95% within 0.21 ms): insertion into the part of a plan not yet driven; an ALNS pass every 30 minutes lowers cost (plant, 140 moves: −1.2%). Re-solving everything with OR-Tools for every order (3 s) accepts 86.4% against 83.6% and is 1.6% cheaper, but answers in 2.9 s — tens of thousands of times slower — and its vehicles arrive 5 minutes later on average. Every final plan verified | `python benchmark/realtime_dispatch.py --with-ortools` → [table](docs/benchmarks/realtime-dispatch.md) |
 | Profiling → Rust kernel | ALNS on the Rust kernel runs **10–49×** faster than the Python reference (VRPTW ×10, PDPTW ×17, DARP ×49) with **bit-identical** plans, rests and trips included; ×5.4 on the 8-type cargo day, where operators in Python (type choice, merges) are the bottleneck | `python benchmark/measure_vrp_speed.py` → [table](docs/benchmarks/vrp-speed.md) |
-| MIP vs CP on Cordeau a2-16 | CP-SAT proves the optimum 294.25 in 0.7 s; SCIP 26.2 s, HiGHS 41.3 s; CBC keeps a 20% gap at 60 s; LP relaxation 85.27 (weak big-M). ALNS reaches the same optimum in 3.0 s; OR-Tools leaves 1 of 16 requests out in 10 s | `python benchmark/solver_lab.py` → [table](docs/benchmarks/solver-lab-a2-16.md) |
+| MIP vs CP on Cordeau a2-16 | CP-SAT proves the optimum 294.25 in 0.6 s; SCIP 25.9 s, HiGHS 40.4 s; CBC keeps a 20% gap at 60 s; LP relaxation 85.27 (weak big-M). ALNS reaches the same optimum in 2.7 s and OR-Tools Routing within its 10 s | `python benchmark/solver_lab.py` → [table](docs/benchmarks/solver-lab-a2-16.md) |
 | Solver choice for set partitioning | one set-partitioning model on ALNS route pools, 7 instances, 10 s each: on R101/RC101 SCIP, HiGHS, CBC and 8-worker CP-SAT prove the pool optimum in 0.1–0.4 s; single-thread CP-SAT with default settings does not within 10 s, with `linearization_level=2` it does in 0.1–0.2 s (now the engine's setting); on the multi-trip day all four find a plan **0.29% better than ALNS**; on a 6,339-route pool 8-worker CP-SAT is best (−0.05%), HiGHS without a hint finds nothing and CBC returns a plan 22.6% worse. The LP relaxation bounds the pool from below | `python benchmark/setpart_study.py` → [table](docs/benchmarks/setpart-solvers.md) |
 | Drivers' rest rule | a freight-day plan made without the 4.5 h / 45 min rule has, on each of 5 days, **4–6 routes with no room for a rest** (94–209 minutes short in total); the plan made with the rule is feasible at 2.0–5.5% more | `python benchmark/rules_study.py` → [table](docs/benchmarks/rules.md) |
 | Several trips per vehicle | DC → 60 stores in two delivery waves: with one trip per vehicle even 21 vehicles (12 hired) serve only 52–55 stores; with two or three trips, **all 60 on 12–15 vehicles** | same |
 | Rush hours | a plan made on free-flow speeds fails on **8–13 routes a day** in peak traffic (113–318 minutes late); the traffic-aware plan holds at 0–11% more | same |
 | Seeds and statistics | 19 Solomon R2/RC2 instances × 5 seeds: every run at the reference vehicle count, gap spread across seeds up to ±3 pp. Local search shortens the plan in 61 of 95 paired runs (median −0.32% of the best known), Wilcoxon **p = 0.006**; RC202 mean 8.3% → 6.3%, R211 6.5% → 3.9% | `python benchmark/seed_study.py` → [table](docs/benchmarks/seed-study.md) |
-| Engineering | 590 tests, 10 of them Hypothesis properties (hundreds of random routes: the search's checks and the route-sheet schedule against the independent verifier); `mypy --strict`, `ruff`, `clippy -D warnings`; Rust ↔ Python bit for bit | `pytest && ruff check . && mypy` |
+| Engineering | 604 tests, 11 of them Hypothesis properties (hundreds of random routes: the search's checks and the route-sheet schedule against the independent verifier); `mypy --strict`, `ruff`, `clippy -D warnings`; Rust ↔ Python bit for bit | `pytest && ruff check . && mypy` |
 
 Measured on one machine (Linux x86_64, Python 3.13, single thread); not an SLA.
 
@@ -93,10 +97,13 @@ literature: [docs/comparison.md](docs/comparison.md) (RU, English summary).
 | Independent check, "why not" certificate | ✓ | n/f | n/f | n/f | n/f | n/f |
 | Open source | MIT | Apache-2.0 | BSD-2 | MIT | Apache-2.0 | — |
 
-◐ partly, n/f not found in the documentation. Measured at equal time on 18
-instances with one verifier: **ALNS beats OR-Tools on 15, ties on 3, loses on
-none**; on mixed-fleet freight days it costs 16.8–18.3% less with two
-vehicles fewer. How to choose: PyVRP and VROOM fit classic CVRP/VRPTW
+◐ partly, n/f not found in the documentation. Measured at equal time with
+one verifier: **ALNS beats OR-Tools on 12 of 18 instances, ties on 6, loses
+on none**, and on mixed-fleet freight days it costs 14.4–16.6% less with one
+to three vehicles fewer; against PyVRP, VROOM and jsprit it holds the
+best-known fleet on all 56 Solomon instances, while PyVRP is ahead on pure
+distance at 1000 customers ([table](docs/benchmarks/solvers.md)). How to
+choose: PyVRP and VROOM fit classic CVRP/VRPTW
 without fleet rules, a commercial service fits a finished dispatcher UI; this
 engine fits a model of one's own with driving-time rules, trips, a mixed fleet
 and results that can be checked.
@@ -161,6 +168,7 @@ flowchart LR
 | Merge two routes onto a vehicle of another type; chain trips through a reload | mixed fleet, several trips | no |
 | Local search relocate / swap / 2-opt* / 2-opt, windows in O(1) by segment concatenation (Vidal et al. 2013) | VRPTW, every new best plan | no |
 | Set partitioning over the route pool (CP-SAT, SCIP, HiGHS, CBC) | option: recombine routes found | over the pool only |
+| The dual of its LP relaxation (GLOP), a second LP over the optimal face | prices of orders, rents of vehicle types | yes (LP) |
 | Insertion into the live plan | new order during the day | no |
 | CP-SAT, one circuit per vehicle | small instances, any constraint | yes, for its integer model |
 | Furtado–Munari–Morabito MIP on SCIP / HiGHS / CBC | solver comparison, lower bound | yes, by the backend's proof |
@@ -230,6 +238,23 @@ a min-cost flow solves it, no MIP needed.
 \sum_{\rho \in \Omega_k} x_\rho \le n_k, \qquad x \in \{0, 1\}^{\Omega}
 ```
 
+**Prices: the dual.** The LP relaxation of that model has a dual whose
+variables are the price of an order $u_r$ and the rent of a vehicle type
+$-v_k$:
+
+```math
+\max \sum_r u_r + \sum_k n_k v_k
+\quad \text{s.t.} \quad \sum_{r \in \rho} u_r + v_k \le c_\rho \ \ \forall \rho \in \Omega_k, \qquad
+u_r \le \pi_r, \qquad v_k \le 0
+```
+
+No pool route is cheaper than the prices of its orders; the routes of an
+optimal plan cost exactly that (complementary slackness); the prices add up to
+the LP value plus the rents (strong duality). With a plan route minus order
+$r$ in the pool, $u_r \ge c_\rho - c_{\rho \setminus r}$: the price is at
+least the saving of dropping the order (Lemma 5). The LP is degenerate, so
+among its optimal duals the one closest to those savings is returned.
+
 **When to leave (Lemma 4).** Let $E$ be the earliest return, $c$ the shortest
 shift and $U_0$ the latest departure. Leaving at $t_0 \le U_0$, the shift
 lasts
@@ -241,7 +266,7 @@ D(t_0) = \max\big(E - t_0,\; c\big), \qquad t_0^{*} = E - c .
 Leaving at $t_0^{*}$ gives the shortest shift and the earliest return at once.
 On the synthetic Naberezhnye Chelny day that frees 14.8 hours of shift time a
 day with the same routes; the [site](https://konkovdv.github.io/SynAPS-MobiRoute/#sheets)
-lets you drag $D(t_0)$ by hand. Proofs of all four lemmas are in
+lets you drag $D(t_0)$ by hand. Proofs of all six lemmas are in
 [docs/mathematical-formulation.md](docs/mathematical-formulation.md).
 
 ## "Why not?" — a certificate

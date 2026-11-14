@@ -70,7 +70,8 @@ jobs:
           mobiroute vrp-solve --instance benchmark/instances/lilim/LC101.txt --iterations 500 --out-dir /tmp/lc101 --svg
           mobiroute vrp-solve --generate cargo --orders 40 --iterations 500 --out-dir /tmp/cargo
           mobiroute vrp-solve --generate cargo --orders 30 --solver ortools --time-limit 3 --out-dir /tmp/cargo-ortools
-          mobiroute vrp-solve --geo examples/chelny-day.geo.json --iterations 1000 --sheets --out-dir /tmp/chelny
+          mobiroute vrp-solve --geo examples/chelny-day.geo.json --iterations 1000 --sheets --prices --out-dir /tmp/chelny
+          test -s /tmp/chelny/prices.md && test -s /tmp/chelny/route-sheets.csv
           mobiroute vrp-dispatch --day plant --out-dir /tmp/plant
 
   vrp-python-fallback:
@@ -92,7 +93,7 @@ jobs:
       - name: VRP tests on the Python reference
         env:
           MOBIROUTE_DISABLE_NATIVE: "1"
-        run: pytest -q tests/test_vrp_insertion.py tests/test_vrp_engine.py tests/test_vrp_native.py
+        run: pytest -q tests/test_vrp_insertion.py tests/test_vrp_engine.py tests/test_vrp_native.py tests/test_vrp_rules.py tests/test_vrp_prices.py
 
   typecheck:
     runs-on: ubuntu-latest
