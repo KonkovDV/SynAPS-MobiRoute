@@ -1,0 +1,46 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="960" height="340" viewBox="0 0 960 340" role="img" aria-label="Лемма 4: длительность смены D(t₀) = max(E − t₀, c)">
+<style>
+  .surface { fill: #fcfcfb; } .ink { fill: #0b0b0b; } .ink2 { fill: #52514e; }
+  .muted { fill: #898781; } .line { stroke: #c3c2b7; } .grid { stroke: #e1e0d9; }
+  .accent { fill: #2a78d6; } .saccent { stroke: #2a78d6; } .bad { fill: #d03b3b; }
+  .sbad { stroke: #d03b3b; } .node { fill: #fcfcfb; stroke: #52514e; }
+  @media (prefers-color-scheme: dark) {
+    .surface { fill: #1a1a19; } .ink { fill: #f0efec; } .ink2 { fill: #c3c2b7; }
+    .line { stroke: #383835; } .grid { stroke: #2c2c2a; }
+    .accent { fill: #3987e5; } .saccent { stroke: #3987e5; }
+    .node { fill: #1a1a19; stroke: #c3c2b7; }
+  }
+  text { font-family: system-ui, -apple-system, "Segoe UI", sans-serif; }
+</style>
+<defs><marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0L10,5L0,10z" class="muted"/></marker><marker id="b" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0L10,5L0,10z" class="bad"/></marker></defs>
+<rect class="surface" width="960" height="340" rx="10"/>
+<line x1="80.0" y1="50" x2="80.0" y2="300" class="grid"/>
+<text class="muted" x="80.0" y="320" font-size="12" text-anchor="middle">07:00</text>
+<line x1="195.6" y1="50" x2="195.6" y2="300" class="grid"/>
+<text class="muted" x="195.6" y="320" font-size="12" text-anchor="middle">08:00</text>
+<line x1="311.1" y1="50" x2="311.1" y2="300" class="grid"/>
+<text class="muted" x="311.1" y="320" font-size="12" text-anchor="middle">09:00</text>
+<line x1="426.7" y1="50" x2="426.7" y2="300" class="grid"/>
+<text class="muted" x="426.7" y="320" font-size="12" text-anchor="middle">10:00</text>
+<line x1="542.2" y1="50" x2="542.2" y2="300" class="grid"/>
+<text class="muted" x="542.2" y="320" font-size="12" text-anchor="middle">11:00</text>
+<line x1="80" y1="300.0" x2="600" y2="300.0" class="grid"/>
+<text class="muted" x="70" y="304.0" font-size="12" text-anchor="end">0 ч</text>
+<line x1="80" y1="223.9" x2="600" y2="223.9" class="grid"/>
+<text class="muted" x="70" y="227.9" font-size="12" text-anchor="end">2 ч</text>
+<line x1="80" y1="147.7" x2="600" y2="147.7" class="grid"/>
+<text class="muted" x="70" y="151.7" font-size="12" text-anchor="end">4 ч</text>
+<line x1="80" y1="71.6" x2="600" y2="71.6" class="grid"/>
+<text class="muted" x="70" y="75.6" font-size="12" text-anchor="end">6 ч</text>
+<polyline points="80.0,50.0 453.6,173.1 600.0,173.1" fill="none" class="saccent" stroke-width="2.5" stroke-linejoin="round"/>
+<circle cx="453.6" cy="173.1" r="6" class="accent" stroke="#fcfcfb" stroke-width="2"/>
+<text class="ink" x="453.6" y="157.1" font-size="13" font-weight="600" text-anchor="middle">t₀* = E − c = 10:14</text>
+<text class="ink2" x="195.6" y="64.0" font-size="12.5">D = E − t₀: стоим у ворот</text>
+<text class="ink2" x="496.0" y="195.1" font-size="12.5">D = c, но возврат позже</text>
+<text class="ink" x="660" y="80" font-size="16" font-weight="600">Лемма 4</text>
+<text class="ink2" x="660" y="104" font-size="13">длительность смены D(t₀) = max(E − t₀, c)</text>
+<text class="ink2" x="660" y="140" font-size="12.5">Фургон №1, день в Челнах: E = 13:34, c = 3:20</text>
+<text class="muted" x="660" y="160" font-size="12.5">ось x — начало смены</text>
+<text class="ink2" x="660" y="200" font-size="12.5">Начало в t₀* даёт сразу кратчайшую</text>
+<text class="ink2" x="660" y="218" font-size="12.5">смену и самое раннее возвращение.</text>
+</svg>

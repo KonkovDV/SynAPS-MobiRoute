@@ -1,0 +1,40 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="960" height="380" viewBox="0 0 960 380" role="img" aria-label="Отрицательный цикл = сертификат">
+<style>
+  .surface { fill: #fcfcfb; } .ink { fill: #0b0b0b; } .ink2 { fill: #52514e; }
+  .muted { fill: #898781; } .line { stroke: #c3c2b7; } .grid { stroke: #e1e0d9; }
+  .accent { fill: #2a78d6; } .saccent { stroke: #2a78d6; } .bad { fill: #d03b3b; }
+  .sbad { stroke: #d03b3b; } .node { fill: #fcfcfb; stroke: #52514e; }
+  @media (prefers-color-scheme: dark) {
+    .surface { fill: #1a1a19; } .ink { fill: #f0efec; } .ink2 { fill: #c3c2b7; }
+    .line { stroke: #383835; } .grid { stroke: #2c2c2a; }
+    .accent { fill: #3987e5; } .saccent { stroke: #3987e5; }
+    .node { fill: #1a1a19; stroke: #c3c2b7; }
+  }
+  text { font-family: system-ui, -apple-system, "Segoe UI", sans-serif; }
+</style>
+<defs><marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0L10,5L0,10z" class="muted"/></marker><marker id="b" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0L10,5L0,10z" class="bad"/></marker></defs>
+<rect class="surface" width="960" height="380" rx="10"/>
+<line x1="141.7" y1="177.7" x2="388.3" y2="82.3" class="sbad" stroke-width="2" marker-end="url(#b)"/>
+<text class="ink" x="239.0" y="176.0" font-size="16" font-weight="600" text-anchor="end">+720</text>
+<text class="ink2" x="239.0" y="194.0" font-size="12" text-anchor="end">B_c ≤ 12:00</text>
+<line x1="420.0" y1="104.0" x2="420.0" y2="276.0" class="sbad" stroke-width="2" marker-end="url(#b)"/>
+<text class="ink" x="438.0" y="186.0" font-size="16" font-weight="600" text-anchor="start">−188,8</text>
+<text class="ink2" x="438.0" y="204.0" font-size="12" text-anchor="start">B_c ≥ B_p + 26 + 162,8</text>
+<line x1="388.3" y1="297.7" x2="141.7" y2="202.3" class="sbad" stroke-width="2" marker-end="url(#b)"/>
+<text class="ink" x="239.0" y="296.0" font-size="16" font-weight="600" text-anchor="end">−540</text>
+<text class="ink2" x="239.0" y="314.0" font-size="12" text-anchor="end">B_p ≥ 09:00</text>
+<circle cx="110" cy="190" r="30" class="node" stroke-width="2"/>
+<text class="ink" x="110" y="196" font-size="18" font-weight="600" text-anchor="middle">0</text>
+<text class="ink2" x="110" y="240" font-size="12.5" text-anchor="middle">начало отсчёта</text>
+<circle cx="420" cy="70" r="30" class="node" stroke-width="2"/>
+<text class="ink" x="420" y="76" font-size="18" font-weight="600" text-anchor="middle">c</text>
+<text class="ink2" x="420" y="120" font-size="12.5" text-anchor="middle">клиент</text>
+<circle cx="420" cy="310" r="30" class="node" stroke-width="2"/>
+<text class="ink" x="420" y="316" font-size="18" font-weight="600" text-anchor="middle">p</text>
+<text class="ink2" x="420" y="360" font-size="12.5" text-anchor="middle">поставщик</text>
+<text class="ink" x="600" y="110" font-size="17" font-weight="600">Отрицательный цикл = сертификат</text>
+<text class="bad" x="600" y="150" font-size="24" font-weight="600">720 − 188,8 − 540 = −8,8 мин</text>
+<text class="ink2" x="600" y="185" font-size="13">Вес цикла меньше нуля: рейс невозможен</text>
+<text class="ink2" x="600" y="203" font-size="13">при любом расписании, не хватает 8,8 мин.</text>
+<text class="muted" x="600" y="235" font-size="13">Каждая дуга — одно правило: B_v − B_u ≤ w.</text>
+</svg>
