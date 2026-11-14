@@ -12,10 +12,15 @@ What the code does not do yet, and what its numbers do not mean.
 * Input in coordinates (`vrp.geo`): offline matrices are great-circle
   distance times a detour factor at a mean speed, symmetric and blind to
   one-way streets; OSRM matrices come from whatever profile the server runs
-  (usually a car), and a truck is only slowed down by a factor. Truck
-  restrictions (weight, height, bans) need a truck-aware engine such as
-  Valhalla or GraphHopper behind the same matrix-source function. Matrices
-  are fetched once per profile; there is no cache and no retry.
+  (usually a car), and a truck is only slowed down by a factor. With a
+  Valhalla server (`--valhalla URL`) a profile gets truck-aware matrices
+  (weight, axle load, height, hazmat). Matrices are fetched once per
+  profile; there is no cache and no retry.
+* Access zones close stops to vehicle types by gross weight, axle load,
+  height or type for the whole day; a ban by time of day (trucks barred
+  from a centre at rush hour) needs time windows per vehicle type, which
+  the model does not have. Seasonal axle limits are set by hand as zone
+  limits or Valhalla options.
 * The Naberezhnye Chelny example is synthetic: random points inside the
   city's bounding box, made-up names, no company's orders.
 
@@ -25,10 +30,10 @@ What the code does not do yet, and what its numbers do not mean.
   $D$ minutes of driving and at most $2D$ minutes of driving a day; with
   $D$ = 4.5 h and $b$ = 45 min this is the rule of EU Regulation 561/2006
   (art. 6-7) and of Russian Ministry of Transport Order No. 424 of
-  16.10.2020. The shift cap counts from departure to return, waiting
-  included, as working time does. Not modelled: a break split into
-  15 + 30 min; daily driving extended to 10 h twice a week (art. 6 of the EU
-  regulation); weekly and fortnightly driving limits; the meal break of the
+  16.10.2020, including the split into 15 + 30 min (`BreakRule.split`, on
+  the Python reference). The shift cap counts from departure to return,
+  waiting included, as working time does. Not modelled: daily driving
+  extended to 10 h twice a week (art. 6 of the EU regulation); weekly and fortnightly driving limits; the meal break of the
   Labour Code (art. 108), which is not working time; daily and weekly rest
   between shifts; tachograph data. The rest is one contiguous block in one
   gap between two stops, before or after that gap's drive (whichever keeps
@@ -49,11 +54,13 @@ What the code does not do yet, and what its numbers do not mean.
   completely (it may reject a feasible route), time costs are charged on
   free-flow minutes, and it runs on the Python reference, not the Rust
   kernel. It is not combined with ride limits or rest rules.
-* Cost per time is charged on driving and service, not on waiting or depot
-  loading. Plans may therefore keep a vehicle waiting for a window for an
-  hour or more; the route sheet and its Gantt chart show every wait, and
-  pricing on-duty time is a next step (it changes the objective of the
-  search, so the Rust kernel has to follow).
+* By default cost per time is charged on driving and service, not on
+  waiting. `time_cost = "duty"` charges the whole shift instead (the
+  shortest feasible duration, waiting included) in the objective, the
+  choice of vehicle types, set partitioning and route sheets; the regret
+  repair, in Python and in Rust, still ranks insertions by the fast
+  operating-time delta, so a plan's waiting is cut by acceptance and the
+  other operators rather than at insertion.
 * The loading order on a sheet is the reverse of the drops per trip; it does
   not check stowage, axle loads or load securing.
 * Route sheets: the schedule is the shortest one that returns earliest (no
