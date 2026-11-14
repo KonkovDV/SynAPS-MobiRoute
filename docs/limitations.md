@@ -49,7 +49,13 @@ What the code does not do yet, and what its numbers do not mean.
   completely (it may reject a feasible route), time costs are charged on
   free-flow minutes, and it runs on the Python reference, not the Rust
   kernel. It is not combined with ride limits or rest rules.
-* Cost per time is charged on driving and service, not on waiting.
+* Cost per time is charged on driving and service, not on waiting or depot
+  loading. Plans may therefore keep a vehicle waiting for a window for an
+  hour or more; the route sheet and its Gantt chart show every wait, and
+  pricing on-duty time is a next step (it changes the objective of the
+  search, so the Rust kernel has to follow).
+* The loading order on a sheet is the reverse of the drops per trip; it does
+  not check stowage, axle loads or load securing.
 * Route sheets: the schedule is the shortest one that returns earliest (no
   traffic) or the shortest one (traffic); a dispatcher who prefers an early
   start or a fixed departure has to shift it by hand, and the rest's place is
