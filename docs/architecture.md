@@ -3,7 +3,7 @@
 ```mermaid
 flowchart LR
   subgraph input[Input]
-    B[Benchmark files<br/>Solomon · Li&Lim · Sartori-Buriol · Cordeau]
+    B[Benchmark files<br/>Solomon · Li&Lim · Sartori-Buriol · Cordeau · VRPLIB]
     J[JSON instance<br/>mobiroute.vrp.v1]
     GEO[Coordinates<br/>mobiroute.vrp.geo.v1]
     OSRM[(OSRM table service<br/>optional)]
@@ -24,7 +24,7 @@ flowchart LR
     L[lateness<br/>bisection · LP]
     T[realtime<br/>freeze · insert · re-optimise]
     V[verify + schedule<br/>Bellman-Ford, certificates]
-    GM[geo<br/>great-circle or OSRM matrices]
+    GM[geo<br/>great-circle, OSRM or Valhalla truck matrices · access zones]
     SH[sheets<br/>driver's schedule · CSV · Markdown]
   end
   B --> M
@@ -104,6 +104,13 @@ times from the constraint system the verifier checks (`compact_schedule`:
 the latest departure that still returns earliest, a shortest schedule by
 Lemma 4 of the formulation) and their costs from the cost model, so the sheets
 of a plan add up to its verdict.
+
+**Small instances reproduce, large ones scale.** Below 400 requests every
+operator runs its full scan, so each published table reproduces bit for bit;
+from 400 requests the search switches to granular mode (removal gains from
+the arcs around a stop, local search seeded by the routes that changed).
+The objective memoizes route costs either way; the Rust kernel keeps the
+same arithmetic as the Python reference in both modes.
 
 **Deterministic runs.** Seeds everywhere, SHA-256 of instance bytes in every
 benchmark row, one thread unless stated, CP-SAT with one worker in the

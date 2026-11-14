@@ -212,6 +212,8 @@ mobiroute vrp-solve --generate cargo --orders 60 --solver ortools --time-limit 1
 mobiroute vrp-dispatch --day plant --policy insertion+alns --out-dir out-plant
 mobiroute vrp-solve --geo examples/chelny-day.geo.json --sheets --out-dir out-chelny
 mobiroute vrp-solve --geo examples/chelny-day.geo.json --osrm http://localhost:5000 --sheets --out-dir out-osrm
+mobiroute vrp-solve --geo examples/chelny-day.geo.json --valhalla http://localhost:8002 --sheets --out-dir out-trucks
+mobiroute vrp-solve --instance benchmark/instances/gehring-homberger/C1_10_1.vrp --time-limit 60 --out-dir out-c1-10
 ```
 
 ```python
