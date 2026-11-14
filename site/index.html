@@ -142,7 +142,7 @@
       </article>
       <article class="card reveal">
         <p class="tag">03 · <span lang="ru">Доказательство</span><span lang="en">Proof</span></p>
-        <h3><span lang="ru">Нотариус не верит решателю</span><span lang="en">The notary does not trust the solver</span></h3>
+        <h3><span lang="ru">Верификатор не верит решателю</span><span lang="en">The verifier does not trust the solver</span></h3>
         <p><span lang="ru">Расписание маршрута — система разностных неравенств. Она выполнима тогда и только тогда, когда в графе ограничений нет отрицательного цикла. Проверяет алгоритм Беллмана–Форда, отдельным кодом.</span><span lang="en">A route schedule is a system of difference constraints. It is feasible iff the constraint graph has no negative cycle. Bellman–Ford checks it, in separate code.</span></p>
       </article>
       <article class="card b-wide reveal">
@@ -161,7 +161,7 @@ dropoff 1 cannot start before 402; dropoff 1 → dropoff 12 takes 3 + 15.68 min.
       <li><small>01</small><h4><span lang="ru">Вход</span><span lang="en">Input</span></h4><p><span lang="ru">Заказы, парк, водители, матрица времени. Строгая валидация.</span><span lang="en">Orders, fleet, drivers, travel matrix. Strict validation.</span></p></li>
       <li><small>02</small><h4><span lang="ru">Эвристики</span><span lang="en">Heuristics</span></h4><p><span lang="ru">Жадная вставка, beam, ALNS, скользящий горизонт.</span><span lang="en">Greedy insertion, beam, ALNS, rolling horizon.</span></p></li>
       <li><small>03</small><h4><span lang="ru">Точные модели</span><span lang="en">Exact models</span></h4><p><span lang="ru">CP-SAT, MIP на SCIP / HiGHS / CBC, LP-релаксация.</span><span lang="en">CP-SAT, MIP on SCIP / HiGHS / CBC, LP relaxation.</span></p></li>
-      <li><small>04</small><h4><span lang="ru">Нотариус</span><span lang="en">Notary</span></h4><p><span lang="ru">Независимая проверка каждого маршрута.</span><span lang="en">Independent check of every route.</span></p></li>
+      <li><small>04</small><h4><span lang="ru">Верификатор</span><span lang="en">Verifier</span></h4><p><span lang="ru">Независимая проверка каждого маршрута.</span><span lang="en">Independent check of every route.</span></p></li>
       <li><small>05</small><h4><span lang="ru">Результат</span><span lang="en">Result</span></h4><p><span lang="ru">План с отпечатками входа — или сертификат отказа.</span><span lang="en">A plan with input fingerprints, or a refusal certificate.</span></p></li>
     </ol>
   </div>
@@ -394,7 +394,7 @@ dropoff 1 cannot start before 402; dropoff 1 → dropoff 12 takes 3 + 15.68 min.
 <section id="lab" class="sec alt">
   <div class="wrap">
     <p class="kicker reveal"><span lang="ru">Попробуйте сами</span><span lang="en">Try it</span></p>
-    <h2 class="reveal"><span lang="ru">Измените маршрут — нотариус ответит в вашем браузере.</span><span lang="en">Change the route. The notary answers in your browser.</span></h2>
+    <h2 class="reveal"><span lang="ru">Измените маршрут — верификатор ответит в вашем браузере.</span><span lang="en">Change the route. The verifier answers in your browser.</span></h2>
     <p class="sub reveal"><span lang="ru">Это тот же алгоритм, что в ядре, перенесённый на JavaScript и сверенный с Python на 513 перестановках. Выберите остановку и сдвиньте её.</span><span lang="en">The same algorithm as in the kernel, ported to JavaScript and checked against Python on 513 permutations. Pick a stop and move it.</span></p>
     <div class="lab reveal">
       <div class="lab-edit">
@@ -451,7 +451,7 @@ dropoff 1 cannot start before 402; dropoff 1 → dropoff 12 takes 3 + 15.68 min.
 
     <div class="grid2 cargo">
       <div class="reveal">
-        <h3 class="h3"><span lang="ru">От пассажиров к грузам: та же алгебра, другие единицы</span><span lang="en">From passengers to cargo: same algebra, other units</span></h3>
+        <h3 class="h3"><span lang="ru">От пассажиров к грузам: та же модель расписания, другие единицы</span><span lang="en">From passengers to cargo: the same scheduling model, other units</span></h3>
         <p class="sub"><span lang="ru">Пассажирская задача — частный случай PDPTW. Грузовой движок использует ту же логику расписания и проверки; меняются единицы ёмкости, стоимость и правила парка.</span><span lang="en">The passenger problem is a special case of PDPTW. The cargo engine uses the same scheduling and verification logic; capacity units, costs and fleet rules change.</span></p>
         <a class="link" href="https://github.com/KonkovDV/SynAPS-MobiRoute/blob/main/docs/cargo-vrp.md"><span lang="ru">Грузовой VRP: модель, алгоритмы, сценарии</span><span lang="en">Cargo VRP: model, algorithms, scenarios</span> →</a>
       </div>
@@ -471,7 +471,7 @@ dropoff 1 cannot start before 402; dropoff 1 → dropoff 12 takes 3 + 15.68 min.
     <p class="kicker reveal"><span lang="ru">Инженерная дисциплина</span><span lang="en">Engineering discipline</span></p>
     <h2 class="reveal"><span lang="ru">Каждое число на этой странице воспроизводится.</span><span lang="en">Every number on this page is reproducible.</span></h2>
     <div class="grid3 eng">
-      <article class="card reveal"><h3>465+ <span lang="ru">тестов</span><span lang="en">tests</span></h3><p><span lang="ru">Нотариус, сверка Rust с Python-эталоном, атаки на проверку: подделанные часы, перегруз, спрятанное ожидание.</span><span lang="en">Notary, Rust against a Python oracle, attacks on the check: forged clocks, overloads, hidden waiting.</span></p></article>
+      <article class="card reveal"><h3>604 <span lang="ru">теста</span><span lang="en">tests</span></h3><p><span lang="ru">Верификатор, сверка Rust с эталоном на Python, 11 свойств Hypothesis, атаки на проверку: подделанные часы, перегруз, спрятанное ожидание. Покрытие 92%.</span><span lang="en">The verifier, Rust against its Python reference, 11 Hypothesis properties, attacks on the check: forged clocks, overloads, hidden waiting. 92% coverage.</span></p></article>
       <article class="card reveal"><h3>mypy --strict · ruff · clippy</h3><p><span lang="ru">Строгая типизация Python, предупреждения Rust считаются ошибками. Девять проверок CI на каждый запрос на слияние.</span><span lang="en">Strict Python typing, Rust warnings are errors. Nine CI checks on every pull request.</span></p></article>
       <article class="card reveal"><h3>SHA-256</h3><p><span lang="ru">Сравнение с литературой публикуется только для побайтно того же файла эталона и только после проверки плана.</span><span lang="en">A literature comparison is published only for the byte-identical instance and only after the plan is verified.</span></p></article>
     </div>
