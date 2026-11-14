@@ -1,0 +1,233 @@
+{
+  "set": "Solomon (1987) VRPTW, 100 customers",
+  "objective": "hierarchical: vehicles, then total distance (double precision, reported to 2 decimals)",
+  "kind": "best known",
+  "source": "SINTEF TOP VRPTW 100-customer table; cross-checked against Czech & Czarnas best solutions (sun.aei.polsl.pl/~zjc/best-solutions-solomon.html)",
+  "note": "Reference values carry a 0.01 rounding uncertainty between sources.",
+  "instances": {
+    "C101": {
+      "vehicles": 10,
+      "cost": 828.94
+    },
+    "C102": {
+      "vehicles": 10,
+      "cost": 828.94
+    },
+    "C103": {
+      "vehicles": 10,
+      "cost": 828.06
+    },
+    "C104": {
+      "vehicles": 10,
+      "cost": 824.78
+    },
+    "C105": {
+      "vehicles": 10,
+      "cost": 828.94
+    },
+    "C106": {
+      "vehicles": 10,
+      "cost": 828.94
+    },
+    "C107": {
+      "vehicles": 10,
+      "cost": 828.94
+    },
+    "C108": {
+      "vehicles": 10,
+      "cost": 828.94
+    },
+    "C109": {
+      "vehicles": 10,
+      "cost": 828.94
+    },
+    "C201": {
+      "vehicles": 3,
+      "cost": 591.56
+    },
+    "C202": {
+      "vehicles": 3,
+      "cost": 591.56
+    },
+    "C203": {
+      "vehicles": 3,
+      "cost": 591.17
+    },
+    "C204": {
+      "vehicles": 3,
+      "cost": 590.6
+    },
+    "C205": {
+      "vehicles": 3,
+      "cost": 588.88
+    },
+    "C206": {
+      "vehicles": 3,
+      "cost": 588.49
+    },
+    "C207": {
+      "vehicles": 3,
+      "cost": 588.29
+    },
+    "C208": {
+      "vehicles": 3,
+      "cost": 588.32
+    },
+    "R101": {
+      "vehicles": 19,
+      "cost": 1650.8
+    },
+    "R102": {
+      "vehicles": 17,
+      "cost": 1486.12
+    },
+    "R103": {
+      "vehicles": 13,
+      "cost": 1292.68
+    },
+    "R104": {
+      "vehicles": 9,
+      "cost": 1007.31
+    },
+    "R105": {
+      "vehicles": 14,
+      "cost": 1377.11
+    },
+    "R106": {
+      "vehicles": 12,
+      "cost": 1252.03
+    },
+    "R107": {
+      "vehicles": 10,
+      "cost": 1104.66
+    },
+    "R108": {
+      "vehicles": 9,
+      "cost": 960.88
+    },
+    "R109": {
+      "vehicles": 11,
+      "cost": 1194.73
+    },
+    "R110": {
+      "vehicles": 10,
+      "cost": 1118.84
+    },
+    "R111": {
+      "vehicles": 10,
+      "cost": 1096.73
+    },
+    "R112": {
+      "vehicles": 9,
+      "cost": 982.14
+    },
+    "R201": {
+      "vehicles": 4,
+      "cost": 1252.37
+    },
+    "R202": {
+      "vehicles": 3,
+      "cost": 1191.7
+    },
+    "R203": {
+      "vehicles": 3,
+      "cost": 939.5
+    },
+    "R204": {
+      "vehicles": 2,
+      "cost": 825.52
+    },
+    "R205": {
+      "vehicles": 3,
+      "cost": 994.42
+    },
+    "R206": {
+      "vehicles": 3,
+      "cost": 906.14
+    },
+    "R207": {
+      "vehicles": 2,
+      "cost": 890.61
+    },
+    "R208": {
+      "vehicles": 2,
+      "cost": 726.82
+    },
+    "R209": {
+      "vehicles": 3,
+      "cost": 909.16
+    },
+    "R210": {
+      "vehicles": 3,
+      "cost": 939.37
+    },
+    "R211": {
+      "vehicles": 2,
+      "cost": 885.71
+    },
+    "RC101": {
+      "vehicles": 14,
+      "cost": 1696.95
+    },
+    "RC102": {
+      "vehicles": 12,
+      "cost": 1554.75
+    },
+    "RC103": {
+      "vehicles": 11,
+      "cost": 1261.67
+    },
+    "RC104": {
+      "vehicles": 10,
+      "cost": 1135.48
+    },
+    "RC105": {
+      "vehicles": 13,
+      "cost": 1629.44
+    },
+    "RC106": {
+      "vehicles": 11,
+      "cost": 1424.73
+    },
+    "RC107": {
+      "vehicles": 11,
+      "cost": 1230.48
+    },
+    "RC108": {
+      "vehicles": 10,
+      "cost": 1139.82
+    },
+    "RC201": {
+      "vehicles": 4,
+      "cost": 1406.94
+    },
+    "RC202": {
+      "vehicles": 3,
+      "cost": 1365.65
+    },
+    "RC203": {
+      "vehicles": 3,
+      "cost": 1049.62
+    },
+    "RC204": {
+      "vehicles": 3,
+      "cost": 798.46
+    },
+    "RC205": {
+      "vehicles": 4,
+      "cost": 1297.65
+    },
+    "RC206": {
+      "vehicles": 3,
+      "cost": 1146.32
+    },
+    "RC207": {
+      "vehicles": 3,
+      "cost": 1061.14
+    },
+    "RC208": {
+      "vehicles": 3,
+      "cost": 828.14
+    }
+  }
+}

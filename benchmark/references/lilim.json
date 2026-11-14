@@ -1,0 +1,12 @@
+{
+  "set": "Li & Lim (2001) PDPTW, 100 tasks",
+  "objective": "hierarchical: vehicles, then total distance",
+  "kind": "best known",
+  "source": "SINTEF TOP PDPTW 100-task table (LC101 shares the C101 optimum)",
+  "instances": {
+    "LC101": {
+      "vehicles": 10,
+      "cost": 828.94
+    }
+  }
+}

@@ -4,8 +4,8 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "synaps-mobiroute"
-version = "0.3.0"
-description = "Verifiable DARP / PDPTW routing kernel: Rust insertion, CP-SAT and MIP solvers, independent notary with why-not certificates"
+version = "0.5.0"
+description = "Vehicle routing engine for heterogeneous fleets: VRPTW, PDPTW and DARP with ALNS on a Rust kernel, exact CP-SAT and MIP models, an OR-Tools baseline, live dispatch and an independent verifier"
 readme = "README.md"
 requires-python = ">=3.12"
 license = "MIT"
@@ -16,24 +16,22 @@ keywords = [
   "vehicle-routing",
   "VRP",
   "VRPTW",
-  "pickup-and-delivery",
-  "dial-a-ride",
-  "DARP",
   "PDPTW",
+  "DARP",
+  "heterogeneous-fleet",
+  "pickup-and-delivery",
+  "ALNS",
+  "metaheuristics",
   "mixed-integer-programming",
   "cp-sat",
   "or-tools",
-  "metaheuristics",
   "rust",
-  "paratransit",
-  "accessible-transport",
-  "optimization",
-  "constraint-programming",
-  "operations-research",
+  "logistics",
   "dispatch",
+  "operations-research",
 ]
 classifiers = [
-  "Development Status :: 3 - Alpha",
+  "Development Status :: 4 - Beta",
   "Intended Audience :: Science/Research",
   "Intended Audience :: Developers",
   "Operating System :: OS Independent",
@@ -56,6 +54,7 @@ dev = [
   "pytest-cov>=6.0",
   "ruff>=0.8",
   "mypy>=1.13",
+  "hypothesis>=6.100",
   "types-jsonschema>=4.20",
 ]
 native = [
@@ -97,7 +96,7 @@ select = ["E", "F", "W", "I", "UP", "B", "SIM", "C4", "RUF"]
 
 [tool.ruff.lint.per-file-ignores]
 "tests/**" = ["T20"]
-"benchmark/**" = ["T20"]
+"benchmark/**" = ["T20", "E501"]  # Markdown table literals
 
 [tool.mypy]
 python_version = "3.12"

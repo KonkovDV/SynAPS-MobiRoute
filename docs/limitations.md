@@ -1,77 +1,125 @@
-# Limitations and forbidden claims
+# Scope and roadmap
 
-## Not proven / PARTIAL in v0.3.0
+What the engine covers, what it leaves to adjacent systems (the accounting
+system, the operator's router), how to read its numbers, and what comes
+next.
 
-- Improvement of Moscow social taxi KPIs
-- Compatibility with Мосавтосантранс production APIs
-- Optimality of greedy / beam / RHC / online insertion / disruption recovery
-- Tiny CP-SAT as optimum of the **pooling** DARP (it is sequential)
-- ALNS as OPTIMAL (adaptive LNS on greedy: Shaw / worst / route / random + SA)
-- LBBD / Activated Benders — **out of scope** for v0.2.x (stub remains
-  `NotImplementedError`; not a hidden solver)
-- GPU insertion — **refused**: 13×13 zone tables, sequential/branchy insert
-  with VIA/quota/unavail occupancy. The hot path stays CPU native. Do not
-  claim a CUDA/OpenCL DARP engine.
-- Third stop / hour quotas / live graph / ALNS OPTIMAL: `ops_via` and
-  `ops_quota` exist; ALNS is never OPTIMAL (RT-20 residual)
-- Stochastic travel times (deterministic buffers only)
-- Fairness as a single score
-- Personal-data certification / 152-FZ
-- Vehicle shortage resolution
-- Full passenger/driver mobile apps
-- Driver rest as a labour-law certificate (Mintrans Order No. 424 of 2020-10-16 on
-  drivers' working and rest time; 580-FZ for taxi carriers). Vehicle equipment is
-  not certified to GOST R 70314-2022 (M1 vehicles for disabled passengers). The field is
-  policy occupancy windows, same algebra as vehicle shop-out. Multi-day
-  rostering is not modelled.
-- Rolling-horizon composition as global re-optimization. Windows are solved in
-  order with the previous routes seeded; an earlier window is never re-opened
-  after a later window commits, and the last window stays open. `window_minutes`
-  and `overlap_minutes` change which requests a window can see, not only the
-  runtime.
-- `plan_id` as a feasibility certificate. It fingerprints the planning input and
-  the published configuration of the lane that signs it (greedy / beam / CP-SAT /
-  CP-SAT fallback / RHC / ALNS / incremental repair / online / manual override)
-  — nothing more.
-- A manual override as authorization. The journal is an audit record;
-  `apply_reject` publishes an unverified plan (`verified_feasible=False`) under a
-  new plan identity, and it has to be re-verified before anyone acts on it.
-  In analogue practice an override or a driver reassignment is a dated, signed
-  and re-verified operator action with retained source documents: Honolulu OTS
-  schedulers and dispatchers are directed to override computer-generated
-  schedules and divert drivers for unscheduled trips; the Jacksonville JTA
-  follow-up audit (798A) asks that modifications be dated, signed and verified
-  after finding ~17% of trips with late pickup/dropoff or trip-length
-  violations and 48% of complaints tied to scheduling and same-day dispatcher
-  insertion; Minnesota OSA agreed-upon-procedures reports retain driver
-  exception reports, trip sheets and run guides; the Washington SOS transit
-  retention schedule keeps "assignment/reassignment" records. Those are other
-  operators' controls, cited as analogues — MobiRoute claims none of them.
-- Frozen protection as a passenger promise. It is a refusal predicate over
-  vehicle, driver and published pickup/dropoff clocks, shared with
-  `compute_diff`. It does not prove that dispatch honoured the plan.
+## Data
 
-Kernel note (SynAPS ADR-0005, pin `07f11ebb`): `WorkCenter.calendar` is encoded
-by CP-SAT/ALNS/LBBD (occupancy in one shift) and clipped on greedy-family
-kernel configs. Auto-route stays `CALENDAR_AWARE`. The kernel night-window analog covered 0.75–0.88 of ops — that is
-not a MobiRoute DARP KPI. Night/emergency vehicle unavailability in this
-product is the domain's own tables, not a kernel shift calendar.
+* Public benchmarks and synthetic days only. There is no customer data and no
+  pilot, so nothing here is a claim about savings at an operator.
+* Synthetic cargo, shuttle and plant days use straight-line distance times a
+  detour factor and a fixed speed per profile. The model accepts any matrix:
+  the Sartori–Buriol set already runs on real road times (OSRM).
+* Input in coordinates (`vrp.geo`): offline matrices are great-circle
+  distance times a detour factor at a mean speed, symmetric and blind to
+  one-way streets; OSRM matrices come from whatever profile the server runs
+  (usually a car), and a truck is only slowed down by a factor. With a
+  Valhalla server (`--valhalla URL`) a profile gets truck-aware matrices
+  (weight, axle load, height, hazmat). Matrices are fetched once per
+  profile; there is no cache and no retry.
+* Access zones close stops to vehicle types by gross weight, axle load,
+  height or type for the whole day; a ban by time of day (trucks barred
+  from a centre at rush hour) needs time windows per vehicle type, which
+  the model does not have. Seasonal axle limits are set by hand as zone
+  limits or Valhalla options.
+* The Naberezhnye Chelny example is synthetic: random points inside the
+  city's bounding box, made-up names, no company's orders.
 
-## Forbidden statements
+## Rich VRP model
 
-Pooling in v0.3.0 is **classic pickup/dropoff insertion** with dynamic load, independently
-feasibility-checked. It is not a proven optimal shareability network.
+* Driver rules. Implemented: a break of at least $b$ minutes after at most
+  $D$ minutes of driving and at most $2D$ minutes of driving a day; with
+  $D$ = 4.5 h and $b$ = 45 min this is the rule of EU Regulation 561/2006
+  (art. 6-7) and of Russian Ministry of Transport Order No. 424 of
+  16.10.2020, including the split into 15 + 30 min (`BreakRule.split`, on
+  the Python reference). The shift cap counts from departure to return,
+  waiting included, as working time does. Not modelled: daily driving
+  extended to 10 h twice a week (art. 6 of the EU regulation); weekly and fortnightly driving limits; the meal break of the
+  Labour Code (art. 108), which is not working time; daily and weekly rest
+  between shifts; tachograph data. The rest is one contiguous block in one
+  gap between two stops, before or after that gap's drive (whichever keeps
+  both stints within the limit). It may use idle time of the gap only if the
+  driver is free to rest there (queueing at a gate is not a break). These are
+  engineering constraints, not legal advice: check a configuration against
+  the regulations in force and the company's local acts.
+* Route sheets are trip plans ("маршрутный лист" in the Russian output), not
+  the statutory waybill ("путевой лист", Road Transport Charter, art. 6;
+  required details by Order No. 390 of 28.09.2022). Vehicle and driver data,
+  odometer readings and the medical and technical pre-trip checks stay in
+  the accounting system.
+* Multi-trip days need reload stops created up front
+  (`model.add_reload_stops`); a stop is a copy of the depot, and reloading
+  takes a fixed time whatever the load.
+* Time-dependent travel: one speed profile per road profile (every arc slows
+  down by the same factor); the search tests the shift cap soundly but not
+  completely (it may reject a feasible route), time costs are charged on
+  free-flow minutes, and it runs on the Python reference, not the Rust
+  kernel. It is not combined with ride limits or rest rules.
+* By default cost per time is charged on driving and service, not on
+  waiting. `time_cost = "duty"` charges the whole shift instead (the
+  shortest feasible duration, waiting included) in the objective, the
+  choice of vehicle types, set partitioning and route sheets; the regret
+  repair, in Python and in Rust, still ranks insertions by the fast
+  operating-time delta, so a plan's waiting is cut by acceptance and the
+  other operators rather than at insertion.
+* The loading order on a sheet is the reverse of the drops per trip; it does
+  not check stowage, axle loads or load securing.
+* Route sheets: the schedule is the shortest one that returns earliest (no
+  traffic) or the shortest one (traffic); a dispatcher who prefers an early
+  start or a fixed departure has to shift it by hand, and the rest's place is
+  the first admissible gap the verifier finds, not a driver's preference.
+* Every vehicle returns to its end depot; open routes need a zero-cost return.
+* The OR-Tools lane, the exact CP-SAT model and the live dispatcher do not
+  model rests, multi-trip days or time-dependent travel; they refuse such
+  instances with an explicit error. In the dispatcher, ride limits have to be
+  written as delivery deadlines, and vehicles idle where they finish instead
+  of repositioning.
 
-Insertion scoring for greedy / beam / ALNS / RHC / online is Rust `mobiroute_native`.
-Python SoA is an oracle for lockstep tests, not a solver backend, and not a
-license to claim OPTIMAL or an unmeasured ×N speedup. Generator `medium` is
-60 vehicles / 1000 requests. The `stress_200` full pipeline (day-ahead plus disruptions and 8 inserts,
-13.1 s; day-ahead 2.8 s) is a sample on one machine, not a SLA.
+## Algorithms
 
-Per-vehicle refusal evidence (`NO_COMPATIBLE_VEHICLE`, `NO_QUALIFIED_DRIVER`,
-`NO_DRIVER`, `INSERT_INFEASIBLE`, `POOLING_BLOCKED`, `SIMULATION_FAILED`) is
-search-side, deduplicated and truncated to eight vehicles. It records why the
-search refused this request, not that the request is infeasible.
+* ALNS, regret insertion, guided ejection, the merge operator, the local
+  search and the dispatcher are heuristics. Gaps to best-known solutions vary
+  between seeds; the spread on Solomon's type-2 classes is measured in
+  [benchmarks/seed-study.md](benchmarks/seed-study.md).
+* The local search applies to instances whose orders are all deliveries from
+  the depot (VRPTW) without reload stops, rest rules or traffic.
+* Set partitioning over the route pool is off by default: on long-route
+  instances the pool rarely holds routes that partition the orders anew.
+* The exact CP-SAT model proves optima on small instances (about ten orders).
+  `OPTIMAL` refers to its integer model with travel rounded up to 0.01 min;
+  the verifier re-prices the plan in real numbers.
+* The OR-Tools lane is the common configuration (PCI + GLS, integer time grid,
+  disjunctions), not a tuned setup; the comparison says how far the default
+  gets in the same time, not what OR-Tools can do with tuning. Its matrices
+  are registered on the C++ side, so the time limit is spent on the search.
+* The comparison with PyVRP, VROOM and jsprit covers classic VRPTW and CVRP
+  only (those solvers do not share the rich model), with default settings and
+  wall-clock budgets on a shared machine. On Solomon the hierarchical
+  objective reaches the other solvers as a fixed vehicle cost, which is not
+  what they are built for; where distance alone ranks, PyVRP is ahead of
+  this engine at 1000 customers (+1.2% against +2.9% to the best known).
+* Orders that may be refused are dropped by a rule on the plan as it stands:
+  single orders first, then whole routes of optional orders. A cluster inside
+  a longer route that is unprofitable only as a group is not found; against
+  CP-SAT the rule is optimal on 87 of 90 small instances, worst gap 13%.
+* Prices and rents (`vrp.prices`) are duals of a restricted master problem:
+  exact for the routes the search visited, an estimate for the full problem.
+  No pricing subproblem is solved, so a route outside the pool can change
+  them, and the LP value over the pool is not a lower bound for the problem.
+  A rent is a marginal rate of the relaxation, not a forecast: on the Chelny
+  day the rents of own vans and trucks are 2,104 and 5,378 while solving
+  again with one more unit saves 641 and 2,160. Degenerate LPs have many
+  optimal duals; the one closest to the removal savings is a convention,
+  stated in the formulation, not the only valid price list.
 
-See `docs/archive/claims-review-2026-08-12.md`.
-Ops-suite service rates are synthetic policy scripts (seed 42), not Moscow social-taxi KPIs.
+## Paratransit kernel
+
+* Synthetic Moscow-zone days; quota and priority rules are policy shapes, not
+  legal eligibility; no integration with a live dispatch system.
+* CP-SAT tiny is a sequential model (no pooling).
+
+## Timings
+
+One machine (Linux x86_64, Python 3.13), one thread unless stated. Samples,
+not SLAs.

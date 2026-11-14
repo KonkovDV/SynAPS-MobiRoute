@@ -1,133 +1,544 @@
-# Mathematical formulation (Accessible Dynamic DARP)
+# Mathematical formulation
 
-## Problem name
+Two models live in the repository. The **rich VRP** (`mobiroute.vrp`) is the
+general one: cargo and passengers, heterogeneous fleet, pickup and delivery.
+The **paratransit kernel** adds operator rules for accessible transport; its
+specifics are at the end and in [darp-kernel.md](darp-kernel.md).
 
-**Dynamic Stochastic Accessible Dial-a-Ride Problem with Time Windows,
-Heterogeneous Vehicles, Capacity, Pairing, Fairness and Disruption Recovery**
-(DSA-DARP-TW-HV).
+## 1. Rich VRP
 
-v0 implements the **deterministic** core (stochastic travel as future extension).
+### Sets and data
 
-## Sets
+* $N$ — nodes (depots and service points); travel time $t^p_{ij}$ and distance
+  $d^p_{ij}$ for every road profile $p$ (car, van, truck, ...).
+* Each node $i$: service-start window $[e_i, l_i]$, service time $s_i$.
+* $R$ — orders. An order $r$ is a pickup-delivery pair $(p_r, d_r)$, a
+  delivery $d_r$ loaded at the start depot (VRPTW customer) or a collection
+  $p_r$ unloaded at the end depot. Demand $q_r \in \mathbb{R}^D_{\ge 0}$
+  (kg, m³, pallets, seats, ...), required skills $S_r$, optional ride limit
+  $L_r$, optional drop penalty $\pi_r$.
+* $K$ — vehicle types: count $n_k$, capacity $Q_k \in \mathbb{R}^D$, start and
+  end depots, shift $[a_k, b_k]$, shift cap $T_k$, skills $S_k$, profile
+  $p(k)$, fixed cost $f_k$, cost per distance $c^d_k$, cost per time $c^t_k$.
 
-- Passengers / requests \\(R\\)
-- Vehicles \\(V\\), drivers \\(D\\)
-- Zones \\(Z\\), travel times \\(\\tau(i,j)\\)
-- Stops: pickup \\(p_r\\), optional via \\(v_r\\), dropoff \\(d_r\\) for each \\(r \\in R\\)
-- \\(\\tau(i,j)\\): shortest-path minutes on the labelled zone matrix (Floyd–Warshall), not live roads
+### Decisions
 
-## Decision variables (conceptual)
+A route per used vehicle: an ordered list of service nodes; service starts
+$B_i$; which orders stay unserved.
 
-- \\(x_{rv} \\in \\{0,1\\}\\): request \\(r\\) assigned to vehicle \\(v\\)
-- Route sequence / arrival times \\(a_s\\), departures \\(u_s\\)
-- Reject indicator \\(y_r = 1 - \\sum_v x_{rv}\\) with reason code \\(\\rho_r\\)
+### Constraints
 
-## Hard constraints (mandatory)
+1. every order on at most one route; both nodes of a pair on the same route,
+   pickup before delivery;
+2. $S_r \subseteq S_k$ for the vehicle serving $r$;
+3. load after every stop within $Q_k$ in every dimension (depot deliveries are
+   on board from the start);
+4. $B_j \ge B_i + s_i + t^{p(k)}_{ij}$ for consecutive stops, $e_i \le B_i \le l_i$;
+5. depot departure $\ge a_k$, return $\le b_k$, $B_{\text{end}} - B_{\text{start}} \le T_k$;
+6. $B_{d_r} - (B_{p_r} + s_{p_r}) \le L_r$;
+7. at most $n_k$ routes of type $k$;
+8. optionally per type: a driver rest rule (section 4a), reload stops for
+   multi-trip days (4b), and time-dependent travel on its road profile (4c).
 
-1. Pairing: pickup and dropoff of \\(r\\) on same \\(v\\)
-2. Precedence: \\(a_{p_r} + \\mathrm{board}_r + \\tau \\le a_{d_r}\\)
-3. No dropoff before pickup
-4–5. Pickup window; `appointment_end` is latest dropoff; earliest alight is
-   `appointment_start - 30` (DREDF −30/0 analogue — lobby, not cabin-until-slot)
-6–7. Max ride / max wait (empty idle free; onboard hold and passenger delay capped).
-   Pickup dwell is \\(\\max(\\mathrm{board}, 5)\\) (FTA/DREDF curb-wait analogue).
-   Early-alight snap to \\(start-30\\) is allowed only if this trip is the last onboard;
-   otherwise the insertion is infeasible (do not hold other passengers at the clinic).
-8–9. Passenger and wheelchair capacity along the route
-10–11. Wheelchair type / lift / ramp compatibility
-12. Companion seats
-13–14. Driver qualifications, shift, and optional rest/unavailable occupancy
-   (policy intervals on ``driver.unavailable_intervals``; not a labour-law
-   certificate)
-15. No double-booking of vehicle time
-16–17. Travel and boarding/alighting times
-18–19. Depot start / **return by** \\(\\min(T_v,T_d)\\)
-20. Blocked locations / **service area** (pickup, via, and dropoff in \\(A_v\\) if \\(A_v\\) nonempty)
-21. Invalid pooling forbidden, including stretcher exclusive cabin
-22. Optional VIA between pickup and dropoff; passenger stays onboard.
-    Detour cap uses door-to-door itinerary minutes including VIA service,
-    not geographic hops alone (pharmacy dwell is not a detour).
-23. Remaining hour quota if set, using `quota_debit_basis` (`RIDE_DURATION` or
-    `BILLABLE_SERVICE` = \\(\\max(\\mathrm{board}, 5)\\) + ride + alight); else unlimited
-24. Cancelled requests excluded
-25. Urgent insert only if feasible
-26. Frozen trips immutable without override
-27. Rejected requests keep explainable \\(\\rho_r\\)
-28. Reproducible solve (seed, hashes, single thread)
+### Objective
 
-## Time-window tightening (pickup floor)
+$$
+\min \sum_{\text{routes}} \Big( f_k + c^d_k \sum d_{ij} + c^t_k \big(\sum t_{ij} + \sum s_i\big) \Big)
++ M \cdot \#\text{vehicles} + \sum_{r \text{ unserved}} \pi_r
+$$
 
-With alight floor \\(\\underline{a}_r = \\max(0, \\mathrm{appt}_r - 30)\\), ride cap
-\\(\\bar{L}_r = \\min(L_r, \\mathrm{detour}_r)\\) and curb service \\(s_r = \\max(\\mathrm{board}_r, 5)\\),
-every feasible schedule satisfies
+$c^t_k$ is charged on driving and service time, not on idle waiting, so an
+insertion changes it by a closed-form amount. $M$ (`vehicle_penalty`) is zero
+for cargo days, where vehicles cost $f_k$; benchmarks that rank vehicles first
+use $M = 10^5$. Own vehicles have $f_k = 0$ (the truck and driver are paid for
+anyway); hired vehicles carry a hire fee and a dearer tariff.
 
-\\[ B_{p_r} \\ge e^{*}_r = \\max\\big(e_r,\; \\underline{a}_r - \\bar{L}_r - s_r\\big), \\]
+## 2. Insertion in constant time
 
-because the ride clock runs from pickup departure \\(B_{p_r} + s_r\\) to dropoff arrival
-\\(\\ge \\underline{a}_r\\). This is a valid inequality (Dumas, Desrosiers & Soumis 1991;
-Cordeau 2006), so an early vehicle holds until \\(e^{*}_r\\) without losing any schedule of
-the sequence. Passenger delay is still measured from \\(e_r\\). Kernel, oracle and notary
-share the formula (`pickup_service_floor`).
+For a route $v_0, \dots, v_{m+1}$ (depots at both ends) keep
 
-## Literature lane (Cordeau 2006 algebra)
+$$
+\text{begin}_k = \max\big(\text{begin}_{k-1} + s_{k-1} + t_{k-1,k},\ e_k\big), \qquad
+\text{late}_k = \min\big(l_k,\ \text{late}_{k+1} - s_k - t_{k,k+1}\big)
+$$
 
-Nodes \\(0\\) (depot), pickups \\(1..n\\), dropoffs \\(n+1..2n\\), end depot \\(2n+1\\);
-Euclidean \\(t_{ij} = c_{ij}\\); service \\(d_i\\); windows \\([e_i, l_i]\\); ride limit \\(L\\);
-capacity \\(Q\\); at most \\(K\\) routes.
+(Savelsbergh 1992). Node $u$ fits between $v_i$ and $v_{i+1}$ iff
+$b_u = \max(\text{begin}_i + s_i + t_{iu}, e_u) \le l_u$ and
+$b_u + s_u + t_{u,i+1} \le \text{late}_{i+1}$. A pair scans the delivery
+position $j \ge i$ forward and pushes the pickup's delay only through
+$v_{i+1..j}$, checking their own $l$; load uses the running maximum of the
+loads on $v_{i..j}$. A route of $m$ stops costs $O(m^2)$ tests of $O(1)$.
 
-* **CP-SAT**: `AddMultipleCircuit` over arcs \\(x_{ij}\\); \\(x_{ij} \\Rightarrow B_j \\ge B_i + d_i + \\lceil t_{ij} \\rceil_{1/1000}\\),
-  route label \\(V_j = V_i\\) (first pickup names the route), \\(V_i = V_{n+i}\\),
-  load propagation, \\(B_{n+i} - B_i - d_i \\le L\\). Rounding travel up keeps every model
-  solution feasible in reals.
-* **MIP** (compact two-index, Furtado, Munari & Morabito 2017): degree constraints,
-  \\(\\sum_j x_{0j} \\le K\\), arc big-M \\(B_j \\ge B_i + d_i + t_{ij} - M_{ij}(1 - x_{ij})\\) with
-  \\(M_{ij} = \\max(0, l_i + d_i + t_{ij} - e_j)\\), label and load big-M copies along arcs,
-  ride and precedence rows; real-valued travel, solved by SCIP, HiGHS or CBC. The LP
-  relaxation is reported as a lower bound (85.27 on a2-16 against 294.25: big-M is weak).
-* **Verifier**: for a fixed sequence the constraints
-  \\(B_v - B_u \\le w_{uv}\\) (windows via a zero clock \\(z\\), travel, ride, duration) form a
-  system of difference constraints. It is feasible iff the constraint graph has no negative
-  cycle (Bellman–Ford, CLRS 24.4); the earliest schedule is \\(B_k = -\\delta(k, z)\\). A
-  negative cycle \\(C\\) is the certificate: its constraints cannot all hold and
-  \\(-\\sum_{(u,v) \\in C} w_{uv}\\) is the number of minutes they miss by.
+**Shortest feasible duration.** With windows and travel only, leaving the
+depot at $t$ gives the earliest arrival at the end
+$\max(t + G_0,\ A)$, where $G_k$ is the pure driving and service time from
+stop $k$ to the end and $A = \max_{k\ge1}(e_k + G_k)$. The latest departure is
+$\min_k (l_k - H_k)$ with $H_k$ the time from the start to $k$. Hence
 
-## Lexicographic objective levels
+$$
+\text{duration}_{\min} = \max\big(G_0,\ A - \min_k(l_k - H_k)\big).
+$$
 
-1. Safety / accessibility / medical hard feasibility  
-2. Maximize served (esp. medical on-time)  
-3. Minimize lateness, wait, ride time, cancels  
-4. Fairness, deadhead, cost  
+After an insertion, $G$ and $H$ shift by known constants on three segments
+(before the pickup, between pickup and delivery, after the delivery), so
+prefix and suffix extrema of $e_k + G_k$ and $l_k - H_k$ give the new duration
+in $O(1)$ per candidate (`insertion._min_duration_ok`).
 
-Tiny CP-SAT in v0.2.0 implements a **sequential** pair model (dropoff of trip *i*
-before pickup of trip *j* on the same vehicle). It is not the pooling DARP.
-`OPTIMAL` requires OR-Tools OPTIMAL and an independent notary. Greedy insertion
-is the pooling heuristic (PARTIAL). ALNS is adaptive LNS (random / Shaw / worst /
-route destroy, greedy repair, SA on duration at equal served; never `OPTIMAL`).
-RHC is windowed greedy composition (heuristic, never `OPTIMAL`). LBBD remains PLANNED.
+**Ride limits** couple two stops, so local slack does not decide them.
+Candidates that pass the fast tests are sorted by cost and the cheapest are
+timed exactly (section 4).
 
-Weighted sum / ε-constraint / Pareto slices are **report-only** modes;
-never hide poor metrics behind one scalar.
+## 3. Regret-k repair and ALNS
 
-## Dynamic control
+Each step inserts the order with the largest regret
+$\sum_{h=2}^{k}(c_h - c_1)$ over its best routes (Potvin & Rousseau 1993); an
+empty vehicle of each type with spare units is an option priced with its
+fixed cost. Ruin operators: random, worst saving, related (Shaw: distance,
+time, size), string removal (Christiaens & Vanden Berghe 2020) and whole
+route. Adaptive weights and simulated annealing follow Ropke & Pisinger
+(2006). To save vehicles, a route is removed and its orders are fitted back by
+guided ejection (Nagata & Bräysy 2009): eject at most two orders with the
+smallest penalty counters, perturb, repeat.
 
-Each disruption produces plan \\(P_{k+1}\\), link to \\(P_k\\), diff, fingerprint,
-frozen set, feasibility re-check, measurable **plan_churn**.
+### Vehicle type of a finished route
 
-## Related work (framing only)
+Insertion opens vehicles one order at a time, so a type whose fee is paid up
+front is never chosen for a single order even when a whole route is cheaper on
+it. After every repair the types are re-chosen exactly: route $\rho$ may take
+any type $k$ that keeps it feasible (capacity, skills, schedule on $k$'s
+profile, shift cap), at cost $c_{\rho k}$, with at most $n_k$ routes per type.
+That is a transportation problem, solved as a min-cost flow
+source → route → type → sink by successive shortest paths (Bellman-Ford on
+the residual graph). On the CP-SAT study this closed a 19.6% gap.
 
-Cited to place this formulation, never to claim parity or a shared bound:
+### Merging two routes
 
-- Ho, Szeto, Kuo, Leung, Petering, Tou, "A survey of dial-a-ride problems",
-  Transp. Res. Part B 111:395–421 (2018) — variant and method taxonomy.
-- Barth, Reiter, Schmidt, "The Line-Based Dial-a-Ride Problem with Transfers",
-  OASIcs ATMOS 2025, 17:1–17:20 — exact liDARP, 80 requests in 15 minutes.
-- Gaul, Klamroth, Pfeiffer, Stiglmayr, Schulz, Eur. J. Oper. Res.
-  321(2):363–382 (2025) — tighter DARP formulation and event-based horizons.
-- "Multiple plan approach for a dynamic dial-a-ride problem", OR Spectrum
-  (2025) — several candidate plans instead of one committed plan.
-- Lois, Ziliaskopoulos, "Online algorithm for dynamic dial a ride problem and
-  its metrics", Transp. Res. Procedia 24:377–384 (2017) — online metrics.
+Neither insertion nor re-typing replaces two small routes by one route on a
+larger vehicle: every intermediate step is worse (moving the first order
+leaves two half-empty routes, both paying a fee). The merge operator makes
+the step at once: for routes $A$, $B$ and a type $k$ admissible for all their
+orders, $B$'s orders are inserted cheapest-first into $A$ re-timed on $k$; the
+merge is applied if $c(A \oplus B, k) < c(A) + c(B)$, best merge first, until
+none saves money, and the types are then re-picked. Both instances of the
+CP-SAT study that ALNS missed before were of this kind; with the operator ALNS
+reaches the proven optimum on both.
 
-MobiRoute publishes greedy pooling insertion, beam, ALNS, RHC and a sequential
-tiny CP-SAT on synthetic days. The only literature comparison is the Cordeau
-`a2-16` literature lane above, gated on the instance SHA-256 and the verifier.
+### Local search with time-window segments
+
+On instances whose orders are all deliveries from the depot (VRPTW), every
+new best plan goes through a first-improvement descent over relocate, swap,
+2-opt* and 2-opt moves restricted to the 20 nearest customers (granular
+neighbourhoods, Toth & Vigo 2003). A stop sequence $\sigma$ is summarised by
+its shortest duration $D$, time warp $TW$ (zero iff it can be timed), and the
+earliest and latest start $E$, $L$ of its first service (Kindervater &
+Savelsbergh 1997; Vidal et al. 2013). For $\sigma_1 \oplus \sigma_2$ with
+travel $t$ between them, $\delta = D_1 - TW_1 + t$:
+
+$$
+\begin{aligned}
+D &= D_1 + D_2 + t + \max(E_2 - \delta - L_1, 0), \qquad
+TW = TW_1 + TW_2 + \max(E_1 + \delta - L_2, 0),\\
+E &= \max(E_2 - \delta, E_1) - \max(E_2 - \delta - L_1, 0), \qquad
+L = \min(L_2 - \delta, L_1) + \max(E_1 + \delta - L_2, 0).
+\end{aligned}
+$$
+
+With prefix and suffix segments of every route, a move made of three pieces
+is an $O(1)$ test; a reversed stretch (2-opt) is built incrementally.
+
+### Set partitioning over the route pool
+
+Optionally, the distinct routes $P$ of accepted plans are recombined
+(Rochat & Taillard 1995; Subramanian, Uchoa & Ochi 2013):
+
+$$
+\min \sum_{\rho \in P} c_\rho x_\rho + \sum_r \pi_r y_r
+\quad\text{s.t.}\quad
+\sum_{\rho \ni r} x_\rho + y_r = 1\ \forall r,\quad
+\sum_{\rho \in P_k} x_\rho \le n_k\ \forall k,\quad
+x, y \in \{0,1\}.
+$$
+
+Every column was feasible when found, so every solution is a plan, and the
+incumbent's routes make it at least as good as the incumbent. Its LP
+relaxation bounds every recombination of the pool from below. Two details
+keep the model sound and well scaled:
+
+* an order the incumbent serves gets no $y_r$ (its row becomes
+  $\sum_{\rho \ni r} x_\rho = 1$): the incumbent proves that all of them can
+  be covered at once, so the optimum is unchanged, and the must-serve
+  penalties ($10^9$) leave the matrix — with them GLOP reported the LP as
+  abnormal;
+* reload stops that are exact copies of one depot are interchangeable, so the
+  row for a class $V$ of copies limits how many of them the chosen routes use,
+  $\sum_\rho |\rho \cap V|\, x_\rho \le |V|$, and the chosen routes get
+  distinct copies afterwards. (A row per stop would make the incumbent
+  infeasible as soon as the pool keeps another copy number for one of its
+  routes.)
+[benchmarks/setpart-solvers.md](benchmarks/setpart-solvers.md) compares
+CP-SAT with SCIP, HiGHS and CBC on the same pools.
+
+### Prices: the dual of the pool's LP
+
+Relax $x, y \ge 0$ in the model above. Its dual gives every order a price
+$u_r$ and every vehicle type a rent $-v_k$ (`mobiroute.vrp.prices`,
+`vrp-solve --prices`):
+
+$$
+\max \sum_r u_r + \sum_k n_k v_k
+\quad\text{s.t.}\quad
+\sum_{r \in \rho} u_r + v_k \le c_\rho\ \ \forall \rho \in P_k,\qquad
+u_r \le \pi_r,\qquad v_k \le 0 .
+$$
+
+Reading. No route of the pool is cheaper than the prices of its orders plus
+the rent of its type (dual feasibility); a route used by an optimal LP
+solution costs exactly that (complementary slackness); and the prices add up
+to the LP value plus the rents, $\sum_r u_r = z_{LP} + \sum_k n_k(-v_k)$
+(strong duality). So when the plan attains the LP value, the prices split its
+cost among the orders, after the rents of the types that ran out. A rent is
+positive only for a type all of whose units are in use: for the LP, one more
+unit lowers the value by at most $-v_k$ (the value of a minimisation LP is
+convex in its right-hand side and the dual is a subgradient). Rows for
+classes of reload stops add their own non-positive duals in the same way.
+
+**Lemma 5.** Let the plan be an optimal solution of the pool's LP, $\rho$ a
+route of the plan on type $k$, $r \in \rho$, and let the route
+$\rho \setminus r$ ($\rho$ with the stops of $r$ taken out) be a column of
+type $k$. Then every optimal dual has
+
+$$
+u_r \ \ge\ c_\rho - c_{\rho \setminus r},
+$$
+
+the saving of dropping $r$ from the plan as it stands.
+
+*Proof.* $x_\rho = 1 > 0$, so by complementary slackness
+$\sum_{q \in \rho} u_q + v_k = c_\rho$. Dual feasibility for the column
+$\rho \setminus r$ gives $\sum_{q \in \rho,\, q \ne r} u_q + v_k \le
+c_{\rho \setminus r}$. Subtracting, $u_r \ge c_\rho - c_{\rho \setminus
+r}$. If $r$ is alone on $\rho$ the saving is $c_\rho$ and
+$u_r = c_\rho - v_k \ge c_\rho$. A reload-class dual $w \le 0$ enters both
+rows with multiplicities $m \ge m'$, and $m w \le m' w$ keeps the inequality.
+$\square$
+
+The module puts these columns into the pool (and the plan's routes on every
+other type that can run them, so that a scarce type shows its rent in a thin
+pool). Two caveats are part of the result, not footnotes:
+
+* **Degeneracy.** Set-partitioning LPs have many optimal duals, and a simplex
+  vertex typically charges a whole route to one of its orders. Among all
+  optimal duals the one with the smallest $\sum_r |u_r - (c_\rho -
+  c_{\rho \setminus r})|$ is returned: a second LP over the optimal face.
+* **Restricted master.** $P$ is what the search happened to visit. The prices
+  are exact for $P$ and an estimate for the full problem: a route outside $P$
+  with $\sum_{r \in \rho} u_r + v_k > c_\rho$ would change them, and finding
+  it is the pricing subproblem of column generation, an elementary shortest
+  path with all the rules of section 1 (Lübbecke & Desrosiers 2005; Feillet
+  2010), which is not solved here. The same holds for a rent as a forecast:
+  it is a rate for a fraction of a vehicle on the routes of $P$, while one
+  whole vehicle and a new search can save less (integrality) or more (routes
+  outside $P$). On the synthetic Chelny day the rents of own vans and trucks
+  are 2,104 and 5,378, and solving the day again with one more unit saves 641
+  and 2,160: the rent names the scarce types, the re-solve gives the amount.
+
+### Orders that may be refused
+
+With a finite $\pi_r$ an order is worth serving only while it costs less than
+$\pi_r$. The repair inserts every order that fits, so a separate step
+follows it: orders are taken out one at a time, largest
+$c_\rho - c_{\rho \setminus r} - \pi_r > 0$ first, and when no single order
+gains, a route all of whose orders are optional is dropped whole if
+$c_\rho > \sum_{r \in \rho} \pi_r$ (a far cluster: no order alone pays for
+the trip back). Orders left out stay in the bank, so the next repair offers
+them again. Against the exact model on instances where refusing is cheap:
+[benchmarks/exact-vs-alns.md](benchmarks/exact-vs-alns.md).
+
+## 4. Timing of a fixed sequence: difference constraints
+
+For a fixed order of stops, every rule above is $B_v - B_u \le w_{uv}$:
+
+| Rule | Arc |
+| --- | --- |
+| $B_k \le l_k$ | $z \to k$, weight $l_k$ |
+| $B_k \ge e_k$ | $k \to z$, weight $-e_k$ |
+| travel | $k{+}1 \to k$, weight $-(s_k + t_{k,k+1})$ |
+| ride | $p \to d$, weight $L_r + s_p$ |
+| shift cap | $\text{start} \to \text{end}$, weight $T_k$ |
+| rest in gap $g$ | $g{+}1 \to g$, weight $-(s_g + t_{g,g+1} + b)$ (replaces the travel arc) |
+
+The system is feasible iff the graph has no negative cycle (CLRS 24.4).
+Bellman-Ford from the zero clock $z$ gives the earliest schedule
+($B_k = -\delta(k, z)$), the latest one ($B_k = \delta(z, k)$) and the
+shortest feasible duration ($-\delta(\text{end}, \text{start})$). A negative
+cycle $C$ is a **certificate**: its constraints cannot hold together and
+$-\sum_{C} w$ is the number of minutes missing. Example from a cargo day:
+*supplier opens at 09:00, loading 26 min, drive 162.8 min, customer closes at
+12:00 — short by 8.8 min*.
+
+## 4a. Driver rests
+
+A type may carry a rest rule $(D, b)$: at most $D$ minutes of driving between
+rests of at least $b$ minutes, at most $2D$ minutes of driving per route (the
+4.5 h / 45 min norm with the 9 h daily limit: EU Regulation 561/2006, art. 7;
+the same limits are set for Russian drivers by order No. 424 of the Ministry
+of Transport, 16.10.2020). Let $\tau_0, \dots, \tau_m$ be the driving times of
+the legs of route $v_0, \dots, v_{m+1}$, $P_g = \sum_{a<g} \tau_a$ and
+$\Delta = \sum_a \tau_a$.
+
+**Lemma 1.** If $\Delta \le D$ no rest is needed. If $\Delta > 2D$ the route is
+infeasible. Otherwise it is feasible iff there is a gap $g$ with
+$P_g \in [\Delta - D, D]$ or $P_{g+1} \in [\Delta - D, D]$ for which the
+system of section 4, with the travel arc of gap $g$ lengthened by $b$, has no
+negative cycle.
+
+*Proof.* One rest splits the driving into a part before and a part after it;
+both must be at most $D$, which with a single rest per route forces
+$\Delta \le 2D$. A rest taken between the end of service at $v_g$ and the start
+at $v_{g+1}$ is either before leg $g$ (at $v_g$; driving before it is $P_g$) or
+after it (at $v_{g+1}$; $P_{g+1}$), and in both cases the only timing
+consequence is $B_{g+1} \ge B_g + s_g + \tau_g + b$: the rest is one
+contiguous block of $b$ minutes inside the gap, and slack the gap has anyway
+(a window ahead) can hold it, so a rest costs time only where the gap is
+short of $b$. For a fixed $g$ the system is again of difference constraints
+(section 4). $\square$
+
+The block must be free time: under the rules a break is not a period of
+availability, such as queueing at a gate. Route sheets place it where the
+lemma admitted it: after the service at $v_g$ and before the drive if
+$P_g \in [\Delta - D, D]$, otherwise on arrival at $v_{g+1}$ and before its
+service (then $P_{g+1} \in [\Delta - D, D]$), so that every sheet shows both
+stints within $D$ (property-tested).
+
+The search filters candidates by $\Delta + \Delta_{\text{ins}} \le 2D$ in $O(1)$
+(a rest only adds time, so all other fast tests remain necessary conditions)
+and checks the cheapest ones exactly, trying the admissible gaps in order.
+The verifier implements the lemma separately and returns, for an infeasible
+route, the certificate of the gap that misses by the fewest minutes (labels
+`TRAVEL+REST`) or a `DRIVING` certificate with the excess minutes.
+
+**Split break.** Art. 7 of the EU regulation and Order No. 424 let the break
+be taken as $b_1 \ge 15$ and then $b_2 \ge 30$ minutes; only the second part
+resets the driving counter.
+
+**Lemma 1a.** A route that fails Lemma 1 is feasible with a split break iff
+there are gaps $g_1 < g_2$ with $g_2$ admissible in the sense of Lemma 1 for
+which the system of section 4, with the travel arc of $g_1$ lengthened by
+$b_1$ and that of $g_2$ by $b_2$, has no negative cycle.
+
+*Proof.* The driving before the second part and after it must each stay
+within $D$, which is the admissibility of $g_2$ in Lemma 1 with the same
+"before or after the drive" argument. The first part has no driving
+condition of its own (it does not reset the counter) and must come before
+the second, so it lies in a gap $g_1 < g_2$ (in the same gap the two parts
+are one break, already covered by Lemma 1). For fixed $(g_1, g_2)$ both
+consequences are lengthened travel arcs, a system of difference
+constraints. $\square$
+
+Both the verifier and the search check try the single break first and then
+the $O(m \cdot |G_2|)$ pairs, $G_2$ the admissible gaps; a Hypothesis
+property holds the two to the same answers.
+
+## 4b. Multi-trip days
+
+A multi-trip type lists reload stops: copies of its depot whose service time
+is the reload time. A route visits at most `max_trips - 1` of them; it is
+still one vehicle-day, so windows, the shift cap $T_k$, the rest rule and the
+fixed cost apply to the whole day, while capacity applies per trip. With
+trips split at reload positions, the load after position $j$ in trip $\theta$
+is
+
+$$
+q_j = \sum_{r \in \mathcal D_\theta} q_r \;-\; \sum_{\substack{r \in \mathcal D_\theta\\ d_r \le j}} q_r
+\;+\; \sum_{\substack{r \in \mathcal C_\theta\\ p_r \le j}} q_r
+\;+\; \sum_{r \text{ pair},\ p_r \le j < d_r} q_r,
+$$
+
+with $\mathcal D_\theta$ the depot deliveries of trip $\theta$ (loaded at its
+start) and $\mathcal C_\theta$ its collections (unloaded at its end). A depot
+delivery inserted after position $i$ therefore needs room from the start of
+its trip to $i$, a collection from $i$ to the end of its trip; both are prefix
+or suffix scans per trip. Reload stops enter plans through the merge operator:
+$A \oplus \text{reload} \oplus B$ keeps every trip's loads, so only the timing
+of the day has to be checked, and $B$ may come from another (e.g. hired) type
+if its orders are admissible. Emptied trips are removed (a reload stop that
+starts, ends or repeats a trip is dropped).
+
+## 4c. Time-dependent travel
+
+A road profile may carry speed factors $f_0, f_1, \dots$ for periods starting
+at $\sigma_0 < \sigma_1 < \dots$ (Ichoua, Gendreau & Potvin 2003): a trip with
+free-flow time $t$ leaving at $x$ progresses $f(x)$ free-flow minutes per
+minute. Its arrival $\alpha_t(x)$ is continuous, strictly increasing and
+piecewise linear (FIFO); its inverse is the latest departure
+$\beta_t(y) = \alpha_t^{-1}(y)$.
+
+**Lemma 2.** For a fixed sequence, the earliest schedule
+$B_k = \max\big(e_k,\ \alpha_{t_{k-1,k}}(B_{k-1} + s_{k-1})\big)$ meets all
+windows iff any schedule does, and
+$\lambda_k = \min\big(l_k,\ \beta_{t_{k,k+1}}(\lambda_{k+1}) - s_k\big)$ is the
+latest start at $v_k$ from which the rest can still be timed.
+
+*Proof.* By induction on $k$: every feasible schedule has $B'_k \ge B_k$
+because $\alpha$ and $\max$ are monotone; conversely $B$ itself respects the
+lower bounds and, if $B'$ exists, $B_k \le B'_k \le l_k$. The statement for
+$\lambda$ is the mirror argument with the monotone $\beta$. $\square$
+
+Hence the insertion tests of section 2 stay exact for windows with
+$\alpha$/$\beta$ in place of $+t$/$-t$. The closed-form shortest duration does
+not survive; let $R(x)$ be the arrival at the end depot when leaving at $x$.
+
+**Lemma 3.** $R(x) - x$ is piecewise linear on $[e_0, \lambda_0]$, and its
+breakpoints are among the departures that, propagated without waiting, make
+some service start at its window opening or make some leg start or end on a
+period boundary.
+
+*Proof.* $R$ is a composition of the piecewise-linear maps $\alpha$ and
+$\max(e_k, \cdot)$. A map $\alpha_t$ bends where its departure or its arrival
+crosses a $\sigma_j$, and $\max(e_k,\cdot)$ bends where its argument equals
+$e_k$; when some service waits, everything after it is constant in $x$ and
+adds no breakpoint. Mapping each such event back to the depot through the
+$\beta$ of the preceding legs gives the stated set. $\square$
+
+The verifier evaluates $R(x) - x$ at these candidates and at $e_0$, $\lambda_0$
+(exact shortest duration, tested against a 400-point grid). The search uses a
+sound test instead: the route passes the shift cap if leaving at $e_0$ or at
+$\lambda_0$ keeps it within $T_k$ (both are schedules), so it never accepts an
+infeasible route and may, rarely, reject a feasible one. Time costs are
+charged on free-flow minutes.
+
+## 4d. The schedule handed to the driver
+
+The earliest schedule leaves the depot when the shift opens and may wait an
+hour at the first window; the latest one may come back later than needed.
+Route sheets (`vrp/sheets.py`) use a third schedule
+(`schedule.compact_schedule`).
+
+**Lemma 4.** Let the system of section 4 be feasible, $E$ the earliest return
+($B_{\text{end}}$ of the earliest schedule) and
+$c = -\delta(\text{end}, \text{start})$ the shortest duration. The earliest
+schedule of the system with the extra constraint $B_{\text{start}} \ge E - c$
+exists, returns at $E$ and lasts exactly $c$.
+
+*Proof.* Eliminating the other variables from a system of difference
+constraints (Fourier-Motzkin) leaves difference constraints on
+$(B_{\text{start}}, B_{\text{end}})$ whose bounds are shortest-path
+distances: $L_0 \le B_{\text{start}} \le U_0$,
+$L_e \le B_{\text{end}} \le U_e$ and
+$c \le B_{\text{end}} - B_{\text{start}} \le C$, so
+$E = \max(L_e, L_0 + c)$. The point $(E - c, E)$ satisfies all of them:
+$E - c \ge L_0$ by the formula for $E$; $E - c \le U_0$ because the path
+$\text{end} \to z \to \text{start}$ gives $c \ge L_e - U_0$ and
+$L_0 \le U_0$; $E \le U_e$ because the earliest schedule attains $E$; the
+duration is $c \le C$. So a full schedule with these two values exists, and
+the system with $B_{\text{start}} \ge E - c$ is feasible. Its earliest
+schedule $B^*$ is pointwise below that schedule, so $B^*_{\text{end}} \le E$,
+and $B^*_{\text{end}} \ge E$ by the definition of $E$. Then
+$B^*_{\text{end}} - B^*_{\text{start}} \le c$, and it is at least $c$ by the
+definition of $c$. $\square$
+
+One more Bellman-Ford run gives $B^*$; with a rest the gap is the one the
+verifier chose. Under traffic $R(x) - x$ need not be monotone, so the
+departure is the minimiser of Lemma 3 (the earliest among ties) and the
+return may be later than $E$. A sheet adds arrivals
+$A_{k+1} = B_k + s_k + t_{k,k+1}$ (plus $b$ in the rest gap, $\alpha$ in
+place of $+t$ under traffic) and waiting $B_k - A_k$. Property tests hold
+$B^*$ to every arc of the constraint graph and to the verifier's $E$ and $c$
+on random routes with ride limits and rests, and to the windows, the FIFO
+travel function and the shortest duration under traffic.
+
+## 5. Lateness instead of soft windows
+
+Soft windows hide how late a plan is. The repository keeps windows hard and
+prices a delay explicitly (`vrp/lateness.py`):
+
+* **minimal maximum lateness**: the least $\delta$ such that replacing every
+  $l_k$ by $l_k + \delta$ removes all negative cycles; bisection on
+  Bellman-Ford. For a single conflicting window it equals the certificate's
+  deficit.
+* **minimal total lateness**:
+  $\min \sum_k w_k \lambda_k$ subject to $B_k \le l_k + \lambda_k$,
+  $\lambda_k \ge 0$ and the other constraints of section 4, solved by GLOP.
+  The constraint matrix is a network matrix, so the dual is a min-cost flow.
+
+## 6. Exact CP-SAT model
+
+One `AddCircuit` per vehicle unit over its depot and the service nodes it may
+serve; a self-loop means "skip this node", a depot self-loop means "unit
+unused". Literal $x^u_{ij} \Rightarrow B^u_j \ge B^u_i + s_i + t^u_{ij}$ and
+$Q^u_j = Q^u_i + q_j$; pairs share the visit literal; ride limits and the
+shift cap are linear constraints guarded by it; identical units are used in
+order (symmetry breaking). Travel is rounded **up** on a 0.01 min grid, so any
+model solution is feasible in reals; the verifier re-prices it.
+
+CP-SAT proves the optimum of all 40 random instances of the full model in
+[benchmarks/exact-vs-alns.md](benchmarks/exact-vs-alns.md); ALNS reaches it on
+all 40.
+
+## 7. Literature lane: Cordeau (2006) DARP
+
+`benchmarks/cordeau_exact.py` solves the published algebra exactly:
+
+* CP-SAT with `AddMultipleCircuit`, route labels ($V_j = V_i$ along arcs, the
+  first pickup names the route, $V_i = V_{n+i}$), load and time propagation,
+  ride rows; travel rounded up on a $10^{-3}$ grid;
+* the compact two-index MIP of Furtado, Munari & Morabito (2017) with
+  arc-specific big-M $M_{ij} = \max(0, l_i + s_i + t_{ij} - e_j)$, solved by
+  SCIP, HiGHS or CBC, and its LP relaxation as a bound.
+
+a2-16: CP-SAT proves 294.25 in 0.7 s; SCIP and HiGHS reach it in 26.2 s and
+41.3 s; the LP bound is 85.27 (big-M is weak: 71% gap) —
+[benchmarks/solver-lab-a2-16.md](benchmarks/solver-lab-a2-16.md).
+
+## 8. Paratransit kernel specifics
+
+Integer minutes on a zone graph (Floyd-Warshall), curb dwell
+$\max(\text{board}, 5)$, alighting no earlier than 30 min before an
+appointment, detour cap, wheelchair places, accessibility skills, quotas,
+linked trips. Valid inequality used by search and notary alike:
+
+$$
+B_{p_r} \ge \max\big(e_r,\ \underline{a}_r - \bar L_r - s_r\big),
+\qquad \underline{a}_r = \max(0, \text{appt}_r - 30),\ \bar L_r = \min(L_r, \text{detour}_r)
+$$
+
+(Dumas, Desrosiers & Soumis 1991).
+
+## 9. How results are compared
+
+A heuristic's result on one instance and one seed is one draw. Method
+comparisons in this repository run several seeds per instance and report the
+mean, standard deviation and best run; two configurations are compared on
+paired runs (same instance, same seed) by the two-sided Wilcoxon
+signed-rank test (Wilcoxon 1945; exact null distribution up to 25 untied
+pairs, normal approximation with tie and continuity corrections above):
+[benchmarks/seed-study.md](benchmarks/seed-study.md). Gaps to published
+values are quoted only for verified plans that serve every order, and only
+at the reference vehicle count when the reference ranks vehicles first.
+
+## References
+
+* Cattaruzza, D., Absi, N., Feillet, D. (2016). Vehicle routing problems with multiple trips. *4OR* 14(3):223–259.
+* Christiaens, J., Vanden Berghe, G. (2020). Slack induction by string removals for vehicle routing problems. *Transportation Science* 54(2):417–433.
+* Cordeau, J.-F. (2006). A branch-and-cut algorithm for the dial-a-ride problem. *Operations Research* 54(3):573–586.
+* Dumas, Y., Desrosiers, J., Soumis, F. (1991). The pickup and delivery problem with time windows. *EJOR* 54(1):7–22.
+* European Parliament and Council (2006). Regulation (EC) No 561/2006 on driving times and rest periods, art. 7.
+* Feillet, D. (2010). A tutorial on column generation and branch-and-price for vehicle routing problems. *4OR* 8(4):407–424.
+* Furtado, M., Munari, P., Morabito, R. (2017). Pickup and delivery problem with time windows: a new compact two-index formulation. *Operations Research Letters* 45(4):334–341.
+* Goel, A. (2009). Vehicle scheduling and routing with drivers' working hours. *Transportation Science* 43(1):17–26.
+* Ichoua, S., Gendreau, M., Potvin, J.-Y. (2003). Vehicle dispatching with time-dependent travel times. *EJOR* 144(2):379–396.
+* Kindervater, G.A.P., Savelsbergh, M.W.P. (1997). Vehicle routing: handling edge exchanges. In Aarts & Lenstra (eds.), *Local Search in Combinatorial Optimization*, Wiley, 337–360.
+* Lübbecke, M.E., Desrosiers, J. (2005). Selected topics in column generation. *Operations Research* 53(6):1007–1023.
+* Nagata, Y., Bräysy, O. (2009). A powerful route minimization heuristic for the vehicle routing problem with time windows. *Operations Research Letters* 37(5):333–338.
+* Potvin, J.-Y., Rousseau, J.-M. (1993). A parallel route building algorithm for the VRPTW. *EJOR* 66(3):331–340.
+* Rochat, Y., Taillard, É.D. (1995). Probabilistic diversification and intensification in local search for vehicle routing. *Journal of Heuristics* 1(1):147–167.
+* Ropke, S., Pisinger, D. (2006). An adaptive large neighborhood search heuristic for the pickup and delivery problem with time windows. *Transportation Science* 40(4):455–472.
+* Ropke, S., Cordeau, J.-F., Laporte, G. (2007). Models and branch-and-cut algorithms for pickup and delivery problems with time windows. *Networks* 49(4):258–272.
+* Savelsbergh, M.W.P. (1992). The vehicle routing problem with time windows: minimizing route duration. *ORSA Journal on Computing* 4(2):146–154.
+* Campbell, A.M., Savelsbergh, M. (2004). Efficient insertion heuristics for vehicle routing and scheduling problems. *Transportation Science* 38(3):369–378.
+* Subramanian, A., Uchoa, E., Ochi, L.S. (2013). A hybrid algorithm for a class of vehicle routing problems. *Computers & Operations Research* 40(10):2519–2531.
+* Shaw, P. (1998). Using constraint programming and local search methods to solve vehicle routing problems. *CP 1998*, LNCS 1520:417–431.
+* Sartori, C.S., Buriol, L.S. (2020). A study on the pickup and delivery problem with time windows: matheuristics and new instances. *Computers & Operations Research* 124:105065.
+* Toth, P., Vigo, D. (2003). The granular tabu search and its application to the vehicle-routing problem. *INFORMS Journal on Computing* 15(4):333–346.
+* Vidal, T., Crainic, T.G., Gendreau, M., Prins, C. (2013). A hybrid genetic algorithm with adaptive diversity management for a large class of vehicle routing problems with time-windows. *Computers & Operations Research* 40(1):475–489.
+* Wilcoxon, F. (1945). Individual comparisons by ranking methods. *Biometrics Bulletin* 1(6):80–83.

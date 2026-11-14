@@ -1,24 +1,32 @@
-# Security Policy
+# Security
 
 ## Supported versions
 
 | Version | Supported |
 | --- | --- |
-| 0.3.x | best-effort (prototype) |
-| < 0.3 | not supported |
+| 0.5.x | yes |
+| < 0.5 | no |
 
 ## Reporting a vulnerability
 
-Please use GitHub Security Advisories:
-
+Use a private GitHub security advisory:
 https://github.com/KonkovDV/SynAPS-MobiRoute/security/advisories/new
 
-Do **not** open public issues that include personal or medical data.
+Please do not open a public issue for a vulnerability.
 
-## Data rules
+## Data
 
-- This repository must not contain real passenger PII, medical diagnoses,
-  real GPS tracks, or eligibility documents.
-- Use synthetic / anonymized / aggregated data only until a customer DPA exists.
-- MobiRoute is **not** a certified personal-data protection system unless a
-  separate certification is obtained and documented.
+The repository contains public benchmark instances and synthetic data only.
+Do not commit, attach or paste real addresses, phone numbers, personal or
+medical data, or GPS tracks — in code, issues or pull requests.
+
+## Network
+
+The library makes no network calls unless asked to. The only one is
+`mobiroute.vrp.geo.osrm_source` (`vrp-solve --osrm URL`): it sends the
+coordinates of every depot and stop to that URL to get road matrices. Point it
+at a server you run yourself if the coordinates are not public. Responses are
+parsed as JSON and checked (`GEO_OSRM_*` errors); nothing else is fetched.
+
+Dependencies are audited on every push and weekly: `pip-audit` for Python
+packages and `cargo audit` for the Rust crate (`.github/workflows/security.yml`).

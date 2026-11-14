@@ -4,13 +4,18 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>SynAPS-MobiRoute — маршруты, которые можно доказать</title>
-<meta name="description" content="Ядро маршрутизации VRP / PDPTW / DARP: временные окна, pickup &amp; delivery, гетерогенный парк. Вставка на Rust, точные модели CP-SAT и MIP, независимая проверка каждого плана и объяснение, почему маршрут невозможен.">
-<meta name="keywords" content="VRP, VRPTW, PDPTW, DARP, vehicle routing, pickup and delivery, time windows, heterogeneous fleet, MIP, CP-SAT, OR-Tools, SCIP, HiGHS, ALNS, metaheuristics, Python, Rust">
+<meta name="description" content="Движок маршрутизации для смешанного парка: VRPTW, PDPTW и DARP, вес, объём и паллеты, свои и наёмные машины, режим труда и отдыха, несколько рейсов, заявки в реальном времени. ALNS на ядре Rust, точные модели CP-SAT и MIP, сравнение с OR-Tools, координаты и OSRM на входе, маршрутные листы на выходе и независимая проверка каждого плана.">
+<meta name="keywords" content="VRP, VRPTW, PDPTW, DARP, vehicle routing, pickup and delivery, time windows, heterogeneous fleet, multi-trip, driver rest rules, route sheets, OSRM, MIP, CP-SAT, OR-Tools, SCIP, HiGHS, ALNS, metaheuristics, Python, Rust">
 <meta name="author" content="Dmitrij Konkov">
 <meta property="og:type" content="website">
-<meta property="og:title" content="SynAPS-MobiRoute — routes you can prove">
-<meta property="og:description" content="VRP / PDPTW routing kernel: Rust insertion, exact CP-SAT and MIP models, an independent notary and why-not certificates.">
+<meta property="og:title" content="SynAPS-MobiRoute — маршруты, которые можно доказать">
+<meta property="og:locale" content="ru_RU">
+<meta property="og:locale:alternate" content="en_US">
+<meta property="og:description" content="Маршрутизация смешанного парка (VRPTW, PDPTW, DARP): ALNS на ядре Rust, точные модели CP-SAT и MIP, сравнение с OR-Tools, заявки в реальном времени, маршрутные листы и независимая проверка каждого плана.">
 <meta property="og:image" content="https://konkovdv.github.io/SynAPS-MobiRoute/assets/og.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:image:alt" content="Проверенный оптимальный план Cordeau a2-16 и ключевые результаты: 130 эталонов, 40 из 40 доказанных оптимумов, ядро на Rust в 49 раз быстрее">
 <meta property="og:url" content="https://konkovdv.github.io/SynAPS-MobiRoute/">
 <meta name="twitter:card" content="summary_large_image">
 <meta name="color-scheme" content="light dark">
@@ -19,7 +24,7 @@
 <link rel="icon" href="assets/favicon.svg" type="image/svg+xml">
 <link rel="stylesheet" href="assets/site.css">
 <script type="application/ld+json">
-{"@context":"https://schema.org","@type":"SoftwareSourceCode","name":"SynAPS-MobiRoute","codeRepository":"https://github.com/KonkovDV/SynAPS-MobiRoute","programmingLanguage":["Python","Rust"],"license":"https://opensource.org/licenses/MIT","author":{"@type":"Person","name":"Dmitrij Konkov"},"description":"Verifiable routing kernel for pickup-and-delivery problems with time windows (VRP / PDPTW / DARP)."}
+{"@context":"https://schema.org","@type":"SoftwareSourceCode","name":"SynAPS-MobiRoute","codeRepository":"https://github.com/KonkovDV/SynAPS-MobiRoute","programmingLanguage":["Python","Rust"],"license":"https://opensource.org/licenses/MIT","author":{"@type":"Person","name":"Dmitrij Konkov"},"description":"Routing engine for mixed fleets: VRPTW, PDPTW and DARP with capacity vectors, vehicle requirements, own and hired vehicles, driver rests and multi-trip days. ALNS on a Rust kernel, exact CP-SAT and MIP models, OSRM matrices, route sheets and an independent verifier."}
 </script>
 </head>
 <body>
@@ -28,11 +33,15 @@
 <nav class="nav" aria-label="Main"><div class="wrap nav-in">
   <a class="brand" href="#top" aria-label="SynAPS-MobiRoute"><svg viewBox="0 0 32 32" aria-hidden="true"><rect width="32" height="32" rx="8" fill="#2a78d6"/><path d="M7 22 14 11l5 7 6-9" stroke="#fff" stroke-width="3" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg><span>MobiRoute</span></a>
   <div class="links">
-    <a href="#pain"><span lang="ru">Проблема</span><span lang="en">Problem</span></a>
     <a href="#solution"><span lang="ru">Решение</span><span lang="en">Solution</span></a>
-    <a href="#proof"><span lang="ru">Доказательства</span><span lang="en">Proof</span></a>
+    <a href="#fleet"><span lang="ru">Парк</span><span lang="en">Fleet</span></a>
+    <a href="#dispatch"><span lang="ru">Диспетчеризация</span><span lang="en">Dispatch</span></a>
+    <a href="#rules"><span lang="ru">Правила</span><span lang="en">Rules</span></a>
+    <a href="#sheets"><span lang="ru">Листы</span><span lang="en">Sheets</span></a>
+    <a href="#prices"><span lang="ru">Цены</span><span lang="en">Prices</span></a>
+    <a href="#bench"><span lang="ru">Эталоны</span><span lang="en">Benchmarks</span></a>
+    <a href="#compare"><span lang="ru">Сравнение</span><span lang="en">Compare</span></a>
     <a href="#lab"><span lang="ru">Попробовать</span><span lang="en">Try it</span></a>
-    <a href="#scope"><span lang="ru">Возможности</span><span lang="en">Scope</span></a>
   </div>
   <div class="nav-act">
     <button class="pill-btn" id="lang" type="button" aria-label="Switch language to English">EN</button>
@@ -45,12 +54,12 @@
 <header class="hero" id="top">
   <div class="wrap hero-in">
     <div class="hero-copy">
-      <p class="eyebrow"><span>VRP</span><span>PDPTW</span><span>DARP</span><span>Python + Rust</span></p>
+      <p class="eyebrow"><span>VRPTW</span><span>PDPTW</span><span>DARP</span><span lang="ru">смешанный парк</span><span lang="en">mixed fleet</span><span>Python + Rust</span></p>
       <h1><span lang="ru">Маршруты, которые можно <em>доказать</em>.</span><span lang="en">Routes you can <em>prove</em>.</span></h1>
-      <p class="lead"><span lang="ru">Ядро маршрутизации «забор → доставка» с временными окнами и смешанным парком. Быстрые эвристики на Rust, точные модели CP-SAT и MIP — и независимая проверка, которая либо подтверждает план, либо называет, сколько минут ему не хватает.</span><span lang="en">A pickup-and-delivery routing kernel with time windows and a mixed fleet. Fast Rust heuristics, exact CP-SAT and MIP models, and an independent check that either confirms a plan or tells you how many minutes it is short.</span></p>
+      <p class="lead"><span lang="ru">Движок маршрутизации для смешанного парка: свои и наёмные машины, вес, объём и паллеты, окна, забор и доставка, перерывы водителей, несколько рейсов, пробки по часам суток, заявки в реальном времени. ALNS на ядре Rust, точные модели CP-SAT и MIP, сравнение с OR-Tools — и независимая проверка, которая либо подтверждает план, либо называет, сколько минут ему не хватает.</span><span lang="en">A routing engine for a mixed fleet: own and hired vehicles, weight, volume and pallets, time windows, pickup and delivery, drivers' rests, several trips per shift, rush-hour traffic, orders arriving live. ALNS on a Rust kernel, exact CP-SAT and MIP models, a head-to-head with OR-Tools, and an independent check that either confirms a plan or tells you how many minutes it is short.</span></p>
       <div class="cta">
-        <a class="btn primary" href="#lab"><span lang="ru">Проверить маршрут самому</span><span lang="en">Verify a route yourself</span></a>
-        <a class="btn ghost" href="#proof"><span lang="ru">Смотреть доказательства</span><span lang="en">See the proof</span></a>
+        <a class="btn primary" href="#fleet"><span lang="ru">Смотреть парк в работе</span><span lang="en">See the fleet at work</span></a>
+        <a class="btn ghost" href="#lab"><span lang="ru">Проверить маршрут самому</span><span lang="en">Verify a route yourself</span></a>
       </div>
     </div>
     <figure class="stage">
@@ -66,10 +75,10 @@
   </div>
   <div class="wrap">
     <dl class="stats">
-      <div class="stat reveal"><dt><span lang="ru">опубликованный оптимум воспроизведён</span><span lang="en">published optimum reproduced</span></dt><dd data-count="294.25" data-dec="2">294.25</dd></div>
-      <div class="stat reveal"><dt><span lang="ru">до доказанного оптимума, CP-SAT</span><span lang="en">to a proven optimum, CP-SAT</span></dt><dd data-count="0.5" data-dec="1" data-suf=" с" data-suf-en=" s">0.5 с</dd></div>
-      <div class="stat reveal"><dt><span lang="ru">быстрее на 3200 заказах</span><span lang="en">faster on 3,200 requests</span></dt><dd data-count="17" data-pre="×">×17</dd></div>
-      <div class="stat reveal"><dt><span lang="ru">автотестов</span><span lang="en">automated tests</span></dt><dd data-count="465" data-suf="+">465+</dd></div>
+      <div class="stat reveal"><dt><span lang="ru">открытых эталонов, каждый план проверен</span><span lang="en">public instances, every plan verified</span></dt><dd data-count="130">130</dd></div>
+      <div class="stat reveal"><dt><span lang="ru">малых задач: ALNS находит доказанный оптимум</span><span lang="en">small instances where ALNS finds the proven optimum</span></dt><dd id="stat-exact" data-count="40" data-suf="/40">40/40</dd></div>
+      <div class="stat reveal"><dt><span lang="ru">ответ на новую заявку</span><span lang="en">answer to a new order</span></dt><dd data-count="0.1" data-dec="1" data-suf=" мс" data-suf-en=" ms">0.1 мс</dd></div>
+      <div class="stat reveal"><dt><span lang="ru">быстрее с ядром на Rust, тот же план</span><span lang="en">faster with the Rust kernel, same plan</span></dt><dd id="stat-speed" data-count="49" data-pre="×">×49</dd></div>
     </dl>
   </div>
 </header>
@@ -133,7 +142,7 @@
       </article>
       <article class="card reveal">
         <p class="tag">03 · <span lang="ru">Доказательство</span><span lang="en">Proof</span></p>
-        <h3><span lang="ru">Нотариус не верит решателю</span><span lang="en">The notary does not trust the solver</span></h3>
+        <h3><span lang="ru">Верификатор не верит решателю</span><span lang="en">The verifier does not trust the solver</span></h3>
         <p><span lang="ru">Расписание маршрута — система разностных неравенств. Она выполнима тогда и только тогда, когда в графе ограничений нет отрицательного цикла. Проверяет алгоритм Беллмана–Форда, отдельным кодом.</span><span lang="en">A route schedule is a system of difference constraints. It is feasible iff the constraint graph has no negative cycle. Bellman–Ford checks it, in separate code.</span></p>
       </article>
       <article class="card b-wide reveal">
@@ -152,9 +161,209 @@ dropoff 1 cannot start before 402; dropoff 1 → dropoff 12 takes 3 + 15.68 min.
       <li><small>01</small><h4><span lang="ru">Вход</span><span lang="en">Input</span></h4><p><span lang="ru">Заказы, парк, водители, матрица времени. Строгая валидация.</span><span lang="en">Orders, fleet, drivers, travel matrix. Strict validation.</span></p></li>
       <li><small>02</small><h4><span lang="ru">Эвристики</span><span lang="en">Heuristics</span></h4><p><span lang="ru">Жадная вставка, beam, ALNS, скользящий горизонт.</span><span lang="en">Greedy insertion, beam, ALNS, rolling horizon.</span></p></li>
       <li><small>03</small><h4><span lang="ru">Точные модели</span><span lang="en">Exact models</span></h4><p><span lang="ru">CP-SAT, MIP на SCIP / HiGHS / CBC, LP-релаксация.</span><span lang="en">CP-SAT, MIP on SCIP / HiGHS / CBC, LP relaxation.</span></p></li>
-      <li><small>04</small><h4><span lang="ru">Нотариус</span><span lang="en">Notary</span></h4><p><span lang="ru">Независимая проверка каждого маршрута.</span><span lang="en">Independent check of every route.</span></p></li>
+      <li><small>04</small><h4><span lang="ru">Верификатор</span><span lang="en">Verifier</span></h4><p><span lang="ru">Независимая проверка каждого маршрута.</span><span lang="en">Independent check of every route.</span></p></li>
       <li><small>05</small><h4><span lang="ru">Результат</span><span lang="en">Result</span></h4><p><span lang="ru">План с отпечатками входа — или сертификат отказа.</span><span lang="en">A plan with input fingerprints, or a refusal certificate.</span></p></li>
     </ol>
+  </div>
+</section>
+
+<section id="fleet" class="sec">
+  <div class="wrap">
+    <p class="kicker reveal"><span lang="ru">Смешанный парк</span><span lang="en">Mixed fleet</span></p>
+    <h2 class="reveal"><span lang="ru">Свои машины — первыми. Наёмные — когда своих не хватает.</span><span lang="en">Own vehicles first. Hired ones only when they run out.</span></h2>
+    <p class="sub reveal"><span lang="ru">Один городской день: два склада, фургоны 1,5 т, грузовики 5 и 10 т, тягач 20 т, свои и наёмные. У заказа — вес, объём и паллеты, окно доставки, рефрижератор, гидроборт или ДОПОГ. Добавляйте заказы: решатель сам выбирает, какие машины выпустить и кого нанять.</span><span lang="en">One city day: two depots, 1.5-t vans, 5-t and 10-t trucks, a 20-t tractor, own and hired. Each order has weight, volume and pallets, a delivery window, and may need refrigeration, a tail lift or ADR. Add orders: the solver decides which vehicles go out and whom to hire.</span></p>
+    <div class="fleet reveal">
+      <div class="card flush fleet-map"><svg id="fleet-map" viewBox="0 0 600 600" role="img" aria-label="Routes of the freight day"></svg></div>
+      <div class="card fleet-side">
+        <div class="slider">
+          <label for="fleet-n"><span><span lang="ru">Заказов за день</span><span lang="en">Orders in the day</span></span><b id="fleet-n-val">100</b></label>
+          <input type="range" id="fleet-n" min="0" max="4" step="1" value="2" aria-describedby="fleet-note">
+          <div class="ticks" aria-hidden="true"><span>40</span><span>70</span><span>100</span><span>130</span><span>160</span></div>
+        </div>
+        <dl class="kpis" id="fleet-kpis"></dl>
+        <div class="mix" id="fleet-mix"></div>
+        <div class="legend"><span><i></i><span lang="ru">своя машина</span><span lang="en">own vehicle</span></span><span><i class="dash"></i><span lang="ru">наёмная</span><span lang="en">hired</span></span></div>
+        <p class="fine" id="fleet-note"><span lang="ru">Стоимость: своя машина — только пробег и часы (машина и водитель оплачены в любом случае); наёмная — плата за выход и тариф на 35% выше. Каждый план проверен независимым верификатором. Данные синтетические.</span><span lang="en">Cost: an own vehicle costs mileage and hours only (truck and driver are paid for anyway); a hired one costs a hire fee and a 35% higher tariff. Every plan is checked by the independent verifier. Synthetic data.</span></p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="dispatch" class="sec alt">
+  <div class="wrap">
+    <p class="kicker reveal"><span lang="ru">Живая диспетчеризация</span><span lang="en">Live dispatch</span></p>
+    <h2 class="reveal"><span lang="ru">Ответ на заявку — за долю миллисекунды. С причиной, если «нет».</span><span lang="en">An answer in a fraction of a millisecond. With a reason when it is no.</span></h2>
+    <p class="sub reveal"><span lang="ru">Смена внутризаводской логистики: перевозки паллет между цехами появляются в течение дня. Каждая получает ответ сразу — вставку в ту часть плана, которую машина ещё не проехала, или отказ с причиной. Раз в 30 минут живое состояние переоптимизируется ALNS.</span><span lang="en">A shift of in-plant logistics: pallet moves between workshops appear during the day. Each gets an answer at once: an insertion into the part of a plan the vehicle has not driven yet, or a refusal with the reason. Every 30 minutes the live state is re-optimised by ALNS.</span></p>
+    <div class="disp reveal">
+      <figure class="stage">
+        <svg id="disp-map" viewBox="0 0 600 600" role="img" aria-label="Replay of the plant day"></svg>
+        <div class="hud four" aria-live="off">
+          <div><small><span lang="ru">время</span><span lang="en">clock</span></small><b id="disp-clock">7:00</b></div>
+          <div><small><span lang="ru">принято</span><span lang="en">accepted</span></small><b id="disp-acc">0 / 0</b></div>
+          <div><small><span lang="ru">подача, ср.</span><span lang="en">to pickup</span></small><b id="disp-resp">—</b></div>
+          <div><small><span lang="ru">решение</span><span lang="en">decision</span></small><b id="disp-ms">—</b></div>
+        </div>
+        <div class="speeds" role="group" aria-label="Replay speed"><button type="button" data-speed="1" aria-pressed="true">×1</button><button type="button" data-speed="3" aria-pressed="false">×3</button></div>
+        <button class="play" id="disp-play" type="button" aria-pressed="true" aria-label="Пауза / Pause"><svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true"><path class="i-pause" fill="currentColor" d="M6 4h4v16H6zM14 4h4v16h-4z"/><path class="i-play" fill="currentColor" d="M7 4l13 8-13 8z"/></svg></button>
+        <figcaption><span lang="ru">Синтетическая смена: 140 перевозок, 9 машин трёх типов. Точка появляется в момент заявки, машины едут по проверенному плану.</span><span lang="en">Synthetic shift: 140 moves, 9 vehicles of three types. A dot appears when the order is placed; vehicles drive the verified plan.</span></figcaption>
+      </figure>
+      <div class="card">
+        <div class="card-head"><h3><span lang="ru">Лента решений</span><span lang="en">Decision feed</span></h3></div>
+        <ol class="feed" id="disp-feed" aria-live="polite"></ol>
+        <div class="scroll-x" tabindex="0" role="region" aria-label="Dispatch policies"><table class="policy" id="disp-policies"><thead><tr><th scope="col"><span lang="ru">Политика</span><span lang="en">Policy</span></th><th scope="col"><span lang="ru">Принято</span><span lang="en">Accepted</span></th><th scope="col"><span lang="ru">Подача</span><span lang="en">To pickup</span></th><th scope="col"><span lang="ru">Решение</span><span lang="en">Decision</span></th></tr></thead><tbody></tbody></table></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="rules" class="sec">
+  <div class="wrap">
+    <p class="kicker reveal"><span lang="ru">Правила эксплуатации</span><span lang="en">Operating rules</span></p>
+    <h2 class="reveal"><span lang="ru">Перерывы, рейсы и пробки — ограничения, а не допущения.</span><span lang="en">Rests, trips and traffic are constraints, not assumptions.</span></h2>
+    <p class="sub reveal"><span lang="ru">Без этих трёх правил план не выйдет на линию. Каждое проверяет независимый верификатор; цифры — на синтетических днях, по пять дней на правило.</span><span lang="en">Without these three rules a plan does not leave the depot. The independent verifier checks each; numbers come from synthetic days, five per rule.</span></p>
+    <div class="grid3">
+      <article class="card reveal"><p class="tag warn"><span lang="ru">4,5 ч → 45 мин</span><span lang="en">4.5 h → 45 min</span></p><p class="rule-num">4–6</p><h3><span lang="ru">маршрутов в день без места для перерыва</span><span lang="en">routes a day with no room for a rest</span></h3><p><span lang="ru">Если планировать без нормы труда и отдыха. Верификатор называет конфликт и минуты, которых не хватает; план с нормой дороже на 2–5,5%.</span><span lang="en">When the plan ignores the driving-time rule. The verifier names the conflict and the minutes missing; the compliant plan costs 2–5.5% more.</span></p></article>
+      <article class="card reveal"><p class="tag warn"><span lang="ru">2 рейса</span><span lang="en">2 trips</span></p><p class="rule-num">60/60</p><h3><span lang="ru">магазинов вместо 52–55</span><span lang="en">stores instead of 52–55</span></h3><p><span lang="ru">Склад и две волны доставки. Машина загружается снова и уходит во второй рейс: 12–15 машин вместо 21, наёмных — 3–6 вместо 12.</span><span lang="en">A DC and two delivery waves. A vehicle reloads and leaves for a second trip: 12–15 vehicles instead of 21, 3–6 of them hired instead of 12.</span></p></article>
+      <article class="card reveal"><p class="tag warn"><span lang="ru">часы пик</span><span lang="en">rush hours</span></p><p class="rule-num">8–13</p><h3><span lang="ru">маршрутов в день опаздывают в пробках</span><span lang="en">routes a day run late in traffic</span></h3><p><span lang="ru">Если планировать на скоростях свободного потока: 113–318 минут опозданий за день. План со скоростью по часам суток выполним.</span><span lang="en">When the plan uses free-flow speeds: 113–318 minutes late per day. The plan with speeds by time of day holds.</span></p></article>
+    </div>
+    <p class="fine reveal"><a class="link" href="https://github.com/KonkovDV/SynAPS-MobiRoute/blob/main/docs/benchmarks/rules.md"><span lang="ru">Таблицы по каждому дню</span><span lang="en">Day-by-day tables</span> →</a></p>
+  </div>
+</section>
+
+<section id="sheets" class="sec alt">
+  <div class="wrap">
+    <p class="kicker reveal"><span lang="ru">Маршрутные листы</span><span lang="en">Route sheets</span></p>
+    <h2 class="reveal"><span lang="ru">От координат — к маршрутному листу. Без часа простоя у ворот.</span><span lang="en">From coordinates to a route sheet. Without an hour idling at the gate.</span></h2>
+    <p class="sub reveal"><span lang="ru">Синтетический день в Набережных Челнах: склад, три поставщика, 45 заказов, свои и наёмные фургоны и грузовики, норма труда и отдыха, второй рейс для фургонов. Нажмите на маршрут или строку диаграммы — появятся маршрутный лист машины и выбор времени выезда.</span><span lang="en">A synthetic day in Naberezhnye Chelny: a depot, three suppliers, 45 orders, own and hired vans and trucks, the driving-time rule, a second trip for vans. Click a route or a chart row to see that vehicle's route sheet and the choice of its departure.</span></p>
+    <div class="sheets reveal">
+      <div class="card flush sheets-map"><svg id="sheets-map" viewBox="0 0 600 600" role="img" aria-label="Routes of the Naberezhnye Chelny day"></svg></div>
+      <div class="card sheets-side">
+        <div class="card-head"><h3 id="sheets-title">—</h3><span class="tag" id="sheets-tag"></span></div>
+        <dl class="kpis" id="sheets-kpis"></dl>
+        <svg id="sheets-load" viewBox="0 0 520 200" role="img" aria-label="Load on board along the route"></svg>
+        <p class="fine"><span lang="ru">Загрузка после каждой точки: груз со склада едет с начала рейса, при повторной загрузке на складе кузов наполняется снова. Ёмкость проверяется по каждому измерению и рейсу.</span><span lang="en">Load after every stop: depot goods ride from the start of their trip, and a reload fills the body again. Capacity is checked per dimension and per trip.</span></p>
+      </div>
+    </div>
+    <div class="card gantt-card reveal">
+      <div class="card-head"><h3><span lang="ru">День по часам</span><span lang="en">The day by the hour</span></h3><span class="fine" id="sheets-day"></span></div>
+      <svg id="sheets-gantt" role="img" aria-label="Gantt chart of the day"></svg>
+      <div class="legend"><span><i></i><span lang="ru">в пути</span><span lang="en">driving</span></span><span><i class="box wait"></i><span lang="ru">ожидание окна</span><span lang="en">waiting for a window</span></span><span><i class="box svc"></i><span lang="ru">выгрузка (светлее — погрузка)</span><span lang="en">delivery (lighter: pickup)</span></span><span><i class="box reload"></i><span lang="ru">загрузка на складе</span><span lang="en">reload</span></span><span><i class="box rest"></i><span lang="ru">перерыв</span><span lang="en">rest</span></span></div>
+    </div>
+    <div class="card sheet-card reveal">
+      <div class="card-head"><h3><span lang="ru">Маршрутный лист</span><span lang="en">Route sheet</span> · <span id="sheet-name">—</span></h3><span class="fine"><span lang="ru">как в route-sheets.md и route-sheets.csv</span><span lang="en">as in route-sheets.md and route-sheets.csv</span></span></div>
+      <div class="scroll-x" tabindex="0" role="region" aria-label="Route sheet"><table class="policy sheet" id="sheets-table"><thead></thead><tbody></tbody></table></div>
+    </div>
+    <div class="lemma reveal">
+      <div class="card">
+        <p class="tag warn"><span lang="ru">Лемма 4 · когда начинать смену</span><span lang="en">Lemma 4 · when to start the shift</span></p>
+        <p class="formula" aria-label="D of t zero equals the maximum of E minus t zero and c"><i>D</i>(<i>t</i><sub>0</sub>) = max(<i>E</i> − <i>t</i><sub>0</sub>, <i>c</i>), &nbsp;<i>t</i><sub>0</sub> ≤ <i>U</i><sub>0</sub></p>
+        <p class="fine"><span lang="ru"><i>t</i><sub>0</sub> — начало смены (погрузка на складе, затем выезд), <i>E</i> — самое раннее возвращение, <i>c</i> — кратчайшая смена по системе разностных ограничений, <i>U</i><sub>0</sub> — самое позднее начало. Начало в <i>t</i><sub>0</sub>* = <i>E</i> − <i>c</i> даёт и то и другое сразу.</span><span lang="en"><i>t</i><sub>0</sub> is the shift start (loading at the depot, then departure), <i>E</i> the earliest return, <i>c</i> the shortest shift of the difference-constraint system, <i>U</i><sub>0</sub> the latest start. Starting at <i>t</i><sub>0</sub>* = <i>E</i> − <i>c</i> gets both at once.</span></p>
+        <div class="slider">
+          <label for="dep"><span><span lang="ru">Начало смены</span><span lang="en">Shift start</span></span><b id="dep-val">—</b></label>
+          <input type="range" id="dep" min="420" max="780" step="1" value="600" aria-describedby="dep-text">
+        </div>
+        <p id="dep-text" class="dep-text" aria-live="polite"></p>
+        <div class="saved"><b id="sheets-saved">—</b><span><span lang="ru">времени смены за день освобождает начало по лемме 4 — те же маршруты, те же возвращения</span><span lang="en">of shift time a day freed by the Lemma 4 starts: the same routes, the same returns</span></span></div>
+      </div>
+      <div class="card flush curve-card"><svg id="dep-curve" viewBox="0 0 600 400" role="img" aria-label="Shift length as a function of the departure time"></svg></div>
+    </div>
+    <p class="fine reveal"><span lang="ru">Повторить: <code>mobiroute vrp-solve --geo examples/chelny-day.geo.json --sheets</code>. Точки случайны в границах города, названия условные; данные не описывают ни одну компанию. Маршрутный лист — план рейса для водителя, а не путевой лист: реквизиты путевого листа (медосмотры, техконтроль, одометр) ведёт учётная система.</span><span lang="en">Reproduce: <code>mobiroute vrp-solve --geo examples/chelny-day.geo.json --sheets</code>. Points are random inside the city's bounds and names are made up; the data describe no company. A route sheet is the driver's trip plan, not the statutory waybill: its required details (medical and technical checks, odometer) stay in the accounting system.</span></p>
+  </div>
+</section>
+
+<section id="prices" class="sec">
+  <div class="wrap">
+    <p class="kicker reveal"><span lang="ru">Цены</span><span lang="en">Prices</span></p>
+    <h2 class="reveal"><span lang="ru">Сколько стоит каждый заказ. И чего стоит нехватка своей машины.</span><span lang="en">What every order costs. And what running out of own vehicles costs.</span></h2>
+    <p class="sub reveal"><span lang="ru">Тот же день в Челнах. Маршруты, которые перебрал поиск, складываются в задачу линейного программирования; её двойственные оценки — цены: заказа и машины каждого типа. Круг тем больше, чем дороже заказ. Наведите или нажмите.</span><span lang="en">The same day in Chelny. The routes the search went through make a linear programme; its dual values are prices: of an order and of a vehicle of each type. The larger the circle, the dearer the order. Hover or tap.</span></p>
+    <div class="sheets reveal">
+      <div class="card flush sheets-map"><svg id="prices-map" viewBox="0 0 600 600" role="img" aria-label="Orders of the day sized by their price"></svg></div>
+      <div class="card sheets-side">
+        <div class="card-head"><h3 id="prices-order">—</h3><span class="tag"><span lang="ru">заказ</span><span lang="en">order</span></span></div>
+        <dl class="kpis" id="prices-kpis"></dl>
+        <p class="tag"><span lang="ru">Самые дорогие заказы</span><span lang="en">The dearest orders</span></p>
+        <div class="vs prices-top" id="prices-top"></div>
+        <div class="vs-key"><span><i style="background:var(--s1)"></i><span lang="ru">цена (цвет — машина)</span><span lang="en">price (colour: vehicle)</span></span><span><i style="background:var(--muted)"></i><span lang="ru">экономия при отказе</span><span lang="en">saving if dropped</span></span></div>
+      </div>
+    </div>
+    <div class="lemma reveal">
+      <div class="card">
+        <p class="tag warn"><span lang="ru">Двойственная задача · разбиение множества</span><span lang="en">The dual · set partitioning</span></p>
+        <p class="formula" aria-label="maximise the sum of u r plus the sum of n k v k subject to the sum of u r over the orders of a route plus v k being at most the cost of the route"><span class="nowrap">max Σ<i>u</i><sub>r</sub> + Σ<i>n</i><sub>k</sub><i>v</i><sub>k</sub>,</span> <span class="nowrap">Σ<sub>r∈ρ</sub> <i>u</i><sub>r</sub> + <i>v</i><sub>k</sub> ≤ <i>c</i><sub>ρ</sub>,</span> <span class="nowrap"><i>v</i><sub>k</sub> ≤ 0</span></p>
+        <p class="fine"><span lang="ru"><i>u</i><sub>r</sub> — цена заказа, −<i>v</i><sub>k</sub> — рента типа машины, <i>c</i><sub>ρ</sub> — стоимость маршрута ρ, <i>n</i><sub>k</sub> — число машин типа. Ни один маршрут пула не дешевле цен своих заказов; маршруты оптимального плана стоят ровно столько. Из всех оптимальных оценок берётся ближайшая к экономии при отказе: иначе вырожденная задача списывает весь рейс на один заказ.</span><span lang="en"><i>u</i><sub>r</sub> is the price of an order, −<i>v</i><sub>k</sub> the rent of a vehicle type, <i>c</i><sub>ρ</sub> the cost of route ρ, <i>n</i><sub>k</sub> the units of the type. No pool route is cheaper than the prices of its orders; the routes of an optimal plan cost exactly that. Among all optimal duals the one closest to the savings is taken: a degenerate LP would otherwise charge a whole trip to one order.</span></p>
+        <dl class="kpis" id="prices-summary"></dl>
+      </div>
+      <div class="card">
+        <p class="tag"><span lang="ru">Чего стоит ещё одна своя машина</span><span lang="en">What one more own vehicle is worth</span></p>
+        <div class="vs" id="prices-rents"></div>
+        <div class="vs-key"><span><i style="background:var(--s1)"></i><span lang="ru">LP-рента</span><span lang="en">LP rent</span></span><span><i style="background:var(--muted)"></i><span lang="ru">день пересчитан с ещё одной машиной</span><span lang="en">the day solved again with one more</span></span></div>
+        <p class="fine"><span lang="ru">Рента — предельная оценка релаксации: ставка за долю машины при тех маршрутах, что уже в пуле. Пересчёт — целая машина и новый поиск. Рента называет дефицитные типы, пересчёт — сумму; расхождение между ними — цена целочисленности.</span><span lang="en">The rent is a marginal value of the relaxation: a rate per fraction of a vehicle on the routes already in the pool. Solving again is a whole vehicle and a new search. The rent names the scarce types, solving again gives the amount; the difference between them is the price of integrality.</span></p>
+      </div>
+    </div>
+    <p class="fine reveal"><span lang="ru">Повторить: <code>mobiroute vrp-solve --geo examples/chelny-day.geo.json --prices</code> — рядом с планом появятся <code>prices.md</code> и <code>prices.json</code>. Это цены ограниченной мастер-задачи: точные для пула маршрутов, оценка для задачи в целом.</span><span lang="en">Reproduce: <code>mobiroute vrp-solve --geo examples/chelny-day.geo.json --prices</code> writes <code>prices.md</code> and <code>prices.json</code> next to the plan. These are prices of a restricted master problem: exact for the route pool, an estimate for the whole problem.</span></p>
+  </div>
+</section>
+
+<section id="bench" class="sec">
+  <div class="wrap">
+    <p class="kicker reveal"><span lang="ru">Эталоны</span><span lang="en">Benchmarks</span></p>
+    <h2 class="reveal"><span lang="ru">130 открытых задач. Каждый план проверен.</span><span lang="en">130 public instances. Every plan verified.</span></h2>
+    <p class="sub reveal"><span lang="ru">Solomon (VRPTW), Li &amp; Lim и Sartori–Buriol (PDPTW на реальных дорожных временах OSRM), Cordeau (DARP). Клетка — один инстанс: цвет показывает разрыв к лучшему известному решению при том же числе машин. Наведите или нажмите.</span><span lang="en">Solomon (VRPTW), Li &amp; Lim and Sartori–Buriol (PDPTW on real OSRM road times), Cordeau (DARP). One cell, one instance: colour is the gap to the best known solution at the same vehicle count. Hover or tap.</span></p>
+    <div class="card heat reveal" id="heat"></div>
+    <div class="grid3">
+      <article class="card reveal">
+        <p class="tag"><span lang="ru">Точная модель — судья</span><span lang="en">The exact model judges</span></p>
+        <div class="big-stat" id="exact-stat">—</div>
+        <p id="exact-text"></p>
+      </article>
+      <article class="card reveal">
+        <p class="tag"><span lang="ru">OR-Tools Routing, равное время</span><span lang="en">OR-Tools Routing, equal time</span></p>
+        <div class="vs" id="ortools-vs"></div>
+        <div class="vs-key"><span><i style="background:var(--s1)"></i>ALNS</span><span><i style="background:var(--muted)"></i>OR-Tools PCI + GLS</span></div>
+      </article>
+      <article class="card reveal">
+        <p class="tag"><span lang="ru">Профилирование → Rust</span><span lang="en">Profiling → Rust</span></p>
+        <div class="vs" id="speed-vs"></div>
+        <div class="vs-key"><span><i style="background:var(--muted)"></i>Python</span><span><i style="background:var(--s1)"></i><span lang="ru">ядро Rust, тот же план</span><span lang="en">Rust kernel, same plan</span></span></div>
+      </article>
+    </div>
+  </div>
+</section>
+
+<section id="compare" class="sec alt">
+  <div class="wrap">
+    <p class="kicker reveal"><span lang="ru">Сравнение</span><span lang="en">Comparison</span></p>
+    <h2 class="reveal"><span lang="ru">Чем отличается от OR-Tools, VROOM, PyVRP и готовых сервисов.</span><span lang="en">How it differs from OR-Tools, VROOM, PyVRP and finished services.</span></h2>
+    <p class="sub reveal"><span lang="ru">Возможности сверены по документации проектов 14.11.2026. Замеры — при равном времени на один поток, каждый план проверен одним верификатором: против OR-Tools на 18 задачах по 10 секунд, против PyVRP, VROOM и jsprit на 56 задачах Solomon и на задачах в 1000 клиентов.</span><span lang="en">Capabilities checked against each project's documentation on 2026-11-14. Measured at equal time on one thread, every plan checked by the same verifier: against OR-Tools on 18 instances at 10 seconds each, against PyVRP, VROOM and jsprit on the 56 Solomon instances and on 1000-customer instances.</span></p>
+    <div class="vs-stats reveal">
+      <div class="good"><b>12 / 18</b><span><span lang="ru">задач: план ALNS лучше, чем у OR-Tools; на остальных шести — одинаково, хуже — ни на одной</span><span lang="en">instances where the ALNS plan beats OR-Tools; the other six are ties, none is worse</span></span></div>
+      <div class="good"><b>56 / 56</b><span><span lang="ru">задач Solomon с числом машин лучшего известного решения; у PyVRP 50, VROOM 32, jsprit 30</span><span lang="en">Solomon instances at the best-known vehicle count; PyVRP 50, VROOM 32, jsprit 30</span></span></div>
+      <div class="good"><b>−17%</b><span><span lang="ru">стоимость грузового дня со смешанным парком против OR-Tools, до трёх машин меньше</span><span lang="en">cost of a mixed-fleet freight day against OR-Tools, up to three vehicles fewer</span></span></div>
+    </div>
+    <div class="card reveal flush" style="margin-top:16px"><div class="scroll-x" tabindex="0" role="region" aria-label="Solvers at equal time"><table class="scope compare">
+      <caption class="fine" style="caption-side:bottom;text-align:left;padding:14px 18px"><span lang="ru">Один поток, настройки по умолчанию: 10 с на задачу Solomon, 60 с на задачу в 1000 клиентов. В Solomon сначала сравнивают число машин, в остальных наборах — только расстояние; там впереди PyVRP, этот движок второй. </span><span lang="en">One thread, default settings: 10 s per Solomon instance, 60 s per 1000-customer instance. Solomon ranks vehicles first, the other sets distance only; there PyVRP leads and this engine is second. </span><a class="link" href="https://github.com/KonkovDV/SynAPS-MobiRoute/blob/main/docs/benchmarks/solvers.md"><span lang="ru">Все 256 прогонов</span><span lang="en">All 256 runs</span> →</a></caption>
+      <thead><tr><th scope="col"><span lang="ru">Равное время, один верификатор</span><span lang="en">Equal time, one verifier</span></th><th scope="col"><span lang="ru">Этот движок</span><span lang="en">This engine</span></th><th scope="col">PyVRP 0.14</th><th scope="col">VROOM 1.15</th><th scope="col">jsprit 2.0</th></tr></thead>
+      <tbody>
+        <tr><th scope="row"><span lang="ru">Solomon: число машин лучшего известного решения</span><span lang="en">Solomon: at the best-known vehicle count</span></th><td><b>56 / 56</b></td><td>50 / 56</td><td>32 / 56</td><td>30 / 56</td></tr>
+        <tr><th scope="row"><span lang="ru">Solomon: лучший из четырёх (машины, затем расстояние)</span><span lang="en">Solomon: best of the four (vehicles, then distance)</span></th><td><b>38</b></td><td>36</td><td>17</td><td>11</td></tr>
+        <tr><th scope="row"><span lang="ru">Gehring–Homberger, 1000 клиентов: разрыв по расстоянию</span><span lang="en">Gehring–Homberger, 1000 customers: distance gap</span></th><td><span lang="ru">+2,9%</span><span lang="en">+2.9%</span></td><td><b><span lang="ru">+1,2%</span><span lang="en">+1.2%</span></b></td><td><span lang="ru">+15,2%</span><span lang="en">+15.2%</span></td><td><span lang="ru">+20,9%</span><span lang="en">+20.9%</span></td></tr>
+        <tr><th scope="row"><span lang="ru">Uchoa X, 500 и 1000 клиентов: разрыв по расстоянию</span><span lang="en">Uchoa X, 500 and 1000 customers: distance gap</span></th><td><span lang="ru">+2,4%</span><span lang="en">+2.4%</span></td><td><b><span lang="ru">+0,9%</span><span lang="en">+0.9%</span></b></td><td><span lang="ru">+3,5%</span><span lang="en">+3.5%</span></td><td><span lang="ru">+19,0%</span><span lang="en">+19.0%</span></td></tr>
+      </tbody>
+    </table></div></div>
+    <div class="card reveal flush" style="margin-top:16px"><div class="scroll-x" tabindex="0" role="region" aria-label="Comparison"><table class="scope compare">
+      <thead><tr><th scope="col"><span lang="ru">Возможность</span><span lang="en">Capability</span></th><th scope="col"><span lang="ru">Этот движок</span><span lang="en">This engine</span></th><th scope="col">OR-Tools</th><th scope="col">VROOM</th><th scope="col">PyVRP</th><th scope="col">jsprit</th><th scope="col"><span lang="ru">Яндекс Маршрутизация</span><span lang="en">Yandex Routing</span></th></tr></thead>
+      <tbody>
+        <tr><th scope="row"><span lang="ru">Окна, забор и доставка, разнородный парк</span><span lang="en">Windows, pickup and delivery, mixed fleet</span></th><td><span class="pill ok">✓</span></td><td><span class="pill ok">✓</span></td><td><span class="pill ok">✓</span></td><td><span class="pill ok">✓</span></td><td><span class="pill ok">✓</span></td><td><span class="pill mid"><span lang="ru">частично</span><span lang="en">partly</span></span></td></tr>
+        <tr><th scope="row"><span lang="ru">Несколько рейсов за смену</span><span lang="en">Several trips per shift</span></th><td><span class="pill ok">✓</span></td><td><span class="pill mid"><span lang="ru">вручную</span><span lang="en">by hand</span></span></td><td><span class="pill na"><span lang="ru">н/д</span><span lang="en">n/f</span></span></td><td><span class="pill ok">✓</span></td><td><span class="pill na"><span lang="ru">н/д</span><span lang="en">n/f</span></span></td><td><span class="pill ok">✓</span></td></tr>
+        <tr><th scope="row"><span lang="ru">Перерыв по времени за рулём (4,5&nbsp;ч&nbsp;→&nbsp;45&nbsp;мин, 15&nbsp;+&nbsp;30)</span><span lang="en">Break by time at the wheel (4.5&nbsp;h&nbsp;→&nbsp;45&nbsp;min, 15&nbsp;+&nbsp;30)</span></th><td><span class="pill ok">✓</span></td><td><span class="pill mid"><span lang="ru">интервалы</span><span lang="en">intervals</span></span></td><td><span class="pill mid"><span lang="ru">окна</span><span lang="en">windows</span></span></td><td><span class="pill mid">Enterprise</span></td><td><span class="pill na"><span lang="ru">н/д</span><span lang="en">n/f</span></span></td><td><span class="pill na"><span lang="ru">н/д</span><span lang="en">n/f</span></span></td></tr>
+        <tr><th scope="row"><span lang="ru">Зоны запрета для грузовиков: масса, ось, высота</span><span lang="en">Truck access zones: weight, axle load, height</span></th><td><span class="pill ok">✓</span></td><td><span class="pill plan">—</span></td><td><span class="pill mid"><span lang="ru">профиль</span><span lang="en">profile</span></span></td><td><span class="pill plan">—</span></td><td><span class="pill na"><span lang="ru">н/д</span><span lang="en">n/f</span></span></td><td><span class="pill na"><span lang="ru">н/д</span><span lang="en">n/f</span></span></td></tr>
+        <tr><th scope="row"><span lang="ru">Пробки по времени суток</span><span lang="en">Rush hours by time of day</span></th><td><span class="pill ok">✓</span></td><td><span class="pill na"><span lang="ru">н/д</span><span lang="en">n/f</span></span></td><td><span class="pill na"><span lang="ru">н/д</span><span lang="en">n/f</span></span></td><td><span class="pill na"><span lang="ru">н/д</span><span lang="en">n/f</span></span></td><td><span class="pill ok">✓</span></td><td><span class="pill ok">✓</span></td></tr>
+        <tr><th scope="row"><span lang="ru">Доказанный оптимум на той же модели</span><span lang="en">Proven optimum on the same model</span></th><td><span class="pill ok">✓</span></td><td><span class="pill plan">—</span></td><td><span class="pill plan">—</span></td><td><span class="pill plan">—</span></td><td><span class="pill plan">—</span></td><td><span class="pill na"><span lang="ru">н/д</span><span lang="en">n/f</span></span></td></tr>
+        <tr><th scope="row"><span lang="ru">Независимая проверка и сертификат «почему нельзя»</span><span lang="en">Independent check and a “why not” certificate</span></th><td><span class="pill ok">✓</span></td><td><span class="pill na"><span lang="ru">н/д</span><span lang="en">n/f</span></span></td><td><span class="pill na"><span lang="ru">н/д</span><span lang="en">n/f</span></span></td><td><span class="pill na"><span lang="ru">н/д</span><span lang="en">n/f</span></span></td><td><span class="pill na"><span lang="ru">н/д</span><span lang="en">n/f</span></span></td><td><span class="pill na"><span lang="ru">н/д</span><span lang="en">n/f</span></span></td></tr>
+        <tr><th scope="row"><span lang="ru">Открытый код</span><span lang="en">Open source</span></th><td><span class="pill ok">MIT</span></td><td><span class="pill ok">Apache-2.0</span></td><td><span class="pill ok">BSD-2</span></td><td><span class="pill ok">MIT</span></td><td><span class="pill ok">Apache-2.0</span></td><td><span class="pill plan">—</span></td></tr>
+      </tbody>
+    </table></div></div>
+    <p class="fine reveal"><span lang="ru">«Частично» — есть, но не в той форме; «н/д» — не нашли в документации, это не значит «нет». Как выбирать: для классических CVRP/VRPTW без правил парка подходят PyVRP и VROOM, для готового интерфейса логиста — коммерческий сервис; этот движок — для своей модели с режимом труда и отдыха, рейсами, разнородным парком и проверяемым результатом.</span><span lang="en">“Partly”: present in another form; “n/f”: not found in the documentation, which does not mean absent. How to choose: PyVRP and VROOM fit classic CVRP/VRPTW without fleet rules, a commercial service fits a finished dispatcher UI; this engine fits a model of one's own with driving-time rules, trips, a mixed fleet and results that can be checked.</span> <a class="link" href="https://github.com/KonkovDV/SynAPS-MobiRoute/blob/main/docs/comparison.md"><span lang="ru">Обзор, источники и публикации</span><span lang="en">Review, sources and literature</span> →</a></p>
   </div>
 </section>
 
@@ -167,7 +376,7 @@ dropoff 1 cannot start before 402; dropoff 1 → dropoff 12 takes 3 + 15.68 min.
       <article class="card reveal">
         <div class="card-head"><h3><span lang="ru">Гонка до доказанного оптимума</span><span lang="en">Race to a proven optimum</span></h3><button class="pill-btn" id="race-run" type="button"><span lang="ru">Повторить</span><span lang="en">Replay</span></button></div>
         <div class="bars race" id="race"></div>
-        <p class="fine"><span lang="ru">Анимация в 12 раз быстрее реального времени. Оранжевым — оптимум не доказан за 60 с.</span><span lang="en">Animation runs 12× faster than real time. Orange: optimality not proven in 60 s.</span></p>
+        <p class="fine"><span lang="ru">Анимация в 12 раз быстрее реального времени. ✓ — оптимум доказан; = — эвристика нашла опубликованный оптимум, но не доказывает его; +% — разрыв к оптимуму за отведённое время. Оранжевым — оптимальность не доказана.</span><span lang="en">Animation runs 12× faster than real time. ✓ optimum proven; = a heuristic found the published optimum but proves nothing; +% the gap to the optimum when time ran out. Orange: optimality not proven.</span></p>
       </article>
       <article class="card reveal flush">
         <div class="scroll-x" tabindex="0" role="region" aria-label="Solver results"><table id="lab-table"><thead><tr><th scope="col"><span lang="ru">Решатель</span><span lang="en">Solver</span></th><th scope="col"><span lang="ru">Статус</span><span lang="en">Status</span></th><th scope="col" class="num"><span lang="ru">Стоимость</span><span lang="en">Cost</span></th><th scope="col" class="num"><span lang="ru">Время, с</span><span lang="en">Time, s</span></th></tr></thead><tbody></tbody></table></div>
@@ -176,7 +385,7 @@ dropoff 1 cannot start before 402; dropoff 1 → dropoff 12 takes 3 + 15.68 min.
     <article class="insight reveal">
       <div class="pair"><div><p class="mega small">85.27</p><p class="fine"><span lang="ru">нижняя граница LP-релаксации</span><span lang="en">LP relaxation lower bound</span></p></div>
       <div><p class="mega small">294.25</p><p class="fine"><span lang="ru">оптимум</span><span lang="en">optimum</span></p></div></div>
-      <p><span lang="ru"><b>Почему CP-SAT здесь в 49 раз быстрее SCIP.</b> Ограничения big-M дают слабую LP-релаксацию: разрыв 71%. Пропагация времени по дугам в CP-SAT отсекает узкие окна сразу. Вывод для выбора решателя: на плотных окнах — CP; MIP выигрывает, когда добавлены отсечения и важна нижняя граница.</span><span lang="en"><b>Why CP-SAT is 49× faster than SCIP here.</b> Big-M constraints give a weak LP relaxation: a 71% gap. Arc-wise time propagation in CP-SAT prunes tight windows at once. The solver-choice lesson: CP for tight windows; MIP wins once cuts are added and the lower bound matters.</span></p>
+      <p><span lang="ru"><b>Почему CP-SAT здесь в десятки раз быстрее SCIP.</b> Ограничения big-M дают слабую LP-релаксацию: разрыв 71%. Пропагация времени по дугам в CP-SAT отсекает узкие окна сразу. Вывод для выбора решателя: на плотных окнах — CP; MIP выигрывает, когда добавлены отсечения и важна нижняя граница.</span><span lang="en"><b>Why CP-SAT is dozens of times faster than SCIP here.</b> Big-M constraints give a weak LP relaxation: a 71% gap. Arc-wise time propagation in CP-SAT prunes tight windows at once. The solver-choice lesson: CP for tight windows; MIP wins once cuts are added and the lower bound matters.</span></p>
     </article>
     <figure class="fig reveal"><img src="assets/a2-16-timeline.svg" width="852" height="498" loading="lazy" alt="Timeline: for each of 16 requests, its time window, pickup and dropoff starts and the 30-minute ride limit"><figcaption><span lang="ru">Когда обслуживается каждый заказ: серое — узкое окно, линия — поездка, пунктир — лимит 30 минут.</span><span lang="en">When each order is served: grey is the tight window, the line is the ride, dashes mark the 30-minute limit.</span></figcaption></figure>
   </div>
@@ -185,7 +394,7 @@ dropoff 1 cannot start before 402; dropoff 1 → dropoff 12 takes 3 + 15.68 min.
 <section id="lab" class="sec alt">
   <div class="wrap">
     <p class="kicker reveal"><span lang="ru">Попробуйте сами</span><span lang="en">Try it</span></p>
-    <h2 class="reveal"><span lang="ru">Измените маршрут — нотариус ответит в вашем браузере.</span><span lang="en">Change the route. The notary answers in your browser.</span></h2>
+    <h2 class="reveal"><span lang="ru">Измените маршрут — верификатор ответит в вашем браузере.</span><span lang="en">Change the route. The verifier answers in your browser.</span></h2>
     <p class="sub reveal"><span lang="ru">Это тот же алгоритм, что в ядре, перенесённый на JavaScript и сверенный с Python на 513 перестановках. Выберите остановку и сдвиньте её.</span><span lang="en">The same algorithm as in the kernel, ported to JavaScript and checked against Python on 513 permutations. Pick a stop and move it.</span></p>
     <div class="lab reveal">
       <div class="lab-edit">
@@ -213,27 +422,38 @@ dropoff 1 cannot start before 402; dropoff 1 → dropoff 12 takes 3 + 15.68 min.
 <section id="scope" class="sec">
   <div class="wrap">
     <p class="kicker reveal"><span lang="ru">Возможности</span><span lang="en">Scope</span></p>
-    <h2 class="reveal"><span lang="ru">Что ядро умеет сегодня — и что в плане.</span><span lang="en">What the kernel does today, and what is planned.</span></h2>
+    <h2 class="reveal"><span lang="ru">Что движок умеет сегодня — и что в плане.</span><span lang="en">What the engine does today, and what is planned.</span></h2>
     <div class="card reveal flush"><div class="scroll-x" tabindex="0" role="region" aria-label="Capabilities"><table class="scope">
       <thead><tr><th scope="col"><span lang="ru">Задача маршрутизации</span><span lang="en">Routing capability</span></th><th scope="col"><span lang="ru">Статус</span><span lang="en">Status</span></th><th scope="col"><span lang="ru">Как реализовано</span><span lang="en">How</span></th></tr></thead>
       <tbody>
         <tr><th scope="row"><span lang="ru">Временные окна (VRPTW)</span><span lang="en">Time windows (VRPTW)</span></th><td><span class="pill ok"><span lang="ru">есть</span><span lang="en">done</span></span></td><td><span lang="ru">окна на заборе и доставке, ужатие окон, лимит поездки и смены</span><span lang="en">windows at pickup and delivery, tightening, ride and shift limits</span></td></tr>
         <tr><th scope="row">Pickup &amp; delivery (PDPTW)</th><td><span class="pill ok"><span lang="ru">есть</span><span lang="en">done</span></span></td><td><span lang="ru">пара на одной машине, порядок, промежуточная остановка</span><span lang="en">pair on one vehicle, precedence, intermediate stop</span></td></tr>
-        <tr><th scope="row"><span lang="ru">Гетерогенный парк</span><span lang="en">Heterogeneous fleet</span></th><td><span class="pill ok"><span lang="ru">есть</span><span lang="en">done</span></span></td><td><span lang="ru">вместимость в двух размерностях, оборудование, зоны, смены; в точной модели — один тип ТС</span><span lang="en">two capacity dimensions, equipment, zones, shifts; the exact model has one vehicle type</span></td></tr>
+        <tr><th scope="row"><span lang="ru">Гетерогенный парк</span><span lang="en">Heterogeneous fleet</span></th><td><span class="pill ok"><span lang="ru">есть</span><span lang="en">done</span></span></td><td><span lang="ru">типы ТС со своими ёмкостью, стоимостью, скоростью, сменой и оборудованием; свои и наёмные; в эвристиках и в точной модели CP-SAT</span><span lang="en">vehicle types with their own capacity, cost, speed, shift and equipment; own and hired; in the heuristics and in the exact CP-SAT model</span></td></tr>
         <tr><th scope="row"><span lang="ru">Совместимость заказ — ТС — водитель</span><span lang="en">Order–vehicle–driver compatibility</span></th><td><span class="pill ok"><span lang="ru">есть</span><span lang="en">done</span></span></td><td><span lang="ru">квалификация, смена, перерывы и недоступность</span><span lang="en">qualification, shift, breaks and unavailability</span></td></tr>
-        <tr><th scope="row"><span lang="ru">Точные модели: CP и MIP</span><span lang="en">Exact models: CP and MIP</span></th><td><span class="pill ok"><span lang="ru">есть</span><span lang="en">done</span></span></td><td>CP-SAT, SCIP, HiGHS, CBC, <span lang="ru">LP-граница</span><span lang="en">LP bound</span></td></tr>
-        <tr><th scope="row"><span lang="ru">Эвристики и метаэвристики</span><span lang="en">Heuristics and metaheuristics</span></th><td><span class="pill ok"><span lang="ru">есть</span><span lang="en">done</span></span></td><td><span lang="ru">вставка, beam, ALNS (Shaw, worst, route, random; отжиг), скользящий горизонт</span><span lang="en">insertion, beam, ALNS (Shaw, worst, route, random; annealing), rolling horizon</span></td></tr>
+        <tr><th scope="row"><span lang="ru">Точные модели: CP и MIP</span><span lang="en">Exact models: CP and MIP</span></th><td><span class="pill ok"><span lang="ru">есть</span><span lang="en">done</span></span></td><td>CP-SAT, SCIP, HiGHS, CBC, <span lang="ru">LP-граница; разбиение множества по пулу маршрутов ALNS</span><span lang="en">LP bound; set partitioning over the ALNS route pool</span></td></tr>
+        <tr><th scope="row"><span lang="ru">Эвристики и метаэвристики</span><span lang="en">Heuristics and metaheuristics</span></th><td><span class="pill ok"><span lang="ru">есть</span><span lang="en">done</span></span></td><td><span lang="ru">regret-вставка, ALNS (5 операторов разрушения, отжиг), guided ejection для сокращения парка, слияние маршрутов на машину другого типа, локальный поиск relocate / swap / 2-opt* / 2-opt с проверкой окон за O(1), beam, скользящий горизонт</span><span lang="en">regret insertion, ALNS (5 ruin operators, annealing), guided ejection to cut the fleet, merging routes onto another vehicle type, relocate / swap / 2-opt* / 2-opt local search with O(1) window checks, beam, rolling horizon</span></td></tr>
         <tr><th scope="row"><span lang="ru">Перепланирование в течение дня</span><span lang="en">Same-day re-planning</span></th><td><span class="pill ok"><span lang="ru">есть</span><span lang="en">done</span></span></td><td><span lang="ru">срочный заказ, отмена, неявка, пробка, поломка; сравнение планов</span><span lang="en">urgent order, cancellation, no-show, traffic, breakdown; plan diff</span></td></tr>
-        <tr><th scope="row"><span lang="ru">Вектор ёмкости: кг, м³, паллеты</span><span lang="en">Capacity vector: kg, m³, pallets</span></th><td><span class="pill plan"><span lang="ru">в плане</span><span lang="en">planned</span></span></td><td><span lang="ru">обобщение двух размерностей до произвольного вектора</span><span lang="en">generalise two dimensions to an arbitrary vector</span></td></tr>
-        <tr><th scope="row"><span lang="ru">Стоимость по типам ТС</span><span lang="en">Cost by vehicle type</span></th><td><span class="pill plan"><span lang="ru">в плане</span><span lang="en">planned</span></span></td><td><span lang="ru">фиксированная за выход + переменная за км и час</span><span lang="en">fixed per dispatch plus variable per km and hour</span></td></tr>
-        <tr><th scope="row"><span lang="ru">Эталоны Li &amp; Lim, Solomon</span><span lang="en">Li &amp; Lim, Solomon benchmarks</span></th><td><span class="pill plan"><span lang="ru">в плане</span><span lang="en">planned</span></span></td><td><span lang="ru">загрузчики и сверка с опубликованными решениями</span><span lang="en">loaders and comparison with published solutions</span></td></tr>
+        <tr><th scope="row"><span lang="ru">Вектор ёмкости: кг, м³, паллеты</span><span lang="en">Capacity vector: kg, m³, pallets</span></th><td><span class="pill ok"><span lang="ru">есть</span><span lang="en">done</span></span></td><td><span lang="ru">любая размерность, в эвристиках, ядре Rust, точной модели и верификаторе</span><span lang="en">any dimension, in the heuristics, the Rust kernel, the exact model and the verifier</span></td></tr>
+        <tr><th scope="row"><span lang="ru">Стоимость по типам ТС</span><span lang="en">Cost by vehicle type</span></th><td><span class="pill ok"><span lang="ru">есть</span><span lang="en">done</span></span></td><td><span lang="ru">плата за выход + руб/км + руб/ч; разные профили скорости</span><span lang="en">fixed fee + per km + per hour; separate speed profiles</span></td></tr>
+        <tr><th scope="row"><span lang="ru">Эталоны Solomon, Li &amp; Lim, Sartori–Buriol, Cordeau</span><span lang="en">Solomon, Li &amp; Lim, Sartori–Buriol, Cordeau</span></th><td><span class="pill ok"><span lang="ru">есть</span><span lang="en">done</span></span></td><td><span lang="ru">130 инстансов с SHA-256, разрыв к лучшим известным решениям</span><span lang="en">130 instances pinned by SHA-256, gaps to best known solutions</span></td></tr>
+        <tr><th scope="row"><span lang="ru">Сравнение с OR-Tools Routing</span><span lang="en">Head-to-head with OR-Tools Routing</span></th><td><span class="pill ok"><span lang="ru">есть</span><span lang="en">done</span></span></td><td><span lang="ru">та же модель, равное время, тот же верификатор</span><span lang="en">same model, equal time, same verifier</span></td></tr>
+        <tr><th scope="row"><span lang="ru">Сравнение с PyVRP, VROOM, jsprit</span><span lang="en">Head-to-head with PyVRP, VROOM, jsprit</span></th><td><span class="pill ok"><span lang="ru">есть</span><span lang="en">done</span></span></td><td><span lang="ru">Solomon и задачи в 1000 клиентов, равное время, один поток, тот же верификатор</span><span lang="en">Solomon and 1000-customer instances, equal time, one thread, same verifier</span></td></tr>
+        <tr><th scope="row"><span lang="ru">Цены заказов и рента машин</span><span lang="en">Order prices and vehicle rents</span></th><td><span class="pill ok"><span lang="ru">есть</span><span lang="en">done</span></span></td><td><span lang="ru">двойственная задача LP по пулу маршрутов; из вырожденного множества решений — ближайшее к экономии при отказе</span><span lang="en">the dual of the LP over the route pool; among degenerate optima, the one closest to the removal savings</span></td></tr>
+        <tr><th scope="row"><span lang="ru">Заказы, от которых можно отказаться</span><span lang="en">Orders that may be refused</span></th><td><span class="pill ok"><span lang="ru">есть</span><span lang="en">done</span></span></td><td><span lang="ru">заказ со штрафом обслуживается, пока это дешевле отказа; оптимум CP-SAT в 87 задачах из 90</span><span lang="en">an order with a penalty is served while that is cheaper than refusing it; the CP-SAT optimum on 87 of 90 instances</span></td></tr>
+        <tr><th scope="row"><span lang="ru">Заявки в реальном времени</span><span lang="en">Orders in real time</span></th><td><span class="pill ok"><span lang="ru">есть</span><span lang="en">done</span></span></td><td><span lang="ru">заморозка проеханного, вставка за доли мс, переоптимизация живого состояния</span><span lang="en">freeze what is driven, insert in a fraction of a ms, re-optimise the live state</span></td></tr>
+        <tr><th scope="row"><span lang="ru">Опоздание вместо «мягких окон»</span><span lang="en">Lateness instead of soft windows</span></th><td><span class="pill ok"><span lang="ru">есть</span><span lang="en">done</span></span></td><td><span lang="ru">минимум максимального и суммарного опоздания (Беллман–Форд, LP)</span><span lang="en">least maximum and total lateness (Bellman–Ford, LP)</span></td></tr>
+        <tr><th scope="row"><span lang="ru">Несколько рейсов, перерывы, время суток</span><span lang="en">Multi-trip, breaks, time of day</span></th><td><span class="pill ok"><span lang="ru">есть</span><span lang="en">done</span></span></td><td><span lang="ru">повторная загрузка на складе (ёмкость по рейсам), норма 4,5 ч / 45 мин, скорость по часам суток (модель Ichoua–Gendreau–Potvin, FIFO); в ядре Rust — перерывы и рейсы</span><span lang="en">reloading at the depot (capacity per trip), the 4.5 h / 45 min rule, speeds by time of day (Ichoua–Gendreau–Potvin, FIFO); rests and trips in the Rust kernel</span></td></tr>
+        <tr><th scope="row"><span lang="ru">Режим труда и отдыха, оплата смены</span><span lang="en">Driving-time rules, paid shift</span></th><td><span class="pill ok"><span lang="ru">есть</span><span lang="en">done</span></span></td><td><span lang="ru">перерыв 45 мин после 4,5 ч вождения и разделённый 15 + 30 (приказ № 424, регламент ЕС 561/2006); проверка в каждом маршрутном листе; цена часа за всю смену с ожиданием</span><span lang="en">a 45 min break after 4.5 h of driving and the 15 + 30 split (Order No. 424, EU Regulation 561/2006); a check on every route sheet; the hourly rate on the whole shift, waiting included</span></td></tr>
+        <tr><th scope="row"><span lang="ru">Ограничения для грузовиков</span><span lang="en">Truck restrictions</span></th><td><span class="pill ok"><span lang="ru">есть</span><span lang="en">done</span></span></td><td><span lang="ru">зоны с пределами массы, нагрузки на ось, высоты и запретом типов (знаки 3.4, 3.11–3.13); грузовые матрицы Valhalla</span><span lang="en">zones with weight, axle-load and height limits and banned types (signs 3.4, 3.11–3.13); truck-aware Valhalla matrices</span></td></tr>
+        <tr><th scope="row"><span lang="ru">1000 клиентов и больше</span><span lang="en">1000 customers and more</span></th><td><span class="pill ok"><span lang="ru">есть</span><span lang="en">done</span></span></td><td><span lang="ru">формат VRPLIB, наборы Gehring–Homberger и X; гранулярный режим поиска; в 2,9 раза больше итераций за минуту после профилирования</span><span lang="en">VRPLIB format, Gehring–Homberger and X sets; a granular search mode; 2.9 times more iterations a minute after profiling</span></td></tr>
+        <tr><th scope="row"><span lang="ru">Координаты на входе, маршрутные листы на выходе</span><span lang="en">Coordinates in, route sheets out</span></th><td><span class="pill ok"><span lang="ru">есть</span><span lang="en">done</span></span></td><td><span lang="ru">JSON с широтой и долготой; матрицы офлайн или с сервера OSRM (<code>table</code>); маршрутные листы CSV, Markdown и диаграмма Ганта; выезд без простоя — кратчайшая смена по лемме 4</span><span lang="en">JSON with latitude and longitude; matrices offline or from an OSRM server (<code>table</code>); route sheets as CSV, Markdown and a Gantt chart; departure without idling, the shortest shift by Lemma 4</span></td></tr>
       </tbody></table></div></div>
 
     <div class="grid2 cargo">
       <div class="reveal">
-        <h3 class="h3"><span lang="ru">От пассажиров к грузам: та же алгебра, другие единицы</span><span lang="en">From passengers to cargo: same algebra, other units</span></h3>
-        <p class="sub"><span lang="ru">Пассажирская задача — частный случай PDPTW. При переносе на грузовую логистику меняются единицы ёмкости и стоимость, а не логика расписания.</span><span lang="en">The passenger problem is a special case of PDPTW. Moving to cargo changes capacity units and costs, not the scheduling logic.</span></p>
-        <a class="link" href="https://github.com/KonkovDV/SynAPS-MobiRoute/blob/main/docs/cargo-vrp-porting-plan.md"><span lang="ru">План переноса с этапами и критериями приёмки</span><span lang="en">Porting plan with stages and acceptance criteria</span> →</a>
+        <h3 class="h3"><span lang="ru">От пассажиров к грузам: та же модель расписания, другие единицы</span><span lang="en">From passengers to cargo: the same scheduling model, other units</span></h3>
+        <p class="sub"><span lang="ru">Пассажирская задача — частный случай PDPTW. Грузовой движок использует ту же логику расписания и проверки; меняются единицы ёмкости, стоимость и правила парка.</span><span lang="en">The passenger problem is a special case of PDPTW. The cargo engine uses the same scheduling and verification logic; capacity units, costs and fleet rules change.</span></p>
+        <a class="link" href="https://github.com/KonkovDV/SynAPS-MobiRoute/blob/main/docs/cargo-vrp.md"><span lang="ru">Грузовой VRP: модель, алгоритмы, сценарии</span><span lang="en">Cargo VRP: model, algorithms, scenarios</span> →</a>
       </div>
       <ul class="map reveal">
         <li><span><span lang="ru">Места и колясочные места</span><span lang="en">Seats and wheelchair spaces</span></span><b><span lang="ru">Килограммы, кубометры, паллеты</span><span lang="en">Kilograms, cubic metres, pallets</span></b></li>
@@ -251,7 +471,7 @@ dropoff 1 cannot start before 402; dropoff 1 → dropoff 12 takes 3 + 15.68 min.
     <p class="kicker reveal"><span lang="ru">Инженерная дисциплина</span><span lang="en">Engineering discipline</span></p>
     <h2 class="reveal"><span lang="ru">Каждое число на этой странице воспроизводится.</span><span lang="en">Every number on this page is reproducible.</span></h2>
     <div class="grid3 eng">
-      <article class="card reveal"><h3>465+ <span lang="ru">тестов</span><span lang="en">tests</span></h3><p><span lang="ru">Нотариус, сверка Rust с Python-эталоном, атаки на проверку: подделанные часы, перегруз, спрятанное ожидание.</span><span lang="en">Notary, Rust against a Python oracle, attacks on the check: forged clocks, overloads, hidden waiting.</span></p></article>
+      <article class="card reveal"><h3>604 <span lang="ru">теста</span><span lang="en">tests</span></h3><p><span lang="ru">Верификатор, сверка Rust с эталоном на Python, 11 свойств Hypothesis, атаки на проверку: подделанные часы, перегруз, спрятанное ожидание. Покрытие 92%.</span><span lang="en">The verifier, Rust against its Python reference, 11 Hypothesis properties, attacks on the check: forged clocks, overloads, hidden waiting. 92% coverage.</span></p></article>
       <article class="card reveal"><h3>mypy --strict · ruff · clippy</h3><p><span lang="ru">Строгая типизация Python, предупреждения Rust считаются ошибками. Девять проверок CI на каждый запрос на слияние.</span><span lang="en">Strict Python typing, Rust warnings are errors. Nine CI checks on every pull request.</span></p></article>
       <article class="card reveal"><h3>SHA-256</h3><p><span lang="ru">Сравнение с литературой публикуется только для побайтно того же файла эталона и только после проверки плана.</span><span lang="en">A literature comparison is published only for the byte-identical instance and only after the plan is verified.</span></p></article>
     </div>
@@ -259,19 +479,18 @@ dropoff 1 cannot start before 402; dropoff 1 → dropoff 12 takes 3 + 15.68 min.
       <div class="reveal">
         <h3 class="h3"><span lang="ru">Честные границы</span><span lang="en">Honest limits</span></h3>
         <ul class="limits">
-          <li><span lang="ru">Данные — синтетические сценарии и один открытый эталон. Данных заказчика и пилота нет.</span><span lang="en">Data is synthetic scenarios plus one open benchmark. No customer data, no pilot.</span></li>
-          <li><span lang="ru">Уровень готовности 4: лабораторная проверка. Обещаний экономии нет.</span><span lang="en">Readiness level 4: lab validation. No savings claims.</span></li>
-          <li><span lang="ru">Эвристики ядра работают в своей постановке и с литературой не сравниваются.</span><span lang="en">The kernel heuristics use their own formulation and are not compared with the literature.</span></li>
+          <li><span lang="ru">Данные — открытые эталоны и синтетические дни. Данных заказчика и пилота нет, обещаний экономии тоже.</span><span lang="en">Data: public benchmarks and synthetic days. No customer data, no pilot, no savings claims.</span></li>
+          <li><span lang="ru">Перерыв — один за смену; пробки — один профиль скорости на всю сеть; живой диспетчер этих правил пока не учитывает.</span><span lang="en">One rest per shift; traffic is one speed profile for the whole network; the live dispatcher does not handle these rules yet.</span></li>
+          <li><span lang="ru">Эвристики не доказывают оптимум; разрыв к лучшим решениям опубликован по каждому инстансу.</span><span lang="en">Heuristics prove no optimum; the gap to the best known solution is published per instance.</span></li>
           <li><span lang="ru">Замеры скорости — на одной машине, это не SLA.</span><span lang="en">Speed numbers come from one machine and are not an SLA.</span></li>
         </ul>
       </div>
       <div class="reveal">
-        <h3 class="h3"><span lang="ru">Три команды до проверенного оптимума</span><span lang="en">Three commands to a verified optimum</span></h3>
+        <h3 class="h3"><span lang="ru">Четыре команды до проверенного плана</span><span lang="en">Four commands to a verified plan</span></h3>
         <div class="code"><button class="pill-btn copy" type="button" data-copy="cmds" aria-label="Copy commands">copy</button><pre tabindex="0"><code id="cmds">pip install -e ".[dev]" maturin
 maturin develop --release -m native/mobiroute_native/Cargo.toml
-mobiroute literature-benchmark \
-  --instance benchmark/instances/cordeau/a2-16.txt \
-  --out-dir out --svg</code></pre></div>
+mobiroute vrp-solve --generate cargo --orders 120 --out-dir out --svg
+mobiroute vrp-dispatch --day plant --policy insertion+alns --out-dir out</code></pre></div>
         <div class="cta"><a class="btn primary" href="https://github.com/KonkovDV/SynAPS-MobiRoute"><span lang="ru">Открыть репозиторий</span><span lang="en">Open the repository</span></a><a class="btn ghost" href="https://github.com/KonkovDV/SynAPS-MobiRoute/blob/main/docs/mathematical-formulation.md"><span lang="ru">Математическая постановка</span><span lang="en">Mathematical formulation</span></a></div>
       </div>
     </div>
@@ -281,7 +500,7 @@ mobiroute literature-benchmark \
 
 <footer class="foot"><div class="wrap">
   <p>SynAPS-MobiRoute · MIT · <a href="https://github.com/KonkovDV">Dmitrij Konkov</a></p>
-  <p><span lang="ru">Источники чисел: </span><span lang="en">Sources: </span><a href="https://github.com/KonkovDV/SynAPS-MobiRoute/blob/main/docs/benchmarks/solver-lab-a2-16.md">solver lab</a> · <a href="https://github.com/KonkovDV/SynAPS-MobiRoute/blob/main/docs/native-acceleration.md"><span lang="ru">скорость</span><span lang="en">speed</span></a> · <a href="https://github.com/KonkovDV/SynAPS-MobiRoute/blob/main/CHANGELOG.md">changelog</a></p>
+  <p><span lang="ru">Источники чисел: </span><span lang="en">Sources: </span><a href="https://github.com/KonkovDV/SynAPS-MobiRoute/blob/main/docs/benchmarks/vrp-public-benchmarks.md"><span lang="ru">эталоны</span><span lang="en">benchmarks</span></a> · <a href="https://github.com/KonkovDV/SynAPS-MobiRoute/blob/main/docs/benchmarks/exact-vs-alns.md">CP-SAT vs ALNS</a> · <a href="https://github.com/KonkovDV/SynAPS-MobiRoute/blob/main/docs/benchmarks/ortools-vs-alns.md">OR-Tools vs ALNS</a> · <a href="https://github.com/KonkovDV/SynAPS-MobiRoute/blob/main/docs/benchmarks/realtime-dispatch.md"><span lang="ru">диспетчеризация</span><span lang="en">dispatch</span></a> · <a href="https://github.com/KonkovDV/SynAPS-MobiRoute/blob/main/docs/benchmarks/solver-lab-a2-16.md">solver lab</a> · <a href="https://github.com/KonkovDV/SynAPS-MobiRoute/blob/main/docs/native-acceleration.md"><span lang="ru">скорость</span><span lang="en">speed</span></a> · <a href="https://github.com/KonkovDV/SynAPS-MobiRoute/blob/main/CHANGELOG.md">changelog</a></p>
 </div></footer>
 
 <noscript><style>.reveal{opacity:1!important;transform:none!important}</style></noscript>

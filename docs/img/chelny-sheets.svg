@@ -1,0 +1,195 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1000" height="370" viewBox="0 0 1000 370" role="img" aria-label="chelny-day-1: маршрутные листы">
+<style>
+  .surface { fill: #fcfcfb; }
+  .ink { fill: #0b0b0b; } .ink2 { fill: #52514e; } .muted { fill: #898781; }
+  .grid { stroke: #e1e0d9; stroke-width: 1; } .axis { stroke: #c3c2b7; stroke-width: 1; }
+  .window { fill: #898781; fill-opacity: 0.22; }
+  .limit { stroke: #898781; stroke-width: 1; stroke-dasharray: 3 3; }
+  .depot { fill: #0b0b0b; }
+  .s0 { stroke: #2a78d6; } .f0 { fill: #2a78d6; } .s1 { stroke: #eb6834; } .f1 { fill: #eb6834; } .s2 { stroke: #1baf7a; } .f2 { fill: #1baf7a; } .s3 { stroke: #eda100; } .f3 { fill: #eda100; } .s4 { stroke: #e87ba4; } .f4 { fill: #e87ba4; } .s5 { stroke: #008300; } .f5 { fill: #008300; } .s6 { stroke: #6250d6; } .f6 { fill: #6250d6; }
+  @media (prefers-color-scheme: dark) {
+    .surface { fill: #1a1a19; }
+    .ink { fill: #f0efec; } .ink2 { fill: #c3c2b7; }
+    .grid { stroke: #2c2c2a; } .axis { stroke: #383835; }
+    .depot { fill: #f0efec; }
+    .s0 { stroke: #3987e5; } .f0 { fill: #3987e5; } .s1 { stroke: #d95926; } .f1 { fill: #d95926; } .s2 { stroke: #199e70; } .f2 { fill: #199e70; } .s3 { stroke: #c98500; } .f3 { fill: #c98500; } .s4 { stroke: #d55181; } .f4 { fill: #d55181; } .s5 { stroke: #008300; } .f5 { fill: #008300; } .s6 { stroke: #9085e9; } .f6 { fill: #9085e9; }
+  }
+  text { font-family: system-ui, -apple-system, "Segoe UI", sans-serif; }
+</style>
+<style>
+  .drive { stroke: #898781; stroke-width: 2.5; stroke-linecap: round; }
+  .wait { fill: #898781; fill-opacity: 0.16; }
+  .rest { fill: #eda100; } .reload { fill: #52514e; } .pick { fill-opacity: 0.5; }
+  .hour { stroke: #e1e0d9; stroke-width: 1; }
+  @media (prefers-color-scheme: dark) {
+    .drive { stroke: #898781; } .wait { fill-opacity: 0.22; }
+    .rest { fill: #c98500; } .reload { fill: #c3c2b7; } .hour { stroke: #2c2c2a; }
+  }
+</style>
+<rect class="surface" width="1000" height="370" rx="8"/>
+<text class="ink" x="24" y="32" font-size="17" font-weight="600">chelny-day-1: маршрутные листы</text>
+<text class="ink2" x="24" y="54" font-size="12.5">7 машин · 333,9 км · стоимость 27 544 ₽</text>
+<text class="muted" x="24" y="74" font-size="12">линия — в пути · серый фон — ожидание · цвет — выгрузка (светлее — погрузка) · тёмное — загрузка на складе · жёлтое — перерыв</text>
+<line class="hour" x1="168.0" y1="86" x2="168.0" y2="336"/>
+<text class="muted" x="168.0" y="354" font-size="11.5" text-anchor="middle">07:00</text>
+<line class="hour" x1="248.8" y1="86" x2="248.8" y2="336"/>
+<text class="muted" x="248.8" y="354" font-size="11.5" text-anchor="middle">08:00</text>
+<line class="hour" x1="329.6" y1="86" x2="329.6" y2="336"/>
+<text class="muted" x="329.6" y="354" font-size="11.5" text-anchor="middle">09:00</text>
+<line class="hour" x1="410.4" y1="86" x2="410.4" y2="336"/>
+<text class="muted" x="410.4" y="354" font-size="11.5" text-anchor="middle">10:00</text>
+<line class="hour" x1="491.2" y1="86" x2="491.2" y2="336"/>
+<text class="muted" x="491.2" y="354" font-size="11.5" text-anchor="middle">11:00</text>
+<line class="hour" x1="572.0" y1="86" x2="572.0" y2="336"/>
+<text class="muted" x="572.0" y="354" font-size="11.5" text-anchor="middle">12:00</text>
+<line class="hour" x1="652.8" y1="86" x2="652.8" y2="336"/>
+<text class="muted" x="652.8" y="354" font-size="11.5" text-anchor="middle">13:00</text>
+<line class="hour" x1="733.6" y1="86" x2="733.6" y2="336"/>
+<text class="muted" x="733.6" y="354" font-size="11.5" text-anchor="middle">14:00</text>
+<line class="hour" x1="814.4" y1="86" x2="814.4" y2="336"/>
+<text class="muted" x="814.4" y="354" font-size="11.5" text-anchor="middle">15:00</text>
+<line class="hour" x1="895.2" y1="86" x2="895.2" y2="336"/>
+<text class="muted" x="895.2" y="354" font-size="11.5" text-anchor="middle">16:00</text>
+<line class="hour" x1="976.0" y1="86" x2="976.0" y2="336"/>
+<text class="muted" x="976.0" y="354" font-size="11.5" text-anchor="middle">17:00</text>
+<text class="ink" x="24" y="107.0" font-size="13" font-weight="600">van #1</text>
+<text class="muted" x="24" y="121.0" font-size="11">своя · 2 рейса</text>
+<line class="drive" x1="456.4" y1="109.0" x2="460.3" y2="109.0"/>
+<rect class="f0" x="460.3" y="101.0" width="24.2" height="16" rx="2"><title>выгрузка Z014 Клиент 14 (условн.) 10:37-10:55</title></rect>
+<line class="drive" x1="484.6" y1="109.0" x2="491.2" y2="109.0"/>
+<rect class="f0" x="491.2" y="101.0" width="18.9" height="16" rx="2"><title>выгрузка Z020 Клиент 20 (условн.) 11:00-11:14</title></rect>
+<line class="drive" x1="510.1" y1="109.0" x2="513.2" y2="109.0"/>
+<rect class="f0" x="513.2" y="101.0" width="18.9" height="16" rx="2"><title>выгрузка Z011 Клиент 11 (условн.) 11:16-11:30</title></rect>
+<line class="drive" x1="532.0" y1="109.0" x2="539.3" y2="109.0"/>
+<rect class="reload" x="539.3" y="101.0" width="33.7" height="16" rx="2"><title>загрузка на складе Склад (условн.) 11:36-12:01</title></rect>
+<line class="drive" x1="573.0" y1="109.0" x2="608.3" y2="109.0"/>
+<rect class="f0" x="608.3" y="101.0" width="29.6" height="16" rx="2"><title>выгрузка Z002 Клиент 2 (условн.) 12:27-12:49</title></rect>
+<line class="drive" x1="637.9" y1="109.0" x2="657.7" y2="109.0"/>
+<rect class="f0" x="657.7" y="101.0" width="18.9" height="16" rx="2"><title>выгрузка Z027 Клиент 27 (условн.) 13:04-13:18</title></rect>
+<line class="drive" x1="676.6" y1="109.0" x2="698.2" y2="109.0"/>
+<text class="ink" x="24" y="141.0" font-size="13" font-weight="600">truck #1</text>
+<text class="muted" x="24" y="155.0" font-size="11">своя · 1 рейс</text>
+<line class="drive" x1="285.2" y1="143.0" x2="308.5" y2="143.0"/>
+<rect class="f1" x="308.5" y="135.0" width="29.6" height="16" rx="2"><title>выгрузка Z025 Клиент 25 (условн.) 08:44-09:06</title></rect>
+<line class="drive" x1="338.1" y1="143.0" x2="345.1" y2="143.0"/>
+<rect class="f1" x="345.1" y="135.0" width="29.6" height="16" rx="2"><title>выгрузка Z030 Клиент 30 (условн.) 09:12-09:34</title></rect>
+<line class="drive" x1="374.7" y1="143.0" x2="383.4" y2="143.0"/>
+<rect class="f1 pick" x="383.4" y="135.0" width="20.2" height="16" rx="2"><title>погрузка Z042 Поставщик 3 (условн.) 09:40-09:55</title></rect>
+<rect class="f1 pick" x="403.6" y="135.0" width="20.2" height="16" rx="2"><title>погрузка Z045 Поставщик 3 (условн.) 09:55-10:10</title></rect>
+<rect class="f1 pick" x="423.8" y="135.0" width="20.2" height="16" rx="2"><title>погрузка Z024 Поставщик 3 (условн.) 10:10-10:25</title></rect>
+<line class="drive" x1="444.0" y1="143.0" x2="453.3" y2="143.0"/>
+<rect class="f1" x="453.3" y="135.0" width="24.2" height="16" rx="2"><title>выгрузка Z024 Клиент 24 (условн.) 10:32-10:50</title></rect>
+<line class="drive" x1="477.5" y1="143.0" x2="491.2" y2="143.0"/>
+<rect class="f1" x="491.2" y="135.0" width="24.2" height="16" rx="2"><title>выгрузка Z023 Клиент 23 (условн.) 11:00-11:18</title></rect>
+<line class="drive" x1="515.4" y1="143.0" x2="523.9" y2="143.0"/>
+<rect class="f1 pick" x="523.9" y="135.0" width="20.2" height="16" rx="2"><title>погрузка Z006 Поставщик 2 (условн.) 11:24-11:39</title></rect>
+<rect class="f1 pick" x="544.1" y="135.0" width="20.2" height="16" rx="2"><title>погрузка Z043 Поставщик 2 (условн.) 11:39-11:54</title></rect>
+<line class="drive" x1="564.3" y1="143.0" x2="574.6" y2="143.0"/>
+<rect class="f1" x="574.6" y="135.0" width="18.9" height="16" rx="2"><title>выгрузка Z044 Клиент 44 (условн.) 12:02-12:16</title></rect>
+<line class="drive" x1="593.4" y1="143.0" x2="623.4" y2="143.0"/>
+<rect class="wait" x="623.4" y="135.0" width="110.2" height="16" rx="2"/>
+<rect class="f1" x="733.6" y="135.0" width="18.9" height="16" rx="2"><title>выгрузка Z040 Клиент 40 (условн.) 14:00-14:14</title></rect>
+<line class="drive" x1="752.5" y1="143.0" x2="757.2" y2="143.0"/>
+<rect class="f1" x="757.2" y="135.0" width="29.6" height="16" rx="2"><title>выгрузка Z043 Клиент 43 (условн.) 14:17-14:39</title></rect>
+<line class="drive" x1="786.8" y1="143.0" x2="807.7" y2="143.0"/>
+<rect class="f1" x="807.7" y="135.0" width="18.9" height="16" rx="2"><title>выгрузка Z045 Клиент 45 (условн.) 14:55-15:09</title></rect>
+<line class="drive" x1="826.5" y1="143.0" x2="861.4" y2="143.0"/>
+<rect class="f1" x="861.4" y="135.0" width="29.6" height="16" rx="2"><title>выгрузка Z042 Клиент 42 (условн.) 15:35-15:57</title></rect>
+<line class="drive" x1="891.1" y1="143.0" x2="894.6" y2="143.0"/>
+<rect class="f1" x="894.6" y="135.0" width="18.9" height="16" rx="2"><title>выгрузка Z006 Клиент 6 (условн.) 16:00-16:14</title></rect>
+<line class="drive" x1="913.5" y1="143.0" x2="916.3" y2="143.0"/>
+<rect class="f1" x="916.3" y="135.0" width="24.2" height="16" rx="2"><title>выгрузка Z032 Клиент 32 (условн.) 16:16-16:34</title></rect>
+<line class="drive" x1="940.6" y1="143.0" x2="960.6" y2="143.0"/>
+<text class="ink" x="24" y="175.0" font-size="13" font-weight="600">van #2</text>
+<text class="muted" x="24" y="189.0" font-size="11">своя · 2 рейса</text>
+<line class="drive" x1="425.0" y1="177.0" x2="443.4" y2="177.0"/>
+<rect class="f2" x="443.4" y="169.0" width="18.9" height="16" rx="2"><title>выгрузка Z018 Клиент 18 (условн.) 10:24-10:38</title></rect>
+<line class="drive" x1="462.2" y1="177.0" x2="491.2" y2="177.0"/>
+<rect class="f2" x="491.2" y="169.0" width="29.6" height="16" rx="2"><title>выгрузка Z041 Клиент 41 (условн.) 11:00-11:22</title></rect>
+<line class="drive" x1="520.8" y1="177.0" x2="532.5" y2="177.0"/>
+<rect class="f2 pick" x="532.5" y="169.0" width="20.2" height="16" rx="2"><title>погрузка Z029 Поставщик 3 (условн.) 11:31-11:46</title></rect>
+<line class="drive" x1="552.7" y1="177.0" x2="561.0" y2="177.0"/>
+<rect class="f2" x="561.0" y="169.0" width="29.6" height="16" rx="2"><title>выгрузка Z029 Клиент 29 (условн.) 11:52-12:14</title></rect>
+<line class="drive" x1="590.7" y1="177.0" x2="615.1" y2="177.0"/>
+<rect class="reload" x="615.1" y="169.0" width="33.7" height="16" rx="2"><title>загрузка на складе Склад (условн.) 12:32-12:57</title></rect>
+<line class="drive" x1="648.8" y1="177.0" x2="659.1" y2="177.0"/>
+<rect class="f2" x="659.1" y="169.0" width="29.6" height="16" rx="2"><title>выгрузка Z012 Клиент 12 (условн.) 13:05-13:27</title></rect>
+<line class="drive" x1="688.7" y1="177.0" x2="699.0" y2="177.0"/>
+<text class="ink" x="24" y="209.0" font-size="13" font-weight="600">van #3</text>
+<text class="muted" x="24" y="223.0" font-size="11">своя · 2 рейса</text>
+<line class="drive" x1="482.9" y1="211.0" x2="491.2" y2="211.0"/>
+<rect class="f3" x="491.2" y="203.0" width="24.2" height="16" rx="2"><title>выгрузка Z010 Клиент 10 (условн.) 11:00-11:18</title></rect>
+<line class="drive" x1="515.4" y1="211.0" x2="529.0" y2="211.0"/>
+<rect class="wait" x="529.0" y="203.0" width="204.6" height="16" rx="2"/>
+<rect class="f3" x="733.6" y="203.0" width="24.2" height="16" rx="2"><title>выгрузка Z035 Клиент 35 (условн.) 14:00-14:18</title></rect>
+<line class="drive" x1="757.8" y1="211.0" x2="764.9" y2="211.0"/>
+<rect class="reload" x="764.9" y="203.0" width="33.7" height="16" rx="2"><title>загрузка на складе Склад (условн.) 14:23-14:48</title></rect>
+<line class="drive" x1="798.5" y1="211.0" x2="819.9" y2="211.0"/>
+<rect class="f3" x="819.9" y="203.0" width="18.9" height="16" rx="2"><title>выгрузка Z013 Клиент 13 (условн.) 15:04-15:18</title></rect>
+<line class="drive" x1="838.7" y1="211.0" x2="841.1" y2="211.0"/>
+<rect class="f3" x="841.1" y="203.0" width="29.6" height="16" rx="2"><title>выгрузка Z017 Клиент 17 (условн.) 15:20-15:42</title></rect>
+<line class="drive" x1="870.8" y1="211.0" x2="894.5" y2="211.0"/>
+<text class="ink" x="24" y="243.0" font-size="13" font-weight="600">van #4</text>
+<text class="muted" x="24" y="257.0" font-size="11">своя · 2 рейса</text>
+<line class="drive" x1="235.7" y1="245.0" x2="272.2" y2="245.0"/>
+<rect class="f4" x="272.2" y="237.0" width="24.2" height="16" rx="2"><title>выгрузка Z037 Клиент 37 (условн.) 08:17-08:35</title></rect>
+<line class="drive" x1="296.5" y1="245.0" x2="335.4" y2="245.0"/>
+<rect class="f4 pick" x="335.4" y="237.0" width="20.2" height="16" rx="2"><title>погрузка Z034 Поставщик 1 (условн.) 09:04-09:19</title></rect>
+<rect class="f4 pick" x="355.6" y="237.0" width="20.2" height="16" rx="2"><title>погрузка Z015 Поставщик 1 (условн.) 09:19-09:34</title></rect>
+<line class="drive" x1="375.8" y1="245.0" x2="384.9" y2="245.0"/>
+<rect class="f4" x="384.9" y="237.0" width="18.9" height="16" rx="2"><title>выгрузка Z005 Клиент 5 (условн.) 09:41-09:55</title></rect>
+<line class="drive" x1="403.8" y1="245.0" x2="410.4" y2="245.0"/>
+<rect class="f4" x="410.4" y="237.0" width="18.9" height="16" rx="2"><title>выгрузка Z015 Клиент 15 (условн.) 10:00-10:14</title></rect>
+<line class="drive" x1="429.3" y1="245.0" x2="436.3" y2="245.0"/>
+<rect class="f4 pick" x="436.3" y="237.0" width="20.2" height="16" rx="2"><title>погрузка Z008 Поставщик 1 (условн.) 10:19-10:34</title></rect>
+<line class="drive" x1="456.5" y1="245.0" x2="468.0" y2="245.0"/>
+<rect class="f4" x="468.0" y="237.0" width="24.2" height="16" rx="2"><title>выгрузка Z008 Клиент 8 (условн.) 10:43-11:01</title></rect>
+<line class="drive" x1="492.2" y1="245.0" x2="503.7" y2="245.0"/>
+<rect class="f4 pick" x="503.7" y="237.0" width="20.2" height="16" rx="2"><title>погрузка Z028 Поставщик 1 (условн.) 11:09-11:24</title></rect>
+<line class="drive" x1="523.9" y1="245.0" x2="540.8" y2="245.0"/>
+<rect class="f4" x="540.8" y="237.0" width="18.9" height="16" rx="2"><title>выгрузка Z039 Клиент 39 (условн.) 11:37-11:51</title></rect>
+<line class="drive" x1="559.6" y1="245.0" x2="592.5" y2="245.0"/>
+<rect class="f4" x="592.5" y="237.0" width="24.2" height="16" rx="2"><title>выгрузка Z028 Клиент 28 (условн.) 12:15-12:33</title></rect>
+<line class="drive" x1="616.7" y1="245.0" x2="663.0" y2="245.0"/>
+<rect class="reload" x="663.0" y="237.0" width="33.7" height="16" rx="2"><title>загрузка на складе Склад (условн.) 13:08-13:33</title></rect>
+<line class="drive" x1="696.6" y1="245.0" x2="707.0" y2="245.0"/>
+<rect class="f4" x="707.0" y="237.0" width="18.9" height="16" rx="2"><title>выгрузка Z034 Клиент 34 (условн.) 13:40-13:54</title></rect>
+<line class="drive" x1="725.9" y1="245.0" x2="737.2" y2="245.0"/>
+<rect class="f4" x="737.2" y="237.0" width="29.6" height="16" rx="2"><title>выгрузка Z038 Клиент 38 (условн.) 14:03-14:25</title></rect>
+<line class="drive" x1="766.8" y1="245.0" x2="786.2" y2="245.0"/>
+<text class="ink" x="24" y="277.0" font-size="13" font-weight="600">truck #2</text>
+<text class="muted" x="24" y="291.0" font-size="11">своя · 1 рейс</text>
+<line class="drive" x1="340.5" y1="279.0" x2="362.7" y2="279.0"/>
+<rect class="f5" x="362.7" y="271.0" width="24.2" height="16" rx="2"><title>выгрузка Z001 Клиент 1 (условн.) 09:25-09:43</title></rect>
+<line class="drive" x1="386.9" y1="279.0" x2="405.8" y2="279.0"/>
+<rect class="f5 pick" x="405.8" y="271.0" width="20.2" height="16" rx="2"><title>погрузка Z016 Поставщик 3 (условн.) 09:57-10:12</title></rect>
+<line class="drive" x1="426.0" y1="279.0" x2="454.8" y2="279.0"/>
+<rect class="f5" x="454.8" y="271.0" width="24.2" height="16" rx="2"><title>выгрузка Z016 Клиент 16 (условн.) 10:33-10:51</title></rect>
+<line class="drive" x1="479.1" y1="279.0" x2="491.2" y2="279.0"/>
+<rect class="f5" x="491.2" y="271.0" width="18.9" height="16" rx="2"><title>выгрузка Z033 Клиент 33 (условн.) 11:00-11:14</title></rect>
+<line class="drive" x1="510.1" y1="279.0" x2="514.2" y2="279.0"/>
+<rect class="f5" x="514.2" y="271.0" width="29.6" height="16" rx="2"><title>выгрузка Z019 Клиент 19 (условн.) 11:17-11:39</title></rect>
+<line class="drive" x1="543.8" y1="279.0" x2="555.0" y2="279.0"/>
+<rect class="wait" x="555.0" y="271.0" width="178.6" height="16" rx="2"/>
+<rect class="f5" x="733.6" y="271.0" width="29.6" height="16" rx="2"><title>выгрузка Z004 Клиент 4 (условн.) 14:00-14:22</title></rect>
+<line class="drive" x1="763.2" y1="279.0" x2="787.3" y2="279.0"/>
+<rect class="f5" x="787.3" y="271.0" width="18.9" height="16" rx="2"><title>выгрузка Z036 Клиент 36 (условн.) 14:40-14:54</title></rect>
+<line class="drive" x1="806.1" y1="279.0" x2="814.5" y2="279.0"/>
+<rect class="f5" x="814.5" y="271.0" width="24.2" height="16" rx="2"><title>выгрузка Z021 Клиент 21 (условн.) 15:00-15:18</title></rect>
+<line class="drive" x1="838.8" y1="279.0" x2="857.0" y2="279.0"/>
+<text class="ink" x="24" y="311.0" font-size="13" font-weight="600">truck-hired #1</text>
+<text class="muted" x="24" y="325.0" font-size="11">наёмная · 1 рейс</text>
+<line class="drive" x1="334.5" y1="313.0" x2="346.9" y2="313.0"/>
+<rect class="f6" x="346.9" y="305.0" width="24.2" height="16" rx="2"><title>выгрузка Z007 Клиент 7 (условн.) 09:13-09:31</title></rect>
+<line class="drive" x1="371.1" y1="313.0" x2="382.2" y2="313.0"/>
+<rect class="f6" x="382.2" y="305.0" width="24.2" height="16" rx="2"><title>выгрузка Z009 Клиент 9 (условн.) 09:39-09:57</title></rect>
+<line class="drive" x1="406.4" y1="313.0" x2="413.1" y2="313.0"/>
+<rect class="f6" x="413.1" y="305.0" width="18.9" height="16" rx="2"><title>выгрузка Z022 Клиент 22 (условн.) 10:02-10:16</title></rect>
+<line class="drive" x1="432.0" y1="313.0" x2="450.2" y2="313.0"/>
+<rect class="f6" x="450.2" y="305.0" width="29.6" height="16" rx="2"><title>выгрузка Z031 Клиент 31 (условн.) 10:30-10:52</title></rect>
+<line class="drive" x1="479.8" y1="313.0" x2="491.2" y2="313.0"/>
+<rect class="f6" x="491.2" y="305.0" width="29.6" height="16" rx="2"><title>выгрузка Z026 Клиент 26 (условн.) 11:00-11:22</title></rect>
+<line class="drive" x1="520.8" y1="313.0" x2="528.9" y2="313.0"/>
+<rect class="f6" x="528.9" y="305.0" width="18.9" height="16" rx="2"><title>выгрузка Z003 Клиент 3 (условн.) 11:28-11:42</title></rect>
+<line class="drive" x1="547.8" y1="313.0" x2="559.9" y2="313.0"/>
+</svg>

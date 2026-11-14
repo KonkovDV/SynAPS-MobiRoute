@@ -16,6 +16,8 @@ use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
 use rayon::prelude::*;
 
+mod vrp;
+
 const STRIDE: usize = 16;
 const FLAG_LIFT: i32 = 1;
 const FLAG_RAMP: i32 = 2;
@@ -196,7 +198,14 @@ fn compat(
 }
 
 #[inline(always)]
-fn pair_at(orig_t: &[i32], orig_k: &[i32], new_idx: i32, i: usize, j: usize, k: usize) -> (i32, i32) {
+fn pair_at(
+    orig_t: &[i32],
+    orig_k: &[i32],
+    new_idx: i32,
+    i: usize,
+    j: usize,
+    k: usize,
+) -> (i32, i32) {
     if k < i {
         (orig_t[k], orig_k[k])
     } else if k == i {
@@ -346,8 +355,20 @@ fn world_from_veh<'a>(
     veh: &'a [i32],
     unavail: &'a [i32],
 ) -> Option<World<'a>> {
-    let (depot, shift_start, shift_end, cap_p, cap_w, vflags, wmask, dstart, dend, dassist, has_driver, area) =
-        parse_veh(veh)?;
+    let (
+        depot,
+        shift_start,
+        shift_end,
+        cap_p,
+        cap_w,
+        vflags,
+        wmask,
+        dstart,
+        dend,
+        dassist,
+        has_driver,
+        area,
+    ) = parse_veh(veh)?;
     Some(World {
         travel,
         n_zones,
@@ -562,15 +583,7 @@ fn apply_orig_range(
 ) -> bool {
     for s in from..to {
         if !apply_stop(
-            w,
-            cur,
-            pickup_dep,
-            orig_t[s],
-            orig_k[s],
-            false,
-            best_dur,
-            best_wait,
-            None,
+            w, cur, pickup_dep, orig_t[s], orig_k[s], false, best_dur, best_wait, None,
         ) {
             return false;
         }
@@ -668,7 +681,22 @@ fn simulate_inserted(
     finish_return(w, &cur)
 }
 
-fn parse_veh(veh: &[i32]) -> Option<(i32, i32, i32, i32, i32, i32, i32, i32, i32, bool, bool, &[i32])> {
+fn parse_veh(
+    veh: &[i32],
+) -> Option<(
+    i32,
+    i32,
+    i32,
+    i32,
+    i32,
+    i32,
+    i32,
+    i32,
+    i32,
+    bool,
+    bool,
+    &[i32],
+)> {
     if veh.len() < 11 {
         return None;
     }
@@ -843,14 +871,7 @@ fn best_insert_inner(
         return None;
     }
     let w = world_from_veh(
-        travel,
-        n_zones,
-        table,
-        detour,
-        detour_cap,
-        n_trips,
-        veh,
-        unavail,
+        travel, n_zones, table, detour, detour_cap, n_trips, veh, unavail,
     )?;
     let nt = trip_at(table, detour, new_idx as usize);
     if !compat(
@@ -953,24 +974,10 @@ fn best_insert_inner(
                         let cap_j = capture_dep(stop_trip, new_idx, pickup_dep);
                         let mut trial = walk_j;
                         let scored = if apply_stop(
-                            &w,
-                            &mut trial,
-                            pickup_dep,
-                            new_idx,
-                            1,
-                            false,
-                            best_dur,
-                            best_wait,
+                            &w, &mut trial, pickup_dep, new_idx, 1, false, best_dur, best_wait,
                             None,
                         ) && apply_orig_range(
-                            &w,
-                            &mut trial,
-                            pickup_dep,
-                            stop_trip,
-                            stop_kind,
-                            j,
-                            m,
-                            best_dur,
+                            &w, &mut trial, pickup_dep, stop_trip, stop_kind, j, m, best_dur,
                             best_wait,
                         ) {
                             finish_return(&w, &trial)
@@ -978,7 +985,8 @@ fn best_insert_inner(
                             None
                         };
                         restore_dep(&cap_j, pickup_dep);
-                        if let Some((dur, wait, mx)) = scored.filter(|(dur, _, _)| *dur <= best_dur) {
+                        if let Some((dur, wait, mx)) = scored.filter(|(dur, _, _)| *dur <= best_dur)
+                        {
                             let i32i = i as i32;
                             let mid32 = mid as i32;
                             let j32 = j as i32;
@@ -1047,25 +1055,9 @@ fn best_insert_inner(
                 let cap_j = capture_dep(stop_trip, new_idx, pickup_dep);
                 let mut trial = walk;
                 let scored = if apply_stop(
-                    &w,
-                    &mut trial,
-                    pickup_dep,
-                    new_idx,
-                    1,
-                    false,
-                    best_dur,
-                    best_wait,
-                    None,
+                    &w, &mut trial, pickup_dep, new_idx, 1, false, best_dur, best_wait, None,
                 ) && apply_orig_range(
-                    &w,
-                    &mut trial,
-                    pickup_dep,
-                    stop_trip,
-                    stop_kind,
-                    j,
-                    m,
-                    best_dur,
-                    best_wait,
+                    &w, &mut trial, pickup_dep, stop_trip, stop_kind, j, m, best_dur, best_wait,
                 ) {
                     finish_return(&w, &trial)
                 } else {
@@ -1591,6 +1583,7 @@ fn best_insert(
 fn mobiroute_native(_py: Python<'_>, module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_function(wrap_pyfunction!(best_insert, module)?)?;
     module.add_class::<InsertionEngine>()?;
+    module.add_class::<vrp::VrpKernel>()?;
     module.add("__version__", env!("CARGO_PKG_VERSION"))?;
     Ok(())
 }

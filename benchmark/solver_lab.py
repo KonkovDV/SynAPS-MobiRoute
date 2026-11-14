@@ -16,6 +16,8 @@ import argparse
 import json
 import platform
 import time
+from collections.abc import Callable
+from functools import partial
 from pathlib import Path
 from typing import Any
 
@@ -35,6 +37,10 @@ from mobiroute.solvers.cpsat import solve_cpsat
 from mobiroute.solvers.greedy import solve_greedy
 from mobiroute.solvers.rolling_horizon import solve_rolling_horizon
 from mobiroute.validation.feasibility import check_plan
+from mobiroute.vrp.alns import AlnsConfig
+from mobiroute.vrp.alns import solve as vrp_solve
+from mobiroute.vrp.io import parse_cordeau_vrp
+from mobiroute.vrp.ortools_lane import solve_ortools
 
 ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_INSTANCE = ROOT / "benchmark" / "instances" / "cordeau" / "a2-16.txt"
@@ -44,16 +50,14 @@ def _literature_rows(raw: bytes, mip_limit: float) -> tuple[list[dict[str, Any]]
     instance, digest = load_cordeau_bytes(raw, instance_id="a2-16")
     reference = REFERENCES.get(digest)
     rows: list[dict[str, Any]] = []
-    runs = [("CP-SAT", lambda: solve_exact_cpsat(instance, time_limit_s=60.0))]
+    runs: list[tuple[str, Callable[[], Any]]] = [
+        ("CP-SAT", partial(solve_exact_cpsat, instance, time_limit_s=60.0))
+    ]
     for backend in ("SCIP", "HIGHS", "CBC"):
-        runs.append(
-            (
-                f"MIP · {backend}",
-                lambda b=backend: solve_exact_mip(
-                    instance, backend=b, time_limit_s=mip_limit, with_lp_bound=False
-                ),
-            )
+        mip = partial(
+            solve_exact_mip, instance, backend=backend, time_limit_s=mip_limit, with_lp_bound=False
         )
+        runs.append((f"MIP · {backend}", mip))
     for label, run_fn in runs:
         run = run_fn()
         verdict = verify_routes(instance, run.routes)
@@ -66,10 +70,42 @@ def _literature_rows(raw: bytes, mip_limit: float) -> tuple[list[dict[str, Any]]
                 "solver": label,
                 "status": run.status,
                 "verified": verdict.feasible and verdict.full_service,
+                "feasible": verdict.feasible,
+                "served": f"{len(verdict.served_requests)}/{verdict.requests_total}",
                 "cost": round(verdict.cost, 4) if run.routes else None,
                 "bound": None if run.model_bound is None else round(run.model_bound, 4),
                 "gap_to_published_pct": None if gap is None else round(gap, 4),
                 "seconds": run.wall_clock_seconds,
+            }
+        )
+    # Heuristics of the rich-VRP engine on the same published algebra, judged
+    # by the same Cordeau verifier (node ids coincide).
+    vrp_inst = parse_cordeau_vrp(raw.decode("utf-8"), name="a2-16")
+    started = time.perf_counter()
+    alns = vrp_solve(vrp_inst, AlnsConfig(iterations=10000, seed=1))
+    alns_seconds = time.perf_counter() - started
+    ort = solve_ortools(vrp_inst, time_limit=10.0)
+    for label, routes, status, seconds in (
+        ("ALNS, rich-VRP engine (10k it)", alns.solution, "HEURISTIC", alns_seconds),
+        ("OR-Tools Routing PCI+GLS (10 s)", ort.solution, ort.status, ort.seconds),
+    ):
+        node_routes = [list(r.nodes) for r in routes.routes if r.nodes]
+        verdict = verify_routes(instance, node_routes)
+        gap = None
+        if reference is not None and verdict.full_service and verdict.feasible:
+            gap = 100.0 * (verdict.cost - reference.objective) / reference.objective
+        rows.append(
+            {
+                "lane": "literature",
+                "solver": label,
+                "status": status,
+                "verified": verdict.feasible and verdict.full_service,
+                "feasible": verdict.feasible,
+                "served": f"{len(verdict.served_requests)}/{verdict.requests_total}",
+                "cost": round(verdict.cost, 4) if node_routes else None,
+                "bound": None,
+                "gap_to_published_pct": None if gap is None else round(gap, 4),
+                "seconds": round(seconds, 3),
             }
         )
     started = time.perf_counter()
@@ -138,6 +174,18 @@ def _gap_text(gap: float | None) -> str:
     return f"{gap:.2f}%"
 
 
+def _verified_text(row: dict[str, Any]) -> str:
+    if row["verified"] is None:
+        return "—"
+    if row["verified"]:
+        return "yes"
+    # A feasible plan that leaves requests out is cheaper than the optimum and
+    # must not read as a better answer.
+    if row.get("feasible"):
+        return f"feasible, {row['served']} served"
+    return "no"
+
+
 def _markdown(payload: dict[str, Any]) -> str:
     meta = payload["meta"]
     lines = [
@@ -156,8 +204,7 @@ def _markdown(payload: dict[str, Any]) -> str:
     for row in payload["literature"]:
         gap = row["gap_to_published_pct"]
         lines.append(
-            f"| {row['solver']} | {row['status']} | "
-            f"{'—' if row['verified'] is None else ('yes' if row['verified'] else 'no')} | "
+            f"| {row['solver']} | {row['status']} | {_verified_text(row)} | "
             f"{'—' if row['cost'] is None else f'{row["cost"]:.2f}'} | "
             f"{'—' if row['bound'] is None else f'{row["bound"]:.2f}'} | "
             f"{_gap_text(gap)} | {row['seconds']:.1f} |"

@@ -78,7 +78,7 @@ def test_invalid_inputs_exit_2_without_a_traceback(
     bad = tmp_path / "bad.json"
     bad.write_text('{"bad": 1}', encoding="utf-8")
     assert main(["solve", "--problem", str(bad), "--out-dir", str(tmp_path / "o")]) == 2
-    assert capsys.readouterr().out.startswith("error: ValidationError")
+    assert capsys.readouterr().err.startswith("error: ValidationError")
     missing = tmp_path / "missing.json"
     assert main(["solve", "--problem", str(missing), "--out-dir", str(tmp_path / "o")]) == 2
     broken = tmp_path / "broken.txt"

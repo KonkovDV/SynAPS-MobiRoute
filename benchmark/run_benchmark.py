@@ -7,9 +7,12 @@ import argparse
 import csv
 import json
 import time
+from collections.abc import Callable
 from pathlib import Path
+from typing import Any
 
 from mobiroute.adapters.synthetic_data import generate_day
+from mobiroute.domain.requests import PlanningResult
 from mobiroute.solvers.beam import solve_beam
 from mobiroute.solvers.cpsat import solve_cpsat
 from mobiroute.solvers.greedy import solve_fifo, solve_greedy
@@ -28,14 +31,15 @@ def main() -> None:
         json.dumps(problem.model_dump(mode="json"), indent=2, sort_keys=True),
         encoding="utf-8",
     )
-    rows = []
-    for name, fn in [
+    rows: list[dict[str, Any]] = []
+    solvers: list[tuple[str, Callable[[], PlanningResult]]] = [
         ("FIFO", lambda: solve_fifo(problem)),
         ("NEAREST", lambda: solve_nearest(problem)),
         ("GREEDY", lambda: solve_greedy(problem)),
         ("BEAM", lambda: solve_beam(problem, beam_width=3)),
         ("CPSAT", lambda: solve_cpsat(problem, time_limit_s=10.0)),
-    ]:
+    ]
+    for name, fn in solvers:
         t0 = time.perf_counter()
         res = fn()
         dt = time.perf_counter() - t0

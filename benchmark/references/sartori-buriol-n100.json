@@ -1,0 +1,158 @@
+{
+  "set": "Sartori & Buriol (2020) PDPTW, 100 locations (50 requests), real road network (OSRM)",
+  "objective": "hierarchical: vehicles, then total travel time in minutes",
+  "kind": "best known",
+  "source": "github.com/cssartori/pdptw-instances, solutions/README.md (retrieved 2026-11-13)",
+  "instances": {
+    "bar-n100-1": {
+      "vehicles": 6,
+      "cost": 732.0,
+      "found_by": "R",
+      "date": "06-apr-23"
+    },
+    "bar-n100-2": {
+      "vehicles": 5,
+      "cost": 554.0,
+      "found_by": "SB",
+      "date": "11-feb-19"
+    },
+    "bar-n100-3": {
+      "vehicles": 6,
+      "cost": 746.0,
+      "found_by": "SB",
+      "date": "11-feb-19"
+    },
+    "bar-n100-4": {
+      "vehicles": 12,
+      "cost": 1150.0,
+      "found_by": "R",
+      "date": "06-apr-23"
+    },
+    "bar-n100-5": {
+      "vehicles": 6,
+      "cost": 838.0,
+      "found_by": "SB",
+      "date": "11-feb-19"
+    },
+    "bar-n100-6": {
+      "vehicles": 3,
+      "cost": 784.0,
+      "found_by": "BIG3",
+      "date": "01-oct-26"
+    },
+    "ber-n100-1": {
+      "vehicles": 13,
+      "cost": 1854.0,
+      "found_by": "R",
+      "date": "06-apr-23"
+    },
+    "ber-n100-2": {
+      "vehicles": 6,
+      "cost": 1484.0,
+      "found_by": "R",
+      "date": "06-apr-23"
+    },
+    "ber-n100-3": {
+      "vehicles": 3,
+      "cost": 713.0,
+      "found_by": "SB",
+      "date": "11-feb-19"
+    },
+    "ber-n100-4": {
+      "vehicles": 3,
+      "cost": 494.0,
+      "found_by": "SB",
+      "date": "11-feb-19"
+    },
+    "ber-n100-5": {
+      "vehicles": 5,
+      "cost": 944.0,
+      "found_by": "SB",
+      "date": "11-feb-19"
+    },
+    "ber-n100-6": {
+      "vehicles": 14,
+      "cost": 2116.0,
+      "found_by": "R",
+      "date": "06-apr-23"
+    },
+    "ber-n100-7": {
+      "vehicles": 7,
+      "cost": 1935.0,
+      "found_by": "SB",
+      "date": "11-feb-19"
+    },
+    "nyc-n100-1": {
+      "vehicles": 6,
+      "cost": 634.0,
+      "found_by": "SB",
+      "date": "11-feb-19"
+    },
+    "nyc-n100-2": {
+      "vehicles": 4,
+      "cost": 563.0,
+      "found_by": "R",
+      "date": "06-apr-23"
+    },
+    "nyc-n100-3": {
+      "vehicles": 3,
+      "cost": 490.0,
+      "found_by": "HGIM",
+      "date": "28-apr-25"
+    },
+    "nyc-n100-4": {
+      "vehicles": 2,
+      "cost": 535.0,
+      "found_by": "SB",
+      "date": "11-feb-19"
+    },
+    "nyc-n100-5": {
+      "vehicles": 2,
+      "cost": 669.0,
+      "found_by": "R",
+      "date": "06-apr-23"
+    },
+    "poa-n100-1": {
+      "vehicles": 12,
+      "cost": 1582.0,
+      "found_by": "R",
+      "date": "06-apr-23"
+    },
+    "poa-n100-2": {
+      "vehicles": 15,
+      "cost": 1539.0,
+      "found_by": "SB",
+      "date": "11-feb-19"
+    },
+    "poa-n100-3": {
+      "vehicles": 10,
+      "cost": 1291.0,
+      "found_by": "R",
+      "date": "06-apr-23"
+    },
+    "poa-n100-4": {
+      "vehicles": 7,
+      "cost": 1653.0,
+      "found_by": "R",
+      "date": "24-mar-23"
+    },
+    "poa-n100-5": {
+      "vehicles": 6,
+      "cost": 624.0,
+      "found_by": "SB",
+      "date": "11-feb-19"
+    },
+    "poa-n100-6": {
+      "vehicles": 3,
+      "cost": 562.0,
+      "found_by": "SB",
+      "date": "11-feb-19"
+    },
+    "poa-n100-7": {
+      "vehicles": 5,
+      "cost": 772.0,
+      "found_by": "R",
+      "date": "06-mar-23"
+    }
+  }
+}
