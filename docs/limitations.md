@@ -31,11 +31,11 @@ What the code does not do yet, and what its numbers do not mean.
   regulation); weekly and fortnightly driving limits; the meal break of the
   Labour Code (art. 108), which is not working time; daily and weekly rest
   between shifts; tachograph data. The rest is one contiguous block in one
-  gap between two stops. It may use idle time of that gap only if the driver
-  is free to rest there (queueing at a gate is not a break), so route sheets
-  place it right after the service, before the drive. These are engineering
-  constraints, not legal advice: check a configuration against the
-  regulations in force and the company's local acts.
+  gap between two stops, before or after that gap's drive (whichever keeps
+  both stints within the limit). It may use idle time of the gap only if the
+  driver is free to rest there (queueing at a gate is not a break). These are
+  engineering constraints, not legal advice: check a configuration against
+  the regulations in force and the company's local acts.
 * Route sheets are trip plans ("маршрутный лист" in the Russian output), not
   the statutory waybill ("путевой лист", Road Transport Charter, art. 6;
   required details by Order No. 390 of 28.09.2022). Vehicle and driver data,

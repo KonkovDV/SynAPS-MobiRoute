@@ -228,8 +228,11 @@ short of $b$. For a fixed $g$ the system is again of difference constraints
 (section 4). $\square$
 
 The block must be free time: under the rules a break is not a period of
-availability, such as queueing at a gate. Route sheets therefore place it
-right after the service at $v_g$, before the drive (section 4d).
+availability, such as queueing at a gate. Route sheets place it where the
+lemma admitted it: after the service at $v_g$ and before the drive if
+$P_g \in [\Delta - D, D]$, otherwise on arrival at $v_{g+1}$ and before its
+service (then $P_{g+1} \in [\Delta - D, D]$), so that every sheet shows both
+stints within $D$ (property-tested).
 
 The search filters candidates by $\Delta + \Delta_{\text{ins}} \le 2D$ in $O(1)$
 (a rest only adds time, so all other fast tests remain necessary conditions)
