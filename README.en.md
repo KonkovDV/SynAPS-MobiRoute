@@ -4,8 +4,19 @@ A routing engine for mixed fleets: VRPTW, PDPTW and DARP with a capacity vector
 (kg, m³, pallets), vehicle requirements, shifts, own and hired vehicles,
 drivers' rest rules, several trips per shift and rush-hour travel times. ALNS
 on a Rust kernel plus local search, exact CP-SAT and MIP models, a head-to-head
-with OR-Tools, live order dispatch, input in coordinates with OSRM road
-matrices and route sheets — and an independent check of every plan.
+with OR-Tools, live order dispatch, input in coordinates with OSRM and
+Valhalla road matrices, truck access zones and route sheets — and an
+independent check of every plan.
+
+> **In short.** An open engine that routes a mixed fleet of trucks and vans,
+> own and hired: delivery windows, weight, volume and pallets, drivers'
+> working-time rules (the 15 + 30 min split break included), several trips a
+> shift, zones closed to heavy vehicles. An independent program checks every
+> plan, and each driver gets a route sheet. Against Google OR-Tools at equal
+> time: better on 15 of 18 instances, worse on none; freight days 17–18%
+> cheaper with two vehicles fewer. Python and Rust, about 600 tests, docs in
+> Russian and English, an interactive [site](https://konkovdv.github.io/SynAPS-MobiRoute/).
+> Author: Dmitrij Konkov ([GitHub](https://github.com/KonkovDV)).
 
 Language: [RU](README.md) | **EN** · Site: [konkovdv.github.io/SynAPS-MobiRoute](https://konkovdv.github.io/SynAPS-MobiRoute/)
 
@@ -35,14 +46,14 @@ measurement that one command reproduces.
 
 | Task | What is done | Where to check |
 | --- | --- | --- |
-| VRP with time windows, pickup and delivery, heterogeneous fleet | one model for VRPTW, PDPTW and DARP: capacity vector, skills, shifts, own and hired vehicles, driving-time rules, several trips, rush hours | [model](src/mobiroute/vrp/model.py) · [Solomon 56 of 56](docs/benchmarks/vrp-public-benchmarks.md) |
+| VRP with time windows, pickup and delivery, heterogeneous fleet | one model for VRPTW, PDPTW and DARP: capacity vector, skills, shifts, own and hired vehicles, driving-time rules with the 15 + 30 split, several trips, rush hours, truck access zones | [model](src/mobiroute/vrp/model.py) · [Solomon 56 of 56](docs/benchmarks/vrp-public-benchmarks.md) |
 | Choosing a MIP/CP solver | the same model on CP-SAT, SCIP, HiGHS and CBC, an LP bound; the solver is chosen by measuring on one's own problem class | [Cordeau a2-16](docs/benchmarks/solver-lab-a2-16.md) · [set partitioning](docs/benchmarks/setpart-solvers.md) |
 | Heuristics and metaheuristics | regret-k, ALNS with annealing, guided ejection, route merging, local search with O(1) window checks | [40 of 40 optima](docs/benchmarks/exact-vs-alns.md) · [against OR-Tools](docs/benchmarks/ortools-vs-alns.md) |
 | LP/IP, graph theory, combinatorial optimization | difference constraints and Bellman–Ford with certificates, min-cost flow for vehicle types, set partitioning, four lemmas with proofs | [formulation](docs/mathematical-formulation.md) · [below](#the-mathematics-on-one-screen) |
 | Product code | CLI, input in coordinates, OSRM matrices, route sheets as CSV / Markdown / SVG, error codes, a Rust kernel | [coordinates to route sheets](#from-coordinates-to-route-sheets) |
 | Python: OOP, tests, profiling | immutable dataclass models, `mypy --strict`, 585 tests (9 Hypothesis properties), profiling → a Rust kernel 10–49× faster with the same plan | [tests](tests) · [acceleration](docs/native-acceleration.md) |
 | Code review and documentation | review rules, CI (ruff, mypy, clippy, tests, CLI smoke runs), documentation in Russian and English, a changelog | [CONTRIBUTING](CONTRIBUTING.md) · [architecture](docs/architecture.md) · [CHANGELOG](CHANGELOG.md) |
-| Risk: synthetic data only | public benchmarks, some on real OSRM road times; synthetic data is labelled as such; limits are listed | [limitations](docs/limitations.md) |
+| Risk: synthetic data only | public benchmarks, some on real OSRM road times and with 1000 customers; an operator's data comes in as coordinates and the operator's router matrices (OSRM, Valhalla with a truck profile) | [scope](docs/limitations.md) · [Russian practice](docs/trucking-ru.md) |
 
 ## Results
 
@@ -73,7 +84,8 @@ literature: [docs/comparison.md](docs/comparison.md) (RU, English summary).
 | --- | :---: | :---: | :---: | :---: | :---: | :---: |
 | Windows, pickup and delivery, mixed fleet | ✓ | ✓ | ✓ | ✓ | ✓ | ◐ |
 | Several trips per shift | ✓ | ◐ by hand | n/f | ✓ | n/f | ✓ |
-| Break by time at the wheel (4.5 h → 45 min) | ✓ | ◐ intervals | ◐ windows | Enterprise | n/f | n/f |
+| Break by time at the wheel (4.5 h → 45 min, 15 + 30) | ✓ | ◐ intervals | ◐ windows | Enterprise | n/f | n/f |
+| Zones by weight, height, axle load; truck matrices | ✓ zones + Valhalla | — | ◐ through the router profile | — | n/f | n/f |
 | Rush hours by time of day | ✓ | n/f | n/f | n/f | ✓ | ✓ |
 | Proven optimum on the same model | ✓ | — | — | — | — | n/f |
 | Independent check, "why not" certificate | ✓ | n/f | n/f | n/f | n/f | n/f |
@@ -82,9 +94,10 @@ literature: [docs/comparison.md](docs/comparison.md) (RU, English summary).
 ◐ partly, n/f not found in the documentation. Measured at equal time on 18
 instances with one verifier: **ALNS beats OR-Tools on 15, ties on 3, loses on
 none**; on mixed-fleet freight days it costs 16.8–18.3% less with two
-vehicles fewer. Where others are stronger: PyVRP on pure CVRP/VRPTW, VROOM on
-speed and routing-engine integration, commercial services on a finished
-interface and support.
+vehicles fewer. How to choose: PyVRP and VROOM fit classic CVRP/VRPTW
+without fleet rules, a commercial service fits a finished dispatcher UI; this
+engine fits a model of one's own with driving-time rules, trips, a mixed fleet
+and results that can be checked.
 
 ## What it solves
 
@@ -349,22 +362,24 @@ implementation, with the same results, only slower.
 | [docs/benchmark-protocol.md](docs/benchmark-protocol.md) | rules for published numbers |
 | [docs/benchmarks/](docs/benchmarks) | tables of every experiment |
 | [docs/darp-kernel.md](docs/darp-kernel.md) | paratransit DARP kernel: rules, dispatch, checks |
-| [docs/limitations.md](docs/limitations.md) | what the engine does not do yet |
+| [docs/trucking-ru.md](docs/trucking-ru.md) | Russian freight practice: driving-time rules, the waybill, road signs and zones, Platon tolls, ADR, and how each maps onto the model (RU, English summary) |
+| [docs/benchmarks/solvers.md](docs/benchmarks/solvers.md) | ALNS, PyVRP, VROOM and jsprit on the same instances at equal time |
+| [docs/limitations.md](docs/limitations.md) | scope and roadmap |
 | [benchmark/instances/README.md](benchmark/instances/README.md) | provenance and citations of the instances |
 | [examples/README.md](examples/README.md) | example inputs and how they were made |
 | [CHANGELOG.md](CHANGELOG.md) | what changed in every version |
 
-## Limits
+## Scope and roadmap
 
-Public benchmarks and synthetic days; no customer data and no pilot. Offline
-matrices are an approximation (straight line × a factor) and OSRM matrices
-come from a car profile that a truck only slows down by a factor. One rest
-per shift; traffic is one speed profile for the whole network and runs on
-the Python reference; OR-Tools, the exact model and the live dispatcher do not
-model these rules and refuse such instances with an explicit error. Heuristics
-prove no optimum: the gap to the best known solution is published per
-instance, and the spread over seeds is measured. Details:
-[docs/limitations.md](docs/limitations.md).
+The engine is tested on public benchmarks (some on real OSRM road times, some
+with 1000 customers) and on synthetic days; an operator's own data comes in
+through coordinates and the operator's router (OSRM, or Valhalla with a truck
+profile). The gap to the best known solution is published per instance, the
+spread over seeds is measured, and small instances are solved to proven
+optimality. Next: time-of-day truck bans, multi-day trips with daily rest,
+split breaks and traffic in the Rust kernel. Details:
+[docs/limitations.md](docs/limitations.md); Russian freight practice:
+[docs/trucking-ru.md](docs/trucking-ru.md).
 
 ## License
 

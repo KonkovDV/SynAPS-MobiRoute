@@ -3,6 +3,25 @@
 ## 0.5.0 — 2026-11-14
 
 ### Added
+- Split driver break 15 + 30 min (EU Regulation 561/2006 art. 7, Order
+  No. 424): the second part where a whole break could go, the first in an
+  earlier gap (Lemma 1a); exact in the verifier and the search check; route
+  sheets show both parts and only the second resets the driving counter.
+- `time_cost = "duty"`: the hourly rate pays the whole shift, waiting
+  included (the shortest feasible duration), in the objective, the vehicle
+  type choice, set partitioning and route sheets.
+- Truck access zones (polygon or circle) with limits on gross weight, axle
+  load and height and banned vehicle types, as road signs 3.4 and
+  3.11–3.13 set them; truck-aware matrices from Valhalla
+  (`vrp-solve --valhalla URL`).
+- VRPLIB reader (CVRP, VRPTW; exact, DIMACS and CVRPLIB rounding) and the
+  1000-customer Gehring–Homberger and Uchoa X instances with best-known
+  solutions.
+- `benchmark/solvers_study.py`: ALNS, PyVRP 0.14, VROOM 1.15 and jsprit 2.0
+  on the same instances at equal time, one thread, every plan re-checked by
+  the verifier (`docs/benchmarks/solvers.md`).
+- `docs/trucking-ru.md`: Russian freight rules and practice mapped onto the
+  model.
 - Input in coordinates (`mobiroute.vrp.geo`, format `mobiroute.vrp.geo.v1`):
   depots with opening hours, orders with `"HH:MM"` windows, pickups at a
   supplier or loads at the depot, collections, demand vectors, skills,
@@ -64,6 +83,16 @@
   `setpart_study.py` (solver choice for set partitioning).
 - `dc_day` generator: store deliveries from a DC in two waves.
 - Property-based tests (Hypothesis) hold the search's checks to the verifier.
+
+### Performance
+- Profiled on a 1000-customer instance (X-n1001-k43, 60 s, one thread):
+  8,577 → 24,748 iterations a minute, gap to the best known 5.75% → 3.4%.
+  A granular mode from 400 requests (worst removal from the arcs around a
+  stop, local search from the changed routes only); a memoized objective;
+  Shaw removal and served-request lookup without full scans; in Rust,
+  regret-k by linear selection of the k smallest costs and insertion bounds
+  without a vector per evaluation. Rust and Python stay bit-identical, and
+  instances under 400 requests keep their published trajectories.
 
 ### Fixed
 - Route sheets put the driver's rest before the drive of its gap even where
