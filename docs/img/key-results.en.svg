@@ -1,0 +1,47 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="960" height="250" viewBox="0 0 960 250" role="img" aria-label="Key results">
+<style>
+  .surface { fill: #fcfcfb; } .ink { fill: #0b0b0b; } .ink2 { fill: #52514e; }
+  .muted { fill: #898781; } .line { stroke: #c3c2b7; } .grid { stroke: #e1e0d9; }
+  .accent { fill: #2a78d6; } .saccent { stroke: #2a78d6; } .bad { fill: #d03b3b; }
+  .sbad { stroke: #d03b3b; } .node { fill: #fcfcfb; stroke: #52514e; }
+  @media (prefers-color-scheme: dark) {
+    .surface { fill: #1a1a19; } .ink { fill: #f0efec; } .ink2 { fill: #c3c2b7; }
+    .line { stroke: #383835; } .grid { stroke: #2c2c2a; }
+    .accent { fill: #3987e5; } .saccent { stroke: #3987e5; }
+    .node { fill: #1a1a19; stroke: #c3c2b7; }
+  }
+  text { font-family: system-ui, -apple-system, "Segoe UI", sans-serif; }
+</style>
+<defs><marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0L10,5L0,10z" class="muted"/></marker><marker id="b" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0L10,5L0,10z" class="bad"/></marker></defs>
+<rect class="surface" width="960" height="250" rx="10"/>
+<rect x="24" y="24" width="296" height="96" rx="8" fill="none" class="line" stroke-width="1"/>
+<rect x="24" y="42" width="3" height="60" rx="1.5" class="accent"/>
+<text class="ink" x="44" y="74" font-size="30" font-weight="600">56 / 56</text>
+<text class="ink2" x="44" y="94" font-size="13">Solomon instances at</text>
+<text class="ink2" x="44" y="110" font-size="13">the best-known fleet size</text>
+<rect x="332" y="24" width="296" height="96" rx="8" fill="none" class="line" stroke-width="1"/>
+<rect x="332" y="42" width="3" height="60" rx="1.5" class="accent"/>
+<text class="ink" x="352" y="74" font-size="30" font-weight="600">40 / 40</text>
+<text class="ink2" x="352" y="94" font-size="13">CP-SAT optima</text>
+<text class="ink2" x="352" y="110" font-size="13">found by the heuristic</text>
+<rect x="640" y="24" width="296" height="96" rx="8" fill="none" class="line" stroke-width="1"/>
+<rect x="640" y="42" width="3" height="60" rx="1.5" class="accent"/>
+<text class="ink" x="660" y="74" font-size="30" font-weight="600">15 · 3 · 0</text>
+<text class="ink2" x="660" y="94" font-size="13">vs OR-Tools, 10 s:</text>
+<text class="ink2" x="660" y="110" font-size="13">better · equal · worse</text>
+<rect x="24" y="132" width="296" height="96" rx="8" fill="none" class="line" stroke-width="1"/>
+<rect x="24" y="150" width="3" height="60" rx="1.5" class="accent"/>
+<text class="ink" x="44" y="182" font-size="30" font-weight="600">−18%</text>
+<text class="ink2" x="44" y="202" font-size="13">cost of a cargo day,</text>
+<text class="ink2" x="44" y="218" font-size="13">two vehicles fewer</text>
+<rect x="332" y="132" width="296" height="96" rx="8" fill="none" class="line" stroke-width="1"/>
+<rect x="332" y="150" width="3" height="60" rx="1.5" class="accent"/>
+<text class="ink" x="352" y="182" font-size="30" font-weight="600">×49</text>
+<text class="ink2" x="352" y="202" font-size="13">Rust kernel vs Python,</text>
+<text class="ink2" x="352" y="218" font-size="13">identical plan</text>
+<rect x="640" y="132" width="296" height="96" rx="8" fill="none" class="line" stroke-width="1"/>
+<rect x="640" y="150" width="3" height="60" rx="1.5" class="accent"/>
+<text class="ink" x="660" y="182" font-size="30" font-weight="600">0.1 ms</text>
+<text class="ink2" x="660" y="202" font-size="13">dispatcher response</text>
+<text class="ink2" x="660" y="218" font-size="13">to a new order</text>
+</svg>

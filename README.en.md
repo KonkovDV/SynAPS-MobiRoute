@@ -57,6 +57,8 @@ measurement that one command reproduces.
 
 ## Results
 
+![Key results](docs/img/key-results.en.svg)
+
 | Claim | Result | Reproduce |
 | --- | --- | --- |
 | 130 public instances: Solomon (VRPTW), Li & Lim and Sartori–Buriol (PDPTW, real OSRM road times), Cordeau (DARP) | all 130 plans verified, every order served. Solomon: **56 of 56** at the best-known vehicle count, median gap 0.50%, 20 matches, worst 7.0%. Sartori–Buriol: 22 of 25, median 0.92%. Cordeau: 19 of 48 at the published optimum, mean gap 0.50% | `python benchmark/vrp_benchmark.py` → [table](docs/benchmarks/vrp-public-benchmarks.md) |
@@ -172,6 +174,8 @@ still the best one for windows (Lemmas 2 and 3).
 
 ## The mathematics on one screen
 
+![Lemma 4: shift duration as a function of the start](docs/img/lemma4.en.svg)
+
 **The objective is money, not kilometres.** A hire fee $f_k$ (zero for an own
 vehicle), a price per kilometre $c^d_k$ and per hour $c^t_k$ for vehicle type
 $k$, a penalty $\pi_r$ for an order left out:
@@ -241,6 +245,8 @@ lets you drag $D(t_0)$ by hand. Proofs of all four lemmas are in
 [docs/mathematical-formulation.md](docs/mathematical-formulation.md).
 
 ## "Why not?" — a certificate
+
+![Negative cycle in the difference-constraint graph: 720 − 188.8 − 540 = −8.8 min](docs/img/certificate.en.svg)
 
 A freight day, a transfer from a supplier to a customer:
 
