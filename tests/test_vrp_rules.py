@@ -330,6 +330,28 @@ def test_traffic_round_trip_and_unsupported_mixes() -> None:
         with_traffic(_two_wave_day(1), SpeedProfile((0.0, 0.0), (1.0, 0.5)))
 
 
+def test_reload_stops_keep_the_rush_hour_profile() -> None:
+    """A multi-trip day must stay time-dependent: reload stops used to rebuild
+    every road profile without its speed profile, so a day with trips and rush
+    hours was planned and verified on free-flow times."""
+    jam = with_traffic(_two_wave_day(1))
+    multi = add_reload_stops(jam, "van", 2, 15.0)
+    assert multi.has_traffic and multi.has_reloads
+    assert multi.profiles["default"].speed == jam.profiles["default"].speed
+    # The reload stop is a copy of the depot in both matrices.
+    stop = multi.vehicle_types[0].reload_nodes[0]
+    assert multi.profiles["default"].time[stop][1] == jam.profiles["default"].time[0][1]
+    # The verifier times the second trip through the afternoon rush hour.
+    slow = SpeedProfile((0.0, 200.0), (1.0, 0.25))
+    day = add_reload_stops(with_traffic(_two_wave_day(1), slow), "van", 2, 15.0)
+    plan = Solution([Route(0, [1, 2, day.vehicle_types[0].reload_nodes[0], 3, 4])], set())
+    assert verify(replace(day, profiles=multi.profiles), plan).feasible
+    late = verify(day, plan)
+    assert not late.feasible
+    res = solve(day, AlnsConfig(iterations=200, seed=1))
+    assert res.verdict.feasible
+
+
 # -- split break (15 + 30) ------------------------------------------------------
 
 

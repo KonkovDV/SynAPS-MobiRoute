@@ -380,8 +380,11 @@ def add_reload_stops(inst: Instance, type_id: str, max_trips: int, reload_time: 
     def grow(matrix: Matrix) -> Matrix:
         return tuple(tuple(matrix[a][b] for b in src) for a in src)
 
+    # ``replace`` keeps every other field of the profile: a rush-hour speed
+    # profile must survive, or the day would be planned on free-flow times.
     profiles = {
-        name: Profile(name, grow(p.time), grow(p.distance)) for name, p in inst.profiles.items()
+        name: replace(p, time=grow(p.time), distance=grow(p.distance))
+        for name, p in inst.profiles.items()
     }
     types = list(inst.vehicle_types)
     types[t] = replace(vt, reload_nodes=vt.reload_nodes + new_ids, max_trips=max_trips)
