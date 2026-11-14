@@ -243,6 +243,19 @@ def test_build_maps_orders_to_nodes_and_places() -> None:
     assert inst.nodes[1].y - inst.nodes[0].y == pytest.approx(2.224, abs=1e-3)
 
 
+def test_depot_loading_time_starts_the_shift() -> None:
+    doc = _doc()
+    doc["depots"][0]["load_min"] = 20
+    built = geo.build(doc)
+    assert built.instance.nodes[0].service == 20.0
+    sheet = _sheet_of(built, [1, 2, 3, 4, 5])
+    first = sheet.rows[0]
+    assert first.kind == "depart" and first.end - first.start == pytest.approx(20.0)
+    assert sheet.rows[1].arrive > first.end  # the drive starts after loading
+    text = sheets_markdown([sheet], built.instance.dimensions)
+    assert f"Начало {geo.clock(first.start)}, выезд {geo.clock(first.end)}" in text
+
+
 def test_rests_trips_and_traffic_reach_the_model() -> None:
     doc = _doc()
     doc["currency"] = "RUB"
@@ -348,7 +361,8 @@ def test_sheets_neutralise_formulas_and_table_breakers() -> None:
     text = sheets_markdown([sheet], built.instance.dimensions)
     line = next(x for x in text.splitlines() if "ворота" in x)
     assert "Склад \\| ворота 3 &lt;b&gt;2 этаж&lt;/b&gt;" in line
-    assert line.count(" | ") == text.splitlines()[6].count(" | ")
+    header = next(x for x in text.splitlines() if x.startswith("| Рейс |"))
+    assert line.count(" | ") == header.count(" | ")
 
 
 def test_example_day_is_synthetic_and_matches_its_generator() -> None:
@@ -521,15 +535,20 @@ def test_sheet_numbers_trips_at_the_reload_stop() -> None:
     assert [row.trip for row in sheet.rows] == [1, 1, 1, 1, 1, 2, 2, 2]
     reload_row = sheet.rows[5]
     assert reload_row.kind == "reload" and reload_row.load == (600.0, 1.5)
+    # Depot goods per trip in loading order (last drop first); B and C are not depot goods.
+    assert sheet.loading == (("A",), ("E",))
     assert reload_row.end - reload_row.start == pytest.approx(20.0)
     assert sheet.rows[4].load == (100.0, 0.3)  # the collection, unloaded at the reload
 
     text = sheets_markdown([sheet], built.instance.dimensions, currency=built.currency)
     assert text.startswith("# Маршрутные листы")
     assert "## van #1 · своя · 2 рейса" in text and "₽" in text
-    assert "| 2 | перезагрузка |" in text
+    assert "| 2 | загрузка на складе |" in text
+    assert "Порядок загрузки на складе, обратный порядку выгрузки: рейс 1: A; рейс 2: E." in text
+    assert "| 100 | 0,3 |" in text  # decimal comma for people
     english = sheets_markdown([sheet], built.instance.dimensions, lang="en", currency="EUR")
     assert "## van #1 · own · 2 trips" in english and "€" in english
+    assert "Loading order at the depot, reverse of the drops: trip 1: A; trip 2: E." in english
 
     rows = list(csv.DictReader(io.StringIO(sheets_csv([sheet], built.instance.dimensions))))
     assert len(rows) == len(sheet.rows)
