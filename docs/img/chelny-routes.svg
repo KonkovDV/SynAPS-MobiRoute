@@ -1,0 +1,90 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="774" height="620" viewBox="0 0 774 620" role="img" aria-label="chelny-day-1: ALNS 5000 it, native">
+<style>
+  .surface { fill: #fcfcfb; }
+  .ink { fill: #0b0b0b; } .ink2 { fill: #52514e; } .muted { fill: #898781; }
+  .grid { stroke: #e1e0d9; stroke-width: 1; } .axis { stroke: #c3c2b7; stroke-width: 1; }
+  .window { fill: #898781; fill-opacity: 0.22; }
+  .limit { stroke: #898781; stroke-width: 1; stroke-dasharray: 3 3; }
+  .depot { fill: #0b0b0b; }
+  .s0 { stroke: #2a78d6; } .f0 { fill: #2a78d6; } .s1 { stroke: #eb6834; } .f1 { fill: #eb6834; } .s2 { stroke: #1baf7a; } .f2 { fill: #1baf7a; } .s3 { stroke: #eda100; } .f3 { fill: #eda100; } .s4 { stroke: #e87ba4; } .f4 { fill: #e87ba4; } .s5 { stroke: #008300; } .f5 { fill: #008300; } .s6 { stroke: #6250d6; } .f6 { fill: #6250d6; }
+  @media (prefers-color-scheme: dark) {
+    .surface { fill: #1a1a19; }
+    .ink { fill: #f0efec; } .ink2 { fill: #c3c2b7; }
+    .grid { stroke: #2c2c2a; } .axis { stroke: #383835; }
+    .depot { fill: #f0efec; }
+    .s0 { stroke: #3987e5; } .f0 { fill: #3987e5; } .s1 { stroke: #d95926; } .f1 { fill: #d95926; } .s2 { stroke: #199e70; } .f2 { fill: #199e70; } .s3 { stroke: #c98500; } .f3 { fill: #c98500; } .s4 { stroke: #d55181; } .f4 { fill: #d55181; } .s5 { stroke: #008300; } .f5 { fill: #008300; } .s6 { stroke: #9085e9; } .f6 { fill: #9085e9; }
+  }
+  text { font-family: system-ui, -apple-system, "Segoe UI", sans-serif; }
+</style>
+<rect class="surface" width="774" height="620" rx="8"/>
+<text class="ink" x="24" y="30" font-size="17" font-weight="600">chelny-day-1: ALNS 5000 it, native</text>
+<text class="ink2" x="24" y="52" font-size="12.5">7 vehicles · distance 333.9 · 45/45 orders · filled = pickup, ring = delivery, square = depot</text>
+<polyline class="s0" points="368.4,350.0 348.9,321.5 346.4,262.7 362.0,285.6 368.4,350.0 57.8,394.4 189.7,278.0 368.4,350.0" fill="none" stroke-width="2" stroke-linejoin="round" opacity="0.9"><title>van: 6 stops</title></polyline>
+<circle class="s0 surface" cx="348.9" cy="321.5" r="3.6" stroke-width="1.8"><title>Z014 delivery</title></circle>
+<circle class="s0 surface" cx="346.4" cy="262.7" r="3.6" stroke-width="1.8"><title>Z020 delivery</title></circle>
+<circle class="s0 surface" cx="362.0" cy="285.6" r="3.6" stroke-width="1.8"><title>Z011 delivery</title></circle>
+<circle class="s0 surface" cx="57.8" cy="394.4" r="3.6" stroke-width="1.8"><title>Z002 delivery</title></circle>
+<circle class="s0 surface" cx="189.7" cy="278.0" r="3.6" stroke-width="1.8"><title>Z027 delivery</title></circle>
+<polyline class="s1" points="368.4,350.0 274.9,495.1 224.0,486.6 247.4,427.0 247.4,427.0 247.4,427.0 191.4,467.1 120.8,394.5 141.2,335.4 141.2,335.4 79.3,291.1 57.1,512.2 83.6,534.8 238.2,535.3 473.1,427.8 499.0,422.8 507.1,403.5 368.4,350.0" fill="none" stroke-width="2" stroke-linejoin="round" opacity="0.9"><title>truck: 16 stops</title></polyline>
+<circle class="s1 surface" cx="274.9" cy="495.1" r="3.6" stroke-width="1.8"><title>Z025 delivery</title></circle>
+<circle class="s1 surface" cx="224.0" cy="486.6" r="3.6" stroke-width="1.8"><title>Z030 delivery</title></circle>
+<circle class="f1" cx="247.4" cy="427.0" r="3.6"><title>Z042 pickup</title></circle>
+<circle class="f1" cx="247.4" cy="427.0" r="3.6"><title>Z045 pickup</title></circle>
+<circle class="f1" cx="247.4" cy="427.0" r="3.6"><title>Z024 pickup</title></circle>
+<circle class="s1 surface" cx="191.4" cy="467.1" r="3.6" stroke-width="1.8"><title>Z024 delivery</title></circle>
+<circle class="s1 surface" cx="120.8" cy="394.5" r="3.6" stroke-width="1.8"><title>Z023 delivery</title></circle>
+<circle class="f1" cx="141.2" cy="335.4" r="3.6"><title>Z006 pickup</title></circle>
+<circle class="f1" cx="141.2" cy="335.4" r="3.6"><title>Z043 pickup</title></circle>
+<circle class="s1 surface" cx="79.3" cy="291.1" r="3.6" stroke-width="1.8"><title>Z044 delivery</title></circle>
+<circle class="s1 surface" cx="57.1" cy="512.2" r="3.6" stroke-width="1.8"><title>Z040 delivery</title></circle>
+<circle class="s1 surface" cx="83.6" cy="534.8" r="3.6" stroke-width="1.8"><title>Z043 delivery</title></circle>
+<circle class="s1 surface" cx="238.2" cy="535.3" r="3.6" stroke-width="1.8"><title>Z045 delivery</title></circle>
+<circle class="s1 surface" cx="473.1" cy="427.8" r="3.6" stroke-width="1.8"><title>Z042 delivery</title></circle>
+<circle class="s1 surface" cx="499.0" cy="422.8" r="3.6" stroke-width="1.8"><title>Z006 delivery</title></circle>
+<circle class="s1 surface" cx="507.1" cy="403.5" r="3.6" stroke-width="1.8"><title>Z032 delivery</title></circle>
+<polyline class="s2" points="368.4,350.0 400.7,509.6 148.3,459.0 247.4,427.0 187.8,470.5 368.4,350.0 308.5,419.1 368.4,350.0" fill="none" stroke-width="2" stroke-linejoin="round" opacity="0.9"><title>van: 6 stops</title></polyline>
+<circle class="s2 surface" cx="400.7" cy="509.6" r="3.6" stroke-width="1.8"><title>Z018 delivery</title></circle>
+<circle class="s2 surface" cx="148.3" cy="459.0" r="3.6" stroke-width="1.8"><title>Z041 delivery</title></circle>
+<circle class="f2" cx="247.4" cy="427.0" r="3.6"><title>Z029 pickup</title></circle>
+<circle class="s2 surface" cx="187.8" cy="470.5" r="3.6" stroke-width="1.8"><title>Z029 delivery</title></circle>
+<circle class="s2 surface" cx="308.5" cy="419.1" r="3.6" stroke-width="1.8"><title>Z012 delivery</title></circle>
+<polyline class="s3" points="368.4,350.0 296.6,333.1 390.6,408.3 368.4,350.0 196.8,430.6 177.8,440.9 368.4,350.0" fill="none" stroke-width="2" stroke-linejoin="round" opacity="0.9"><title>van: 5 stops</title></polyline>
+<circle class="s3 surface" cx="296.6" cy="333.1" r="3.6" stroke-width="1.8"><title>Z010 delivery</title></circle>
+<circle class="s3 surface" cx="390.6" cy="408.3" r="3.6" stroke-width="1.8"><title>Z035 delivery</title></circle>
+<circle class="s3 surface" cx="196.8" cy="430.6" r="3.6" stroke-width="1.8"><title>Z013 delivery</title></circle>
+<circle class="s3 surface" cx="177.8" cy="440.9" r="3.6" stroke-width="1.8"><title>Z017 delivery</title></circle>
+<polyline class="s4" points="368.4,350.0 119.5,558.1 464.7,550.3 464.7,550.3 544.0,532.7 517.2,585.0 464.7,550.3 364.4,566.6 464.7,550.3 315.6,565.2 24.0,573.8 368.4,350.0 373.8,442.2 297.7,507.7 368.4,350.0" fill="none" stroke-width="2" stroke-linejoin="round" opacity="0.9"><title>van: 13 stops</title></polyline>
+<circle class="s4 surface" cx="119.5" cy="558.1" r="3.6" stroke-width="1.8"><title>Z037 delivery</title></circle>
+<circle class="f4" cx="464.7" cy="550.3" r="3.6"><title>Z034 pickup</title></circle>
+<circle class="f4" cx="464.7" cy="550.3" r="3.6"><title>Z015 pickup</title></circle>
+<circle class="s4 surface" cx="544.0" cy="532.7" r="3.6" stroke-width="1.8"><title>Z005 delivery</title></circle>
+<circle class="s4 surface" cx="517.2" cy="585.0" r="3.6" stroke-width="1.8"><title>Z015 delivery</title></circle>
+<circle class="f4" cx="464.7" cy="550.3" r="3.6"><title>Z008 pickup</title></circle>
+<circle class="s4 surface" cx="364.4" cy="566.6" r="3.6" stroke-width="1.8"><title>Z008 delivery</title></circle>
+<circle class="f4" cx="464.7" cy="550.3" r="3.6"><title>Z028 pickup</title></circle>
+<circle class="s4 surface" cx="315.6" cy="565.2" r="3.6" stroke-width="1.8"><title>Z039 delivery</title></circle>
+<circle class="s4 surface" cx="24.0" cy="573.8" r="3.6" stroke-width="1.8"><title>Z028 delivery</title></circle>
+<circle class="s4 surface" cx="373.8" cy="442.2" r="3.6" stroke-width="1.8"><title>Z034 delivery</title></circle>
+<circle class="s4 surface" cx="297.7" cy="507.7" r="3.6" stroke-width="1.8"><title>Z038 delivery</title></circle>
+<polyline class="s5" points="368.4,350.0 214.8,291.2 247.4,427.0 39.9,478.6 64.8,564.8 81.9,590.0 121.4,517.3 176.8,348.2 234.7,370.9 368.4,350.0" fill="none" stroke-width="2" stroke-linejoin="round" opacity="0.9"><title>truck: 8 stops</title></polyline>
+<circle class="s5 surface" cx="214.8" cy="291.2" r="3.6" stroke-width="1.8"><title>Z001 delivery</title></circle>
+<circle class="f5" cx="247.4" cy="427.0" r="3.6"><title>Z016 pickup</title></circle>
+<circle class="s5 surface" cx="39.9" cy="478.6" r="3.6" stroke-width="1.8"><title>Z016 delivery</title></circle>
+<circle class="s5 surface" cx="64.8" cy="564.8" r="3.6" stroke-width="1.8"><title>Z033 delivery</title></circle>
+<circle class="s5 surface" cx="81.9" cy="590.0" r="3.6" stroke-width="1.8"><title>Z019 delivery</title></circle>
+<circle class="s5 surface" cx="121.4" cy="517.3" r="3.6" stroke-width="1.8"><title>Z004 delivery</title></circle>
+<circle class="s5 surface" cx="176.8" cy="348.2" r="3.6" stroke-width="1.8"><title>Z036 delivery</title></circle>
+<circle class="s5 surface" cx="234.7" cy="370.9" r="3.6" stroke-width="1.8"><title>Z021 delivery</title></circle>
+<polyline class="s6" points="368.4,350.0 408.1,432.2 465.2,490.8 514.9,490.2 428.9,386.2 444.9,303.4 398.3,265.4 368.4,350.0" fill="none" stroke-width="2" stroke-linejoin="round" opacity="0.9"><title>truck-hired: 6 stops</title></polyline>
+<circle class="s6 surface" cx="408.1" cy="432.2" r="3.6" stroke-width="1.8"><title>Z007 delivery</title></circle>
+<circle class="s6 surface" cx="465.2" cy="490.8" r="3.6" stroke-width="1.8"><title>Z009 delivery</title></circle>
+<circle class="s6 surface" cx="514.9" cy="490.2" r="3.6" stroke-width="1.8"><title>Z022 delivery</title></circle>
+<circle class="s6 surface" cx="428.9" cy="386.2" r="3.6" stroke-width="1.8"><title>Z031 delivery</title></circle>
+<circle class="s6 surface" cx="444.9" cy="303.4" r="3.6" stroke-width="1.8"><title>Z026 delivery</title></circle>
+<circle class="s6 surface" cx="398.3" cy="265.4" r="3.6" stroke-width="1.8"><title>Z003 delivery</title></circle>
+<rect class="depot" x="363.4" y="345.0" width="10" height="10"><title>Склад (условн.)</title></rect>
+<text class="ink" x="568" y="74" font-size="13" font-weight="600">Vehicles by type</text>
+<text class="ink2" x="568" y="96" font-size="12.5">truck: 2</text>
+<text class="ink2" x="568" y="114" font-size="12.5">truck-hired: 1</text>
+<text class="ink2" x="568" y="132" font-size="12.5">van: 4</text>
+</svg>

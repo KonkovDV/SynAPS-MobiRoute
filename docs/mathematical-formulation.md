@@ -301,6 +301,46 @@ $\lambda_0$ keeps it within $T_k$ (both are schedules), so it never accepts an
 infeasible route and may, rarely, reject a feasible one. Time costs are
 charged on free-flow minutes.
 
+## 4d. The schedule handed to the driver
+
+The earliest schedule leaves the depot when the shift opens and may wait an
+hour at the first window; the latest one may come back later than needed.
+Route sheets (`vrp/sheets.py`) use a third schedule
+(`schedule.compact_schedule`).
+
+**Lemma 4.** Let the system of section 4 be feasible, $E$ the earliest return
+($B_{\text{end}}$ of the earliest schedule) and
+$c = -\delta(\text{end}, \text{start})$ the shortest duration. The earliest
+schedule of the system with the extra constraint $B_{\text{start}} \ge E - c$
+exists, returns at $E$ and lasts exactly $c$.
+
+*Proof.* Eliminating the other variables from a system of difference
+constraints (Fourier-Motzkin) leaves difference constraints on
+$(B_{\text{start}}, B_{\text{end}})$ whose bounds are shortest-path
+distances: $L_0 \le B_{\text{start}} \le U_0$,
+$L_e \le B_{\text{end}} \le U_e$ and
+$c \le B_{\text{end}} - B_{\text{start}} \le C$, so
+$E = \max(L_e, L_0 + c)$. The point $(E - c, E)$ satisfies all of them:
+$E - c \ge L_0$ by the formula for $E$; $E - c \le U_0$ because the path
+$\text{end} \to z \to \text{start}$ gives $c \ge L_e - U_0$ and
+$L_0 \le U_0$; $E \le U_e$ because the earliest schedule attains $E$; the
+duration is $c \le C$. So a full schedule with these two values exists, and
+the system with $B_{\text{start}} \ge E - c$ is feasible. Its earliest
+schedule $B^*$ is pointwise below that schedule, so $B^*_{\text{end}} \le E$,
+and $B^*_{\text{end}} \ge E$ by the definition of $E$. Then
+$B^*_{\text{end}} - B^*_{\text{start}} \le c$, and it is at least $c$ by the
+definition of $c$. $\square$
+
+One more Bellman-Ford run gives $B^*$; with a rest the gap is the one the
+verifier chose. Under traffic $R(x) - x$ need not be monotone, so the
+departure is the minimiser of Lemma 3 (the earliest among ties) and the
+return may be later than $E$. A sheet adds arrivals
+$A_{k+1} = B_k + s_k + t_{k,k+1}$ (plus $b$ in the rest gap, $\alpha$ in
+place of $+t$ under traffic) and waiting $B_k - A_k$. Property tests hold
+$B^*$ to every arc of the constraint graph and to the verifier's $E$ and $c$
+on random routes with ride limits and rests, and to the windows, the FIFO
+travel function and the shortest duration under traffic.
+
 ## 5. Lateness instead of soft windows
 
 Soft windows hide how late a plan is. The repository keeps windows hard and
