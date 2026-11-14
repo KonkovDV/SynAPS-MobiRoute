@@ -15,7 +15,7 @@
 <meta property="og:image" content="https://konkovdv.github.io/SynAPS-MobiRoute/assets/og.png">
 <meta property="og:image:width" content="1200">
 <meta property="og:image:height" content="630">
-<meta property="og:image:alt" content="Проверенный оптимальный план Cordeau a2-16 и ключевые результаты: 130 эталонов, 38 из 40 доказанных оптимумов, ядро на Rust в 42 раза быстрее">
+<meta property="og:image:alt" content="Проверенный оптимальный план Cordeau a2-16 и ключевые результаты: 130 эталонов, 40 из 40 доказанных оптимумов, ядро на Rust в 49 раз быстрее">
 <meta property="og:url" content="https://konkovdv.github.io/SynAPS-MobiRoute/">
 <meta name="twitter:card" content="summary_large_image">
 <meta name="color-scheme" content="light dark">
@@ -36,6 +36,7 @@
     <a href="#solution"><span lang="ru">Решение</span><span lang="en">Solution</span></a>
     <a href="#fleet"><span lang="ru">Парк</span><span lang="en">Fleet</span></a>
     <a href="#dispatch"><span lang="ru">Диспетчеризация</span><span lang="en">Dispatch</span></a>
+    <a href="#rules"><span lang="ru">Правила</span><span lang="en">Rules</span></a>
     <a href="#bench"><span lang="ru">Эталоны</span><span lang="en">Benchmarks</span></a>
     <a href="#lab"><span lang="ru">Попробовать</span><span lang="en">Try it</span></a>
   </div>
@@ -52,7 +53,7 @@
     <div class="hero-copy">
       <p class="eyebrow"><span>VRPTW</span><span>PDPTW</span><span>DARP</span><span lang="ru">смешанный парк</span><span lang="en">mixed fleet</span><span>Python + Rust</span></p>
       <h1><span lang="ru">Маршруты, которые можно <em>доказать</em>.</span><span lang="en">Routes you can <em>prove</em>.</span></h1>
-      <p class="lead"><span lang="ru">Движок маршрутизации для смешанного парка: свои и наёмные машины, вес, объём и паллеты, окна, забор и доставка, заявки в реальном времени. ALNS на ядре Rust, точные модели CP-SAT и MIP, сравнение с OR-Tools — и независимая проверка, которая либо подтверждает план, либо называет, сколько минут ему не хватает.</span><span lang="en">A routing engine for a mixed fleet: own and hired vehicles, weight, volume and pallets, time windows, pickup and delivery, orders arriving live. ALNS on a Rust kernel, exact CP-SAT and MIP models, a head-to-head with OR-Tools, and an independent check that either confirms a plan or tells you how many minutes it is short.</span></p>
+      <p class="lead"><span lang="ru">Движок маршрутизации для смешанного парка: свои и наёмные машины, вес, объём и паллеты, окна, забор и доставка, перерывы водителей, несколько рейсов, пробки по часам суток, заявки в реальном времени. ALNS на ядре Rust, точные модели CP-SAT и MIP, сравнение с OR-Tools — и независимая проверка, которая либо подтверждает план, либо называет, сколько минут ему не хватает.</span><span lang="en">A routing engine for a mixed fleet: own and hired vehicles, weight, volume and pallets, time windows, pickup and delivery, drivers' rests, several trips per shift, rush-hour traffic, orders arriving live. ALNS on a Rust kernel, exact CP-SAT and MIP models, a head-to-head with OR-Tools, and an independent check that either confirms a plan or tells you how many minutes it is short.</span></p>
       <div class="cta">
         <a class="btn primary" href="#fleet"><span lang="ru">Смотреть парк в работе</span><span lang="en">See the fleet at work</span></a>
         <a class="btn ghost" href="#lab"><span lang="ru">Проверить маршрут самому</span><span lang="en">Verify a route yourself</span></a>
@@ -72,9 +73,9 @@
   <div class="wrap">
     <dl class="stats">
       <div class="stat reveal"><dt><span lang="ru">открытых эталонов, каждый план проверен</span><span lang="en">public instances, every plan verified</span></dt><dd data-count="130">130</dd></div>
-      <div class="stat reveal"><dt><span lang="ru">малых задач: ALNS находит доказанный оптимум</span><span lang="en">small instances where ALNS finds the proven optimum</span></dt><dd id="stat-exact" data-count="38" data-suf="/40">38/40</dd></div>
+      <div class="stat reveal"><dt><span lang="ru">малых задач: ALNS находит доказанный оптимум</span><span lang="en">small instances where ALNS finds the proven optimum</span></dt><dd id="stat-exact" data-count="40" data-suf="/40">40/40</dd></div>
       <div class="stat reveal"><dt><span lang="ru">ответ на новую заявку</span><span lang="en">answer to a new order</span></dt><dd data-count="0.1" data-dec="1" data-suf=" мс" data-suf-en=" ms">0.1 мс</dd></div>
-      <div class="stat reveal"><dt><span lang="ru">быстрее с ядром на Rust, тот же план</span><span lang="en">faster with the Rust kernel, same plan</span></dt><dd id="stat-speed" data-count="42" data-pre="×">×42</dd></div>
+      <div class="stat reveal"><dt><span lang="ru">быстрее с ядром на Rust, тот же план</span><span lang="en">faster with the Rust kernel, same plan</span></dt><dd id="stat-speed" data-count="49" data-pre="×">×49</dd></div>
     </dl>
   </div>
 </header>
@@ -212,6 +213,20 @@ dropoff 1 cannot start before 402; dropoff 1 → dropoff 12 takes 3 + 15.68 min.
   </div>
 </section>
 
+<section id="rules" class="sec">
+  <div class="wrap">
+    <p class="kicker reveal"><span lang="ru">Правила эксплуатации</span><span lang="en">Operating rules</span></p>
+    <h2 class="reveal"><span lang="ru">Перерывы, рейсы и пробки — ограничения, а не допущения.</span><span lang="en">Rests, trips and traffic are constraints, not assumptions.</span></h2>
+    <p class="sub reveal"><span lang="ru">Без этих трёх правил план не выйдет на линию. Каждое проверяет независимый верификатор; цифры — на синтетических днях, по пять дней на правило.</span><span lang="en">Without these three rules a plan does not leave the depot. The independent verifier checks each; numbers come from synthetic days, five per rule.</span></p>
+    <div class="grid3">
+      <article class="card reveal"><p class="tag warn"><span lang="ru">4,5 ч → 45 мин</span><span lang="en">4.5 h → 45 min</span></p><p class="rule-num">4–6</p><h3><span lang="ru">маршрутов в день без места для перерыва</span><span lang="en">routes a day with no room for a rest</span></h3><p><span lang="ru">Если планировать без нормы труда и отдыха. Верификатор называет конфликт и минуты, которых не хватает; план с нормой дороже на 2–5,5%.</span><span lang="en">When the plan ignores the driving-time rule. The verifier names the conflict and the minutes missing; the compliant plan costs 2–5.5% more.</span></p></article>
+      <article class="card reveal"><p class="tag warn"><span lang="ru">2 рейса</span><span lang="en">2 trips</span></p><p class="rule-num">60/60</p><h3><span lang="ru">магазинов вместо 52–55</span><span lang="en">stores instead of 52–55</span></h3><p><span lang="ru">Склад и две волны доставки. Машина перезагружается и уходит во второй рейс: 12–15 машин вместо 21, наёмных — 3–6 вместо 12.</span><span lang="en">A DC and two delivery waves. A vehicle reloads and leaves for a second trip: 12–15 vehicles instead of 21, 3–6 of them hired instead of 12.</span></p></article>
+      <article class="card reveal"><p class="tag warn"><span lang="ru">часы пик</span><span lang="en">rush hours</span></p><p class="rule-num">8–13</p><h3><span lang="ru">маршрутов в день опаздывают в пробках</span><span lang="en">routes a day run late in traffic</span></h3><p><span lang="ru">Если планировать на скоростях свободного потока: 113–318 минут опозданий за день. План со скоростью по часам суток выполним.</span><span lang="en">When the plan uses free-flow speeds: 113–318 minutes late per day. The plan with speeds by time of day holds.</span></p></article>
+    </div>
+    <p class="fine reveal"><a class="link" href="https://github.com/KonkovDV/SynAPS-MobiRoute/blob/main/docs/benchmarks/rules.md"><span lang="ru">Таблицы по каждому дню</span><span lang="en">Day-by-day tables</span> →</a></p>
+  </div>
+</section>
+
 <section id="bench" class="sec">
   <div class="wrap">
     <p class="kicker reveal"><span lang="ru">Эталоны</span><span lang="en">Benchmarks</span></p>
@@ -301,8 +316,8 @@ dropoff 1 cannot start before 402; dropoff 1 → dropoff 12 takes 3 + 15.68 min.
         <tr><th scope="row">Pickup &amp; delivery (PDPTW)</th><td><span class="pill ok"><span lang="ru">есть</span><span lang="en">done</span></span></td><td><span lang="ru">пара на одной машине, порядок, промежуточная остановка</span><span lang="en">pair on one vehicle, precedence, intermediate stop</span></td></tr>
         <tr><th scope="row"><span lang="ru">Гетерогенный парк</span><span lang="en">Heterogeneous fleet</span></th><td><span class="pill ok"><span lang="ru">есть</span><span lang="en">done</span></span></td><td><span lang="ru">типы ТС со своими ёмкостью, стоимостью, скоростью, сменой и оборудованием; свои и наёмные; в эвристиках и в точной модели CP-SAT</span><span lang="en">vehicle types with their own capacity, cost, speed, shift and equipment; own and hired; in the heuristics and in the exact CP-SAT model</span></td></tr>
         <tr><th scope="row"><span lang="ru">Совместимость заказ — ТС — водитель</span><span lang="en">Order–vehicle–driver compatibility</span></th><td><span class="pill ok"><span lang="ru">есть</span><span lang="en">done</span></span></td><td><span lang="ru">квалификация, смена, перерывы и недоступность</span><span lang="en">qualification, shift, breaks and unavailability</span></td></tr>
-        <tr><th scope="row"><span lang="ru">Точные модели: CP и MIP</span><span lang="en">Exact models: CP and MIP</span></th><td><span class="pill ok"><span lang="ru">есть</span><span lang="en">done</span></span></td><td>CP-SAT, SCIP, HiGHS, CBC, <span lang="ru">LP-граница</span><span lang="en">LP bound</span></td></tr>
-        <tr><th scope="row"><span lang="ru">Эвристики и метаэвристики</span><span lang="en">Heuristics and metaheuristics</span></th><td><span class="pill ok"><span lang="ru">есть</span><span lang="en">done</span></span></td><td><span lang="ru">regret-вставка, ALNS (5 операторов разрушения, отжиг), guided ejection для сокращения парка, beam, скользящий горизонт</span><span lang="en">regret insertion, ALNS (5 ruin operators, annealing), guided ejection to cut the fleet, beam, rolling horizon</span></td></tr>
+        <tr><th scope="row"><span lang="ru">Точные модели: CP и MIP</span><span lang="en">Exact models: CP and MIP</span></th><td><span class="pill ok"><span lang="ru">есть</span><span lang="en">done</span></span></td><td>CP-SAT, SCIP, HiGHS, CBC, <span lang="ru">LP-граница; разбиение множества по пулу маршрутов ALNS</span><span lang="en">LP bound; set partitioning over the ALNS route pool</span></td></tr>
+        <tr><th scope="row"><span lang="ru">Эвристики и метаэвристики</span><span lang="en">Heuristics and metaheuristics</span></th><td><span class="pill ok"><span lang="ru">есть</span><span lang="en">done</span></span></td><td><span lang="ru">regret-вставка, ALNS (5 операторов разрушения, отжиг), guided ejection для сокращения парка, слияние маршрутов на машину другого типа, локальный поиск relocate / swap / 2-opt* / 2-opt с проверкой окон за O(1), beam, скользящий горизонт</span><span lang="en">regret insertion, ALNS (5 ruin operators, annealing), guided ejection to cut the fleet, merging routes onto another vehicle type, relocate / swap / 2-opt* / 2-opt local search with O(1) window checks, beam, rolling horizon</span></td></tr>
         <tr><th scope="row"><span lang="ru">Перепланирование в течение дня</span><span lang="en">Same-day re-planning</span></th><td><span class="pill ok"><span lang="ru">есть</span><span lang="en">done</span></span></td><td><span lang="ru">срочный заказ, отмена, неявка, пробка, поломка; сравнение планов</span><span lang="en">urgent order, cancellation, no-show, traffic, breakdown; plan diff</span></td></tr>
         <tr><th scope="row"><span lang="ru">Вектор ёмкости: кг, м³, паллеты</span><span lang="en">Capacity vector: kg, m³, pallets</span></th><td><span class="pill ok"><span lang="ru">есть</span><span lang="en">done</span></span></td><td><span lang="ru">любая размерность, в эвристиках, ядре Rust, точной модели и верификаторе</span><span lang="en">any dimension, in the heuristics, the Rust kernel, the exact model and the verifier</span></td></tr>
         <tr><th scope="row"><span lang="ru">Стоимость по типам ТС</span><span lang="en">Cost by vehicle type</span></th><td><span class="pill ok"><span lang="ru">есть</span><span lang="en">done</span></span></td><td><span lang="ru">плата за выход + руб/км + руб/ч; разные профили скорости</span><span lang="en">fixed fee + per km + per hour; separate speed profiles</span></td></tr>
@@ -310,7 +325,7 @@ dropoff 1 cannot start before 402; dropoff 1 → dropoff 12 takes 3 + 15.68 min.
         <tr><th scope="row"><span lang="ru">Сравнение с OR-Tools Routing</span><span lang="en">Head-to-head with OR-Tools Routing</span></th><td><span class="pill ok"><span lang="ru">есть</span><span lang="en">done</span></span></td><td><span lang="ru">та же модель, равное время, тот же верификатор</span><span lang="en">same model, equal time, same verifier</span></td></tr>
         <tr><th scope="row"><span lang="ru">Заявки в реальном времени</span><span lang="en">Orders in real time</span></th><td><span class="pill ok"><span lang="ru">есть</span><span lang="en">done</span></span></td><td><span lang="ru">заморозка проеханного, вставка за доли мс, переоптимизация живого состояния</span><span lang="en">freeze what is driven, insert in a fraction of a ms, re-optimise the live state</span></td></tr>
         <tr><th scope="row"><span lang="ru">Опоздание вместо «мягких окон»</span><span lang="en">Lateness instead of soft windows</span></th><td><span class="pill ok"><span lang="ru">есть</span><span lang="en">done</span></span></td><td><span lang="ru">минимум максимального и суммарного опоздания (Беллман–Форд, LP)</span><span lang="en">least maximum and total lateness (Bellman–Ford, LP)</span></td></tr>
-        <tr><th scope="row"><span lang="ru">Несколько рейсов, перерывы, время суток</span><span lang="en">Multi-trip, breaks, time of day</span></th><td><span class="pill plan"><span lang="ru">в плане</span><span lang="en">planned</span></span></td><td><span lang="ru">перезагрузка в депо, режим труда и отдыха, часы пик</span><span lang="en">reloading at the depot, driving-time rules, rush hours</span></td></tr>
+        <tr><th scope="row"><span lang="ru">Несколько рейсов, перерывы, время суток</span><span lang="en">Multi-trip, breaks, time of day</span></th><td><span class="pill ok"><span lang="ru">есть</span><span lang="en">done</span></span></td><td><span lang="ru">перезагрузка в депо (ёмкость по рейсам), норма 4,5 ч / 45 мин, скорость по часам суток (модель Ichoua–Gendreau–Potvin, FIFO); в ядре Rust — перерывы и рейсы</span><span lang="en">reloading at the depot (capacity per trip), the 4.5 h / 45 min rule, speeds by time of day (Ichoua–Gendreau–Potvin, FIFO); rests and trips in the Rust kernel</span></td></tr>
       </tbody></table></div></div>
 
     <div class="grid2 cargo">
@@ -344,7 +359,7 @@ dropoff 1 cannot start before 402; dropoff 1 → dropoff 12 takes 3 + 15.68 min.
         <h3 class="h3"><span lang="ru">Честные границы</span><span lang="en">Honest limits</span></h3>
         <ul class="limits">
           <li><span lang="ru">Данные — открытые эталоны и синтетические дни. Данных заказчика и пилота нет, обещаний экономии тоже.</span><span lang="en">Data: public benchmarks and synthetic days. No customer data, no pilot, no savings claims.</span></li>
-          <li><span lang="ru">Пока один рейс на машину, без перерывов внутри маршрута и без пробок по времени суток.</span><span lang="en">One trip per vehicle for now, no breaks inside a route, no time-of-day traffic.</span></li>
+          <li><span lang="ru">Перерыв — один за смену; пробки — один профиль скорости на всю сеть; живой диспетчер этих правил пока не учитывает.</span><span lang="en">One rest per shift; traffic is one speed profile for the whole network; the live dispatcher does not handle these rules yet.</span></li>
           <li><span lang="ru">Эвристики не доказывают оптимум; разрыв к лучшим решениям опубликован по каждому инстансу.</span><span lang="en">Heuristics prove no optimum; the gap to the best known solution is published per instance.</span></li>
           <li><span lang="ru">Замеры скорости — на одной машине, это не SLA.</span><span lang="en">Speed numbers come from one machine and are not an SLA.</span></li>
         </ul>
