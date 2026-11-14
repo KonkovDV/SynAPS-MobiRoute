@@ -40,7 +40,7 @@ measurement that one command reproduces.
 | Heuristics and metaheuristics | regret-k, ALNS with annealing, guided ejection, route merging, local search with O(1) window checks | [40 of 40 optima](docs/benchmarks/exact-vs-alns.md) · [against OR-Tools](docs/benchmarks/ortools-vs-alns.md) |
 | LP/IP, graph theory, combinatorial optimization | difference constraints and Bellman–Ford with certificates, min-cost flow for vehicle types, set partitioning, four lemmas with proofs | [formulation](docs/mathematical-formulation.md) · [below](#the-mathematics-on-one-screen) |
 | Product code | CLI, input in coordinates, OSRM matrices, route sheets as CSV / Markdown / SVG, error codes, a Rust kernel | [coordinates to route sheets](#from-coordinates-to-route-sheets) |
-| Python: OOP, tests, profiling | immutable dataclass models, `mypy --strict`, 570 tests (8 Hypothesis properties), profiling → a Rust kernel 10–49× faster with the same plan | [tests](tests) · [acceleration](docs/native-acceleration.md) |
+| Python: OOP, tests, profiling | immutable dataclass models, `mypy --strict`, 585 tests (9 Hypothesis properties), profiling → a Rust kernel 10–49× faster with the same plan | [tests](tests) · [acceleration](docs/native-acceleration.md) |
 | Code review and documentation | review rules, CI (ruff, mypy, clippy, tests, CLI smoke runs), documentation in Russian and English, a changelog | [CONTRIBUTING](CONTRIBUTING.md) · [architecture](docs/architecture.md) · [CHANGELOG](CHANGELOG.md) |
 | Risk: synthetic data only | public benchmarks, some on real OSRM road times; synthetic data is labelled as such; limits are listed | [limitations](docs/limitations.md) |
 
@@ -59,9 +59,32 @@ measurement that one command reproduces.
 | Several trips per vehicle | DC → 60 stores in two delivery waves: with one trip per vehicle even 21 vehicles (12 hired) serve only 52–55 stores; with two or three trips, **all 60 on 12–15 vehicles** | same |
 | Rush hours | a plan made on free-flow speeds fails on **8–13 routes a day** in peak traffic (113–318 minutes late); the traffic-aware plan holds at 0–11% more | same |
 | Seeds and statistics | 19 Solomon R2/RC2 instances × 5 seeds: every run at the reference vehicle count, gap spread across seeds up to ±3 pp. Local search shortens the plan in 61 of 95 paired runs (median −0.32% of the best known), Wilcoxon **p = 0.006**; RC202 mean 8.3% → 6.3%, R211 6.5% → 3.9% | `python benchmark/seed_study.py` → [table](docs/benchmarks/seed-study.md) |
-| Engineering | 570 tests, 8 of them Hypothesis properties (hundreds of random routes: the search's checks and the route-sheet schedule against the independent verifier); `mypy --strict`, `ruff`, `clippy -D warnings`; Rust ↔ Python bit for bit | `pytest && ruff check . && mypy` |
+| Engineering | 585 tests, 9 of them Hypothesis properties (hundreds of random routes: the search's checks and the route-sheet schedule against the independent verifier); `mypy --strict`, `ruff`, `clippy -D warnings`; Rust ↔ Python bit for bit | `pytest && ruff check . && mypy` |
 
 Measured on one machine (Linux x86_64, Python 3.13, single thread); not an SLA.
+
+## Comparison with alternatives
+
+Capabilities were checked against each project's documentation (2026-11-14);
+the measurement is against OR-Tools. Details, sources and the research
+literature: [docs/comparison.md](docs/comparison.md) (RU, English summary).
+
+| | This engine | OR-Tools | VROOM | PyVRP | jsprit | Yandex Routing |
+| --- | :---: | :---: | :---: | :---: | :---: | :---: |
+| Windows, pickup and delivery, mixed fleet | ✓ | ✓ | ✓ | ✓ | ✓ | ◐ |
+| Several trips per shift | ✓ | ◐ by hand | n/f | ✓ | n/f | ✓ |
+| Break by time at the wheel (4.5 h → 45 min) | ✓ | ◐ intervals | ◐ windows | Enterprise | n/f | n/f |
+| Rush hours by time of day | ✓ | n/f | n/f | n/f | ✓ | ✓ |
+| Proven optimum on the same model | ✓ | — | — | — | — | n/f |
+| Independent check, "why not" certificate | ✓ | n/f | n/f | n/f | n/f | n/f |
+| Open source | MIT | Apache-2.0 | BSD-2 | MIT | Apache-2.0 | — |
+
+◐ partly, n/f not found in the documentation. Measured at equal time on 18
+instances with one verifier: **ALNS beats OR-Tools on 15, ties on 3, loses on
+none**; on mixed-fleet freight days it costs 16.8–18.3% less with two
+vehicles fewer. Where others are stronger: PyVRP on pure CVRP/VRPTW, VROOM on
+speed and routing-engine integration, commercial services on a finished
+interface and support.
 
 ## What it solves
 
@@ -199,7 +222,7 @@ D(t_0) = \max\big(E - t_0,\; c\big), \qquad t_0^{*} = E - c .
 ```
 
 Leaving at $t_0^{*}$ gives the shortest shift and the earliest return at once.
-On the synthetic Naberezhnye Chelny day that frees 17.1 hours of shift time a
+On the synthetic Naberezhnye Chelny day that frees 14.8 hours of shift time a
 day with the same routes; the [site](https://konkovdv.github.io/SynAPS-MobiRoute/#sheets)
 lets you drag $D(t_0)$ by hand. Proofs of all four lemmas are in
 [docs/mathematical-formulation.md](docs/mathematical-formulation.md).
@@ -241,11 +264,13 @@ mobiroute vrp-solve --geo examples/chelny-day.geo.json --osrm http://localhost:5
 
 Besides the plan and the map, every vehicle gets a route sheet:
 `route-sheets.md` for people, `route-sheets.csv` for an ERP or dispatch
-system, and `route-sheets.svg` is a Gantt chart of the whole day. A sheet lists arrival, start and end of work at every stop, the load
-after it per dimension, reloads between trips and the driver's rest. The
-vehicle leaves as late as its earliest possible return allows instead of
-waiting an hour at the first customer's gate. That schedule has the shortest
-shift duration (Lemma 4 in
+system, and `route-sheets.svg` is a Gantt chart of the whole day. A sheet
+lists arrival, start and end of work at every stop, the load after it per
+dimension, reloads between trips, the driver's break and a driving-time check:
+the longest drive between breaks, driving in the shift and the shift length
+against their limits. The vehicle leaves as late as its earliest possible
+return allows instead of waiting an hour at the first customer's gate. That
+schedule has the shortest shift duration (Lemma 4 in
 [docs/mathematical-formulation.md](docs/mathematical-formulation.md#4d-the-schedule-handed-to-the-driver)),
 and the tests hold it to every constraint of the verifier.
 
@@ -255,18 +280,20 @@ and the tests hold it to every constraint of the verifier.
 
 ```text
 ## van #1 · own · 2 trips
-Departure 10:34, return 13:34; 36.3 km, 73 min driving, 0 min waiting; cost 1,999 ₽
+Start 10:14, departure 10:34, return 13:34; 36.3 km, 73 min driving, 0 min waiting; cost 1,999 ₽
+Driving-time rules met: longest drive between breaks 1:13 / 4:30; driving in the shift 1:13 / 9:00; shift 3:20 / 10:00.
+Loading order at the depot, reverse of the drops: trip 1: Z011, Z020, Z014; trip 2: Z027, Z002.
 
-| Trip | What      | Order | Where               | Window      | Arrive | Start |   End |     kg |
-| ---: | --------- | ----- | ------------------- | ----------- | -----: | ----: | ----: | -----: |
-|    1 | departure |       | Склад (условн.)     |             |  10:34 | 10:34 | 10:34 | 1427.4 |
-|    1 | delivery  | Z014  | Клиент 14 (условн.) | 08:00-11:00 |  10:37 | 10:37 | 10:55 |  645.8 |
-|    1 | delivery  | Z020  | Клиент 20 (условн.) | 11:00-14:00 |  11:00 | 11:00 | 11:14 |  371.1 |
-|    1 | delivery  | Z011  | Клиент 11 (условн.) | 08:00-18:00 |  11:16 | 11:16 | 11:30 |      0 |
-|    2 | reload    |       | Склад (условн.)     | 07:00-20:00 |  11:36 | 11:36 | 12:01 | 1329.1 |
-|    2 | delivery  | Z002  | Клиент 2 (условн.)  | 11:00-14:00 |  12:27 | 12:27 | 12:49 |  241.1 |
-|    2 | delivery  | Z027  | Клиент 27 (условн.) | 08:00-18:00 |  13:04 | 13:04 | 13:18 |      0 |
-|    2 | return    |       | Склад (условн.)     |             |  13:34 | 13:34 | 13:34 |      0 |
+| Trip | What               | Order | Where               | Window      | Arrive | Start |   End |     kg |
+| ---: | ------------------ | ----- | ------------------- | ----------- | -----: | ----: | ----: | -----: |
+|    1 | loading, departure |       | Склад (условн.)     |             |  10:14 | 10:14 | 10:34 | 1427.4 |
+|    1 | delivery           | Z014  | Клиент 14 (условн.) | 08:00-11:00 |  10:37 | 10:37 | 10:55 |  645.8 |
+|    1 | delivery           | Z020  | Клиент 20 (условн.) | 11:00-14:00 |  11:00 | 11:00 | 11:14 |  371.1 |
+|    1 | delivery           | Z011  | Клиент 11 (условн.) | 08:00-18:00 |  11:16 | 11:16 | 11:30 |      0 |
+|    2 | reload             |       | Склад (условн.)     | 07:00-20:00 |  11:36 | 11:36 | 12:01 | 1329.1 |
+|    2 | delivery           | Z002  | Клиент 2 (условн.)  | 11:00-14:00 |  12:27 | 12:27 | 12:49 |  241.1 |
+|    2 | delivery           | Z027  | Клиент 27 (условн.) | 08:00-18:00 |  13:04 | 13:04 | 13:18 |      0 |
+|    2 | return             |       | Склад (условн.)     |             |  13:34 | 13:34 | 13:34 |      0 |
 ```
 
 The example is a synthetic day in Naberezhnye Chelny: a depot, three
@@ -316,6 +343,7 @@ implementation, with the same results, only slower.
 | --- | --- |
 | [docs/cargo-vrp.md](docs/cargo-vrp.md) | cargo VRP: model, algorithms, input in coordinates, route sheets, scenarios, next steps (RU, EN summary) |
 | [docs/mathematical-formulation.md](docs/mathematical-formulation.md) | model, O(1) insertion, difference constraints, rests, trips, traffic, the driver's schedule (lemmas with proofs), local search, set partitioning, lateness LP, CP-SAT, MIP, how results are compared |
+| [docs/comparison.md](docs/comparison.md) | comparison with OR-Tools, VROOM, PyVRP, jsprit, Timefold and Yandex Routing; practice and research taken into the engine (RU, EN summary) |
 | [docs/architecture.md](docs/architecture.md) | modules, data flow, design decisions |
 | [docs/native-acceleration.md](docs/native-acceleration.md) | profiling and the Rust kernels |
 | [docs/benchmark-protocol.md](docs/benchmark-protocol.md) | rules for published numbers |

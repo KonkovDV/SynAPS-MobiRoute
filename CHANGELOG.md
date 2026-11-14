@@ -17,14 +17,28 @@
   chart of the day. `vrp-solve --geo FILE [--osrm URL] --sheets [--lang en]`.
   The Russian output says "маршрутный лист" (a trip plan), not "путевой лист":
   the statutory waybill has required details the engine does not produce.
+- A driving-time check on every route sheet, as an inspector reads it: the
+  longest drive between breaks, driving in the shift and the shift length
+  against their limits; a Hypothesis property holds every sheet of random
+  feasible routes to them.
+- Depot loading time before the first departure (`load_min`), counted in
+  the shift and the windows; the loading order of each trip at the depot,
+  last drop first; decimal commas in Russian sheets.
+- `docs/comparison.md`: OR-Tools, VROOM, jsprit, PyVRP, Timefold and Yandex
+  Routing checked against their documentation, the measured head-to-head
+  with OR-Tools (better on 15 of 18 instances, worse on none), and the
+  research behind the engine with what is taken and what is next.
 - The driver's schedule (`schedule.compact_schedule`): the latest departure
   that still returns earliest, a shortest-duration schedule (Lemma 4 in the
   formulation, two Hypothesis properties).
 - `examples/chelny-day.geo.json`, a synthetic day in Naberezhnye Chelny, and
   its generator.
 - Site: a route-sheets section with the day's map, a Gantt chart of every
-  vehicle, the sheet and load profile of the selected one, and a departure
-  slider that plots the shift length $D(t_0) = \max(E - t_0, c)$ of Lemma 4.
+  vehicle, the sheet and load profile of the selected one, and a shift-start
+  slider that plots the shift length $D(t_0) = \max(E - t_0, c)$ of Lemma 4;
+  a comparison section; view transitions on theme and language switches,
+  anchors clear of the sticky bar, balanced headings, and styles for
+  increased contrast and forced colours.
 - README (RU, EN): a table from the tasks of the role to code and
   measurements, and the key formulas on one screen.
 - Driver rests (`BreakRule`, 4.5 h of driving / 45 min by default, daily
@@ -50,6 +64,11 @@
   `setpart_study.py` (solver choice for set partitioning).
 - `dc_day` generator: store deliveries from a DC in two waves.
 - Property-based tests (Hypothesis) hold the search's checks to the verifier.
+
+### Fixed
+- Route sheets put the driver's rest before the drive of its gap even where
+  Lemma 1 admits it only after the drive, on arrival at the next stop; such
+  sheets showed a stint over the limit (the verifier's schedule was right).
 
 ### Security
 - CSV cells that start like a spreadsheet formula are quoted (OWASP CSV

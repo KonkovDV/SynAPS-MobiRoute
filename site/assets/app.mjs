@@ -35,14 +35,18 @@ function setLang(next) {
   store.set("mr-lang", next);
   rerender.forEach((fn) => fn());
 }
-$("lang").addEventListener("click", () => setLang(lang() === "ru" ? "en" : "ru"));
-$("theme").addEventListener("click", () => {
+// Theme and language switch with a cross-fade where the browser supports
+// view transitions and the reader has not asked for less motion.
+const transition = (fn) =>
+  document.startViewTransition && !reduce.matches ? document.startViewTransition(fn) : fn();
+$("lang").addEventListener("click", () => transition(() => setLang(lang() === "ru" ? "en" : "ru")));
+$("theme").addEventListener("click", () => transition(() => {
   const dark = root.dataset.theme
     ? root.dataset.theme === "dark"
     : matchMedia("(prefers-color-scheme: dark)").matches;
   root.dataset.theme = dark ? "light" : "dark";
   store.set("mr-theme", root.dataset.theme);
-});
+}));
 if (store.get("mr-theme")) root.dataset.theme = store.get("mr-theme");
 
 /* ---------- reveal, counters, scroll progress, card spotlight ---------- */

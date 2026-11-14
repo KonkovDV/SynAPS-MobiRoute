@@ -5,10 +5,10 @@
 
 const PALETTE = ["#2a78d6", "#eb6834", "#1baf7a", "#c98500", "#e87ba4", "#008300", "#6250d6"];
 const KIND = {
-  depart: ["выезд", "departure"],
+  depart: ["загрузка и выезд", "loading, departure"],
   pickup: ["погрузка", "pickup"],
   delivery: ["выгрузка", "delivery"],
-  reload: ["перезагрузка", "reload"],
+  reload: ["загрузка на складе", "reload"],
   rest: ["перерыв", "rest"],
   return: ["возврат", "return"],
 };
@@ -180,7 +180,7 @@ function sheets({ $, tr, lang, svgEl, reduce, rerender }, data) {
     $("sheets-tag").textContent = `${v.hired ? tr("наёмная", "hired") : tr("своя", "own")} · ${tripsText(v.trips)}`;
     $("sheets-tag").style.color = color(sel);
     $("sheets-kpis").innerHTML = [
-      [tr("выезд → возврат", "out → back"), `${hhmm(first.s)} → ${hhmm(last.s)}`],
+      [tr("начало → выезд → возврат", "start → out → back"), `${hhmm(first.s)} → ${hhmm(first.e)} → ${hhmm(last.s)}`],
       [tr("пробег", "distance"), `${num(v.distance, 1)} ${tr("км", "km")}`],
       [tr("за рулём / ожидание", "driving / waiting"), `${Math.round(v.driving)} / ${Math.round(v.waiting)} ${tr("мин", "min")}`],
       [tr("стоимость", "cost"), `${num(v.cost)} ${data.currency}`],
@@ -299,7 +299,7 @@ function sheets({ $, tr, lang, svgEl, reduce, rerender }, data) {
     const yTitle = svgEl("text", { x: cl, y: 16, "font-size": 12, "font-weight": 700, fill: "var(--ink2)" }, curve);
     yTitle.textContent = tr("длительность смены D(t₀)", "shift length D(t₀)");
     const xTitle = svgEl("text", { x: CW - cr, y: CH - 6, "font-size": 12, "font-weight": 700, "text-anchor": "end", fill: "var(--ink2)" }, curve);
-    xTitle.textContent = tr("выезд t₀", "departure t₀");
+    xTitle.textContent = tr("начало смены t₀", "shift start t₀");
     const ok = samples.filter(([, s]) => !s.late && !s.over);
     const bad = samples.filter(([t]) => t >= L.hi);
     const line = (list) => list.map(([t, s], j) => `${j ? "L" : "M"}${cx(t).toFixed(1)} ${cy(s.duration).toFixed(1)}`).join(" ");
@@ -320,20 +320,20 @@ function sheets({ $, tr, lang, svgEl, reduce, rerender }, data) {
     if (now.late) {
       const name = esc(L.names[now.late.i]);
       text = tr(
-        `<b class="bad">Нельзя.</b> Выезд в ${hhmm(d)}: «${name}» — начало позже окна на ${Math.ceil(now.late.by)} мин. Позже ${hhmm(L.hi)} выехать нельзя: это самое позднее расписание.`,
-        `<b class="bad">Infeasible.</b> Leaving at ${hhmm(d)}: "${name}" starts ${Math.ceil(now.late.by)} min after its window. ${hhmm(L.hi)} is the latest departure: the latest schedule.`,
+        `<b class="bad">Нельзя.</b> Начало смены в ${hhmm(d)}: «${name}» — работа начнётся позже окна на ${Math.ceil(now.late.by)} мин. Начать позже ${hhmm(L.hi)} нельзя: это самое позднее расписание.`,
+        `<b class="bad">Infeasible.</b> Starting at ${hhmm(d)}: work at "${name}" begins ${Math.ceil(now.late.by)} min after its window. ${hhmm(L.hi)} is the latest start: the latest schedule.`,
       );
     } else {
       const back = now.B[now.B.length - 1];
       text = tr(
-        `Выезд ${hhmm(d)}, возврат ${hhmm(back)}: смена <b>${dur(now.duration)}</b>, из них ожидание ${dur(now.wait)}.`,
-        `Out ${hhmm(d)}, back ${hhmm(back)}: a <b>${dur(now.duration)}</b> shift, ${dur(now.wait)} of it waiting.`,
+        `Начало ${hhmm(d)}, выезд ${hhmm(d + L.svc[0])}, возврат ${hhmm(back)}: смена <b>${dur(now.duration)}</b>, из них ожидание ${dur(now.wait)}.`,
+        `Start ${hhmm(d)}, out ${hhmm(d + L.svc[0])}, back ${hhmm(back)}: a <b>${dur(now.duration)}</b> shift, ${dur(now.wait)} of it waiting.`,
       );
-      if (Math.abs(d - L.best) < 0.5) text += tr(" Это выезд по лемме 4: смена кратчайшая, возврат самый ранний.", " This is the Lemma 4 departure: the shortest shift and the earliest return.");
+      if (Math.abs(d - L.best) < 0.5) text += tr(" Это начало по лемме 4: смена кратчайшая, возврат самый ранний.", " This is the Lemma 4 start: the shortest shift and the earliest return.");
     }
     text += tr(
-      ` <span class="fine">Выезд в начале смены (${hhmm(lo)}) — те же точки и тот же возврат, но смена ${dur(base.duration)}: на ${dur(saved)} дольше.</span>`,
-      ` <span class="fine">Leaving when the shift opens (${hhmm(lo)}): the same stops and the same return, but a ${dur(base.duration)} shift, ${dur(saved)} longer.</span>`,
+      ` <span class="fine">Если начинать сразу в ${hhmm(lo)} — те же точки и тот же возврат, но смена ${dur(base.duration)}: на ${dur(saved)} дольше.</span>`,
+      ` <span class="fine">Starting as soon as possible (${hhmm(lo)}): the same stops and the same return, but a ${dur(base.duration)} shift, ${dur(saved)} longer.</span>`,
     );
     $("dep-text").innerHTML = text;
   }
