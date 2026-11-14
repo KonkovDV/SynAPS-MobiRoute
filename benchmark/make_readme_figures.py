@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from typing import Any
 
 ROOT = Path(__file__).resolve().parents[1]
 IMG = ROOT / "docs" / "img"
@@ -52,15 +53,42 @@ def svg(width: int, height: int, label: str, body: list[str]) -> str:
     )
 
 
+def _load(result: str, published: str) -> Any:
+    """A fresh result file if the study was rerun, else the copy the site publishes."""
+    path = ROOT / "benchmark" / "results" / result
+    if not path.exists():
+        path = ROOT / "site" / "data" / published
+    return json.loads(path.read_text())
+
+
 def _results() -> dict[str, str]:
-    bench = json.loads((ROOT / "benchmark/results/vrp/vrp_benchmark.json").read_text())
+    bench = _load("vrp/vrp_benchmark.json", "benchmarks.json")
     sol = [r for r in bench["rows"] if r["family"] == "solomon"]
     at_ref = sum(r["vehicles"] <= r["ref_vehicles"] for r in sol)
-    exact = json.loads((ROOT / "benchmark/results/exact_vs_alns.json").read_text())["rows"]
-    proven = sum(abs(r["gap_pct"]) < 1e-9 for r in exact)
+    published = json.loads((ROOT / "site" / "data" / "comparisons.json").read_text())
+    exact = _load("exact_vs_alns.json", "comparisons.json")
+    summary = exact.get("exact", exact)["summary"]
+    ortools = _load("ortools_vs_alns.json", "comparisons.json")
+    rows = ortools.get("ortools", ortools)["rows"]
+    assert rows == published["ortools"]["rows"], "run export_vrp_site_data.py first"
+    better = equal = worse = 0
+    saving, fewer = 0.0, 0
+    for base, ours in zip(rows[::2], rows[1::2], strict=True):
+        assert base["instance"] == ours["instance"] and ours["solver"].startswith("ALNS")
+        a = (-ours["served"], ours["vehicles"], ours["cost"])
+        b = (-base["served"], base["vehicles"], base["cost"])
+        better += a < b
+        equal += a == b
+        worse += a > b
+        if ours["instance"].startswith("cargo-day"):
+            saving = max(saving, 100.0 * (1.0 - ours["cost"] / base["cost"]))
+            fewer = max(fewer, base["vehicles"] - ours["vehicles"])
     return {
         "solomon": f"{at_ref} / {len(sol)}",
-        "exact": f"{proven} / {len(exact)}",
+        "exact": f"{summary['alns_matches_optimum']} / {summary['proven_optimal']}",
+        "ortools": f"{better} · {equal} · {worse}",
+        "cargo": f"−{saving:.0f}%",
+        "fewer": str(fewer),
     }
 
 
@@ -70,16 +98,16 @@ def kpi(lang: str) -> str:
         "ru": [
             (r["solomon"], "Solomon: число машин", "лучшего известного решения"),
             (r["exact"], "оптимумов CP-SAT", "найдено эвристикой"),
-            ("15 · 3 · 0", "против OR-Tools, 10 с:", "лучше · наравне · хуже"),
-            ("−18%", "стоимость грузового дня", "и на две машины меньше"),
+            (r["ortools"], "против OR-Tools, 10 с:", "лучше · наравне · хуже"),
+            (r["cargo"], "стоимость грузового дня,", f"машин меньше: до {r['fewer']}"),
             ("×49", "ядро Rust против Python", "при том же плане"),
             ("0,1 мс", "ответ диспетчера", "на новую заявку"),
         ],
         "en": [
             (r["solomon"], "Solomon instances at", "the best-known fleet size"),
             (r["exact"], "CP-SAT optima", "found by the heuristic"),
-            ("15 · 3 · 0", "vs OR-Tools, 10 s:", "better · equal · worse"),
-            ("−18%", "cost of a cargo day,", "two vehicles fewer"),
+            (r["ortools"], "vs OR-Tools, 10 s:", "better · equal · worse"),
+            (r["cargo"], "cost of a cargo day,", f"up to {r['fewer']} vehicles fewer"),
             ("×49", "Rust kernel vs Python,", "identical plan"),
             ("0.1 ms", "dispatcher response", "to a new order"),
         ],

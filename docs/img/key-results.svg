@@ -26,14 +26,14 @@
 <text class="ink2" x="352" y="110" font-size="13">найдено эвристикой</text>
 <rect x="640" y="24" width="296" height="96" rx="8" fill="none" class="line" stroke-width="1"/>
 <rect x="640" y="42" width="3" height="60" rx="1.5" class="accent"/>
-<text class="ink" x="660" y="74" font-size="30" font-weight="600">15 · 3 · 0</text>
+<text class="ink" x="660" y="74" font-size="30" font-weight="600">12 · 6 · 0</text>
 <text class="ink2" x="660" y="94" font-size="13">против OR-Tools, 10 с:</text>
 <text class="ink2" x="660" y="110" font-size="13">лучше · наравне · хуже</text>
 <rect x="24" y="132" width="296" height="96" rx="8" fill="none" class="line" stroke-width="1"/>
 <rect x="24" y="150" width="3" height="60" rx="1.5" class="accent"/>
-<text class="ink" x="44" y="182" font-size="30" font-weight="600">−18%</text>
-<text class="ink2" x="44" y="202" font-size="13">стоимость грузового дня</text>
-<text class="ink2" x="44" y="218" font-size="13">и на две машины меньше</text>
+<text class="ink" x="44" y="182" font-size="30" font-weight="600">−17%</text>
+<text class="ink2" x="44" y="202" font-size="13">стоимость грузового дня,</text>
+<text class="ink2" x="44" y="218" font-size="13">машин меньше: до 3</text>
 <rect x="332" y="132" width="296" height="96" rx="8" fill="none" class="line" stroke-width="1"/>
 <rect x="332" y="150" width="3" height="60" rx="1.5" class="accent"/>
 <text class="ink" x="352" y="182" font-size="30" font-weight="600">×49</text>

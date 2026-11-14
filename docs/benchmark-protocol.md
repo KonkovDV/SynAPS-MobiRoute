@@ -34,8 +34,10 @@ Rules every number in this repository follows.
 | Public benchmarks (130 instances) | `python benchmark/vrp_benchmark.py --iterations 30000 --cordeau-iterations 10000` | [benchmarks/vrp-public-benchmarks.md](benchmarks/vrp-public-benchmarks.md) |
 | ALNS vs proven optima | `python benchmark/exact_vs_alns.py --instances 40` | [benchmarks/exact-vs-alns.md](benchmarks/exact-vs-alns.md) |
 | OR-Tools Routing vs ALNS, equal time | `python benchmark/ortools_vs_alns.py --time-limit 10` | [benchmarks/ortools-vs-alns.md](benchmarks/ortools-vs-alns.md) |
+| ALNS, PyVRP, VROOM, jsprit at equal time | `python benchmark/solvers_study.py` (needs `pyvrp`, `pyvroom`, a JDK and Maven; see the script) | [benchmarks/solvers.md](benchmarks/solvers.md) |
 | Live dispatch policies | `python benchmark/realtime_dispatch.py --with-ortools` | [benchmarks/realtime-dispatch.md](benchmarks/realtime-dispatch.md) |
 | Python vs Rust kernel | `python benchmark/measure_vrp_speed.py` | [benchmarks/vrp-speed.md](benchmarks/vrp-speed.md) |
+| Where an ALNS run spends its time (`cProfile`) | `python benchmark/profile_vrp.py` | [benchmarks/vrp-profile.md](benchmarks/vrp-profile.md) |
 | Solvers on a2-16 (CP-SAT, MIP, LP bound) | `python benchmark/solver_lab.py` | [benchmarks/solver-lab-a2-16.md](benchmarks/solver-lab-a2-16.md) |
 | Rests, trips, rush hours on synthetic days | `python benchmark/rules_study.py` | [benchmarks/rules.md](benchmarks/rules.md) |
 | Five seeds on Solomon R2/RC2, Wilcoxon test | `python benchmark/seed_study.py` | [benchmarks/seed-study.md](benchmarks/seed-study.md) |
