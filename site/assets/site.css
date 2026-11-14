@@ -358,3 +358,4 @@ td.num { color: var(--ink); }
 .vs-key i { display: inline-block; width: 10px; height: 10px; border-radius: 3px; margin-right: 6px; vertical-align: -1px; }
 .big-stat { font-size: clamp(54px, 7vw, 84px); font-weight: 700; letter-spacing: -.04em; line-height: 1; margin: 12px 0 6px; font-variant-numeric: tabular-nums; }
 .big-stat small { font-size: .42em; color: var(--muted); letter-spacing: 0; }
+.card .rule-num { margin: 14px 0 0; font: 700 44px/1 var(--font); letter-spacing: -.02em; color: var(--ink); font-variant-numeric: tabular-nums; }
