@@ -3,19 +3,19 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>SynAPS-MobiRoute — маршруты, которые можно доказать</title>
+<title>SynAPS-MobiRoute — маршрутизация смешанного парка</title>
 <meta name="description" content="Движок маршрутизации для смешанного парка: VRPTW, PDPTW и DARP, вес, объём и паллеты, свои и наёмные машины, режим труда и отдыха, несколько рейсов, заявки в реальном времени. ALNS на ядре Rust, точные модели CP-SAT и MIP, сравнение с OR-Tools, координаты и OSRM на входе, маршрутные листы на выходе и независимая проверка каждого плана.">
 <meta name="keywords" content="VRP, VRPTW, PDPTW, DARP, vehicle routing, pickup and delivery, time windows, heterogeneous fleet, multi-trip, driver rest rules, route sheets, OSRM, MIP, CP-SAT, OR-Tools, SCIP, HiGHS, ALNS, metaheuristics, Python, Rust">
 <meta name="author" content="Dmitrij Konkov">
 <meta property="og:type" content="website">
-<meta property="og:title" content="SynAPS-MobiRoute — маршруты, которые можно доказать">
+<meta property="og:title" content="SynAPS-MobiRoute — маршрутизация смешанного парка">
 <meta property="og:locale" content="ru_RU">
 <meta property="og:locale:alternate" content="en_US">
 <meta property="og:description" content="Маршрутизация смешанного парка (VRPTW, PDPTW, DARP): ALNS на ядре Rust, точные модели CP-SAT и MIP, сравнение с OR-Tools, заявки в реальном времени, маршрутные листы и независимая проверка каждого плана.">
 <meta property="og:image" content="https://konkovdv.github.io/SynAPS-MobiRoute/assets/og.png">
 <meta property="og:image:width" content="1200">
 <meta property="og:image:height" content="630">
-<meta property="og:image:alt" content="Проверенный оптимальный план Cordeau a2-16 и ключевые результаты: 130 эталонов, 40 из 40 доказанных оптимумов, ядро на Rust в 49 раз быстрее">
+<meta property="og:image:alt" content="Маршруты двух машин на эталоне Cordeau a2-16 и краткое описание движка">
 <meta property="og:url" content="https://konkovdv.github.io/SynAPS-MobiRoute/">
 <meta name="twitter:card" content="summary_large_image">
 <meta name="color-scheme" content="light dark">
@@ -55,11 +55,11 @@
   <div class="wrap hero-in">
     <div class="hero-copy">
       <p class="eyebrow"><span>VRPTW</span><span>PDPTW</span><span>DARP</span><span lang="ru">смешанный парк</span><span lang="en">mixed fleet</span><span>Python + Rust</span></p>
-      <h1><span lang="ru">Маршруты, которые можно <em>доказать</em>.</span><span lang="en">Routes you can <em>prove</em>.</span></h1>
-      <p class="lead"><span lang="ru">Движок маршрутизации для смешанного парка: свои и наёмные машины, вес, объём и паллеты, окна, забор и доставка, перерывы водителей, несколько рейсов, пробки по часам суток, заявки в реальном времени. ALNS на ядре Rust, точные модели CP-SAT и MIP, сравнение с OR-Tools — и независимая проверка, которая либо подтверждает план, либо называет, сколько минут ему не хватает.</span><span lang="en">A routing engine for a mixed fleet: own and hired vehicles, weight, volume and pallets, time windows, pickup and delivery, drivers' rests, several trips per shift, rush-hour traffic, orders arriving live. ALNS on a Rust kernel, exact CP-SAT and MIP models, a head-to-head with OR-Tools, and an independent check that either confirms a plan or tells you how many minutes it is short.</span></p>
+      <h1><span lang="ru">Маршруты для <em>смешанного</em> парка</span><span lang="en">Routes for a <em>mixed</em> fleet</span></h1>
+      <p class="lead"><span lang="ru">VRPTW, PDPTW и DARP в одной модели: свои и наёмные машины, вес, объём и паллеты, окна, забор и доставка, перерывы водителей, несколько рейсов за смену, пробки по часам суток, заявки в течение дня. Поиск — ALNS с ядром на Rust, на малых задачах — точные модели CP-SAT и MIP, для сравнения — OR-Tools. Каждый план пересчитывает отдельный верификатор; если рейс невозможен, он говорит, сколько минут не хватает.</span><span lang="en">VRPTW, PDPTW and DARP in one model: own and hired vehicles, weight, volume and pallets, time windows, pickup and delivery, drivers' breaks, several trips per shift, rush-hour traffic, orders arriving during the day. The search is ALNS with a Rust kernel, small instances are solved exactly with CP-SAT and MIP, and OR-Tools runs alongside for comparison. A separate verifier recomputes every plan; when a trip is impossible, it says how many minutes are missing.</span></p>
       <div class="cta">
-        <a class="btn primary" href="#fleet"><span lang="ru">Смотреть парк в работе</span><span lang="en">See the fleet at work</span></a>
-        <a class="btn ghost" href="#lab"><span lang="ru">Проверить маршрут самому</span><span lang="en">Verify a route yourself</span></a>
+        <a class="btn primary" href="#fleet"><span lang="ru">Пример со смешанным парком</span><span lang="en">A mixed-fleet example</span></a>
+        <a class="btn ghost" href="#lab"><span lang="ru">Проверить маршрут в браузере</span><span lang="en">Check a route in the browser</span></a>
       </div>
     </div>
     <figure class="stage">
@@ -73,27 +73,19 @@
       <figcaption><span lang="ru">Эталон Cordeau a2-16: доказанный оптимум. Расписание посчитал проверяющий модуль, а не решатель.</span><span lang="en">Cordeau a2-16 benchmark: the proven optimum, timed by the verifier rather than the solver.</span></figcaption>
     </figure>
   </div>
-  <div class="wrap">
-    <dl class="stats">
-      <div class="stat reveal"><dt><span lang="ru">открытых эталонов, каждый план проверен</span><span lang="en">public instances, every plan verified</span></dt><dd data-count="130">130</dd></div>
-      <div class="stat reveal"><dt><span lang="ru">малых задач: ALNS находит доказанный оптимум</span><span lang="en">small instances where ALNS finds the proven optimum</span></dt><dd id="stat-exact" data-count="40" data-suf="/40">40/40</dd></div>
-      <div class="stat reveal"><dt><span lang="ru">ответ на новую заявку</span><span lang="en">answer to a new order</span></dt><dd data-count="0.1" data-dec="1" data-suf=" мс" data-suf-en=" ms">0.1 мс</dd></div>
-      <div class="stat reveal"><dt><span lang="ru">быстрее с ядром на Rust, тот же план</span><span lang="en">faster with the Rust kernel, same plan</span></dt><dd id="stat-speed" data-count="49" data-pre="×">×49</dd></div>
-    </dl>
-  </div>
 </header>
 
 <section id="pain" class="sec">
   <div class="wrap">
-    <p class="kicker reveal"><span lang="ru">Проблема</span><span lang="en">The problem</span></p>
-    <h2 class="reveal"><span lang="ru">План ломается там, где его никто не проверяет.</span><span lang="en">Plans fail where nobody checks them.</span></h2>
-    <p class="sub reveal"><span lang="ru">Сотни заказов, у каждого — окно времени, лимит в пути, требования к машине и водителю. Ошибку в таком плане не видно глазами, а стоит она рейсов, штрафов и доверия клиента.</span><span lang="en">Hundreds of orders, each with a time window, a ride limit, vehicle and driver requirements. You cannot see an error in such a plan, and it costs trips, penalties and customer trust.</span></p>
+    <p class="kicker reveal"><span lang="ru">Зачем отдельная проверка</span><span lang="en">Why a separate check</span></p>
+    <h2 class="reveal"><span lang="ru">Одна ошибка в расписании стоила семи заказов из шестнадцати</span><span lang="en">One scheduling bug cost seven orders out of sixteen</span></h2>
+    <p class="sub reveal"><span lang="ru">В плане с сотнями заказов, окнами и лимитами поездки ошибку глазами не найти. Эта нашлась на эталоне Cordeau a2-16, когда планы пассажирского ядра стали сверять с независимым пересчётом.</span><span lang="en">In a plan with hundreds of orders, windows and ride limits you will not spot an error by eye. This one surfaced on the Cordeau a2-16 instance once the passenger kernel's plans were compared with an independent recomputation.</span></p>
 
     <div class="ba reveal" id="ba">
       <div class="ba-head">
         <div>
-          <h3><span lang="ru">Один дефект расписания — и 7 из 16 выполнимых заказов отклонены</span><span lang="en">One scheduling defect, and 7 of 16 feasible orders are refused</span></h3>
-          <p><span lang="ru">Это не гипотеза: аудит нашёл дефект в этом самом ядре. Расписание «как можно раньше» не умело подождать у подъезда, и пассажир не укладывался в лимит поездки. Переключите режим.</span><span lang="en">Not a hypothesis: an audit found it in this very kernel. An as-early-as-possible schedule could not wait at the curb, so the passenger broke the ride limit. Flip the switch.</span></p>
+          <h3><span lang="ru">Подача «как можно раньше» против подачи по ужатому окну</span><span lang="en">Pickup as early as possible versus pickup by the tightened window</span></h3>
+          <p><span lang="ru">Машина, приехавшая слишком рано, сразу забирала пассажира, и поездка выходила за лимит. Жадная вставка отклоняла 7 заказов из 16, хотя каждый из них выполним. Переключите режим, чтобы сравнить.</span><span lang="en">A vehicle that arrived too early picked the passenger up at once, and the ride broke its limit. Greedy insertion refused 7 orders out of 16, although each of them is feasible. Switch the mode to compare.</span></p>
         </div>
         <div class="seg" role="group" aria-label="Schedule mode">
           <button type="button" id="ba-before" aria-pressed="true"><span lang="ru">Как можно раньше</span><span lang="en">As early as possible</span></button>
@@ -107,48 +99,34 @@
       <p class="fine"><span lang="ru">Эталон Cordeau a2-16, жадная вставка. Ужатие окон (Dumas, Desrosiers, Soumis, 1991) следует из самих ограничений: начало подачи ≥ самое раннее время высадки − лимит поездки − посадка.</span><span lang="en">Cordeau a2-16, greedy insertion. Window tightening (Dumas, Desrosiers, Soumis, 1991) follows from the constraints: pickup start ≥ earliest dropoff − ride limit − boarding.</span></p>
     </div>
 
-    <div class="grid3">
-      <article class="card reveal"><p class="tag warn">OPTIMAL?</p><h3><span lang="ru">«Оптимально» без доказательства</span><span lang="en">"Optimal" without proof</span></h3><p><span lang="ru">Статус ставит сам решатель. Независимо от него план никто не пересчитывает.</span><span lang="en">The solver labels its own answer. Nobody recomputes the plan independently.</span></p></article>
-      <article class="card reveal"><p class="tag warn">INFEASIBLE</p><h3><span lang="ru">«Невыполнимо» без причины</span><span lang="en">"Infeasible" without a reason</span></h3><p><span lang="ru">Логист не знает, что менять: окно, машину или обещание клиенту.</span><span lang="en">The planner does not know what to change: a window, a vehicle or a promise.</span></p></article>
-      <article class="card reveal"><p class="tag warn">47.9 s</p><h3><span lang="ru">Медленное перепланирование</span><span lang="en">Slow re-planning</span></h3><p><span lang="ru">Отмена, пробка, поломка — а пересчёт дня идёт дольше, чем звонок диспетчеру.</span><span lang="en">A cancellation, traffic, a breakdown, and re-planning takes longer than the call to the dispatcher.</span></p></article>
-    </div>
-  </div>
-</section>
-
-<section class="sec big-num">
-  <div class="wrap">
-    <p class="kicker reveal"><span lang="ru">Почему это сложно</span><span lang="en">Why it is hard</span></p>
-    <p class="mega reveal">4&thinsp;×&thinsp;10<sup>30</sup></p>
-    <h2 class="reveal"><span lang="ru">порядков объезда — для одной машины и 16 заказов.</span><span lang="en">visit orders for one vehicle and 16 orders.</span></h2>
-    <p class="sub center reveal"><span lang="ru">32 остановки, забор раньше доставки: 32! / 2¹⁶. Это в десять триллионов раз больше, чем секунд прошло от Большого взрыва. Окна, лимит поездки и вместимость оставляют от этого пространства узкую щель — поэтому нужны и быстрые эвристики, и точные модели, и проверка, которая не доверяет ни тем, ни другим.</span><span lang="en">32 stops, pickup before delivery: 32! / 2¹⁶. Ten trillion times the number of seconds since the Big Bang. Windows, ride limits and capacity leave a thin slit of that space, so you need fast heuristics, exact models, and a check that trusts neither.</span></p>
   </div>
 </section>
 
 <section id="solution" class="sec alt">
   <div class="wrap">
-    <p class="kicker reveal"><span lang="ru">Решение</span><span lang="en">The solution</span></p>
-    <h2 class="reveal"><span lang="ru">Скорость. Точность. Доказательство. Объяснение.</span><span lang="en">Speed. Exactness. Proof. Explanation.</span></h2>
+    <p class="kicker reveal"><span lang="ru">Как устроено</span><span lang="en">How it works</span></p>
+    <h2 class="reveal"><span lang="ru">Эвристики, точные модели и отдельный верификатор</span><span lang="en">Heuristics, exact models and a separate verifier</span></h2>
     <div class="bento">
       <article class="card b-wide reveal">
-        <p class="tag">01 · <span lang="ru">Скорость</span><span lang="en">Speed</span></p>
-        <h3><span lang="ru">3200 заказов и 200 машин — за 2.8 секунды</span><span lang="en">3,200 orders and 200 vehicles in 2.8 seconds</span></h3>
-        <p><span lang="ru">Вставка с префиксным состоянием на Rust (PyO3, rayon). Профилирование показало: узким местом был не Rust, а Python вокруг него — 56% времени уходило в одну функцию.</span><span lang="en">Prefix-state insertion in Rust (PyO3, rayon). Profiling showed the bottleneck was not Rust but the Python around it: 56% of the time went into one function.</span></p>
+        <p class="tag">01 · <span lang="ru">Ядро на Rust</span><span lang="en">Rust kernel</span></p>
+        <h3><span lang="ru">3200 заявок и 200 машин: план дня за 2,8 с</span><span lang="en">3,200 requests and 200 vehicles: a day's plan in 2.8 s</span></h3>
+        <p><span lang="ru">Вставка на Rust (PyO3, rayon) с переиспользованием префикса маршрута. По профилю 56% времени уходило в одну функцию на Python вокруг ядра; после правки план считается за 2,8 с вместо 47,9 с.</span><span lang="en">Insertion in Rust (PyO3, rayon) that reuses the route prefix. The profile put 56% of the time into one Python function around the kernel; after the fix the plan takes 2.8 s instead of 47.9 s.</span></p>
         <div class="bars" id="speed"></div>
       </article>
       <article class="card reveal">
-        <p class="tag">02 · <span lang="ru">Точность</span><span lang="en">Exactness</span></p>
+        <p class="tag">02 · <span lang="ru">Точные модели</span><span lang="en">Exact models</span></p>
         <h3><span lang="ru">CP-SAT и MIP на одной задаче</span><span lang="en">CP-SAT and MIP on one problem</span></h3>
         <p><span lang="ru">Точная модель воспроизводит опубликованный оптимум до сотых. Та же постановка решается как MIP на SCIP, HiGHS и CBC, с LP-границей.</span><span lang="en">The exact model reproduces the published optimum to 0.01. The same formulation runs as a MIP on SCIP, HiGHS and CBC, with an LP bound.</span></p>
       </article>
       <article class="card reveal">
-        <p class="tag">03 · <span lang="ru">Доказательство</span><span lang="en">Proof</span></p>
-        <h3><span lang="ru">Верификатор не верит решателю</span><span lang="en">The verifier does not trust the solver</span></h3>
+        <p class="tag">03 · <span lang="ru">Верификатор</span><span lang="en">Verifier</span></p>
+        <h3><span lang="ru">Расписание пересчитывается отдельно</span><span lang="en">The schedule is recomputed separately</span></h3>
         <p><span lang="ru">Расписание маршрута — система разностных неравенств. Она выполнима тогда и только тогда, когда в графе ограничений нет отрицательного цикла. Проверяет алгоритм Беллмана–Форда, отдельным кодом.</span><span lang="en">A route schedule is a system of difference constraints. It is feasible iff the constraint graph has no negative cycle. Bellman–Ford checks it, in separate code.</span></p>
       </article>
       <article class="card b-wide reveal">
-        <p class="tag">04 · <span lang="ru">Объяснение</span><span lang="en">Explanation</span></p>
-        <h3><span lang="ru">Не «infeasible», а «не хватает 358.68 минут»</span><span lang="en">Not "infeasible" but "358.68 minutes short"</span></h3>
-        <p><span lang="ru">Отрицательный цикл и есть сертификат: он называет конфликтующие ограничения, а его вес — дефицит времени. Объяснение формируется по-русски и по-английски.</span><span lang="en">The negative cycle is the certificate: it names the conflicting constraints, and its weight is the missing time. The explanation comes in Russian and English.</span></p>
+        <p class="tag">04 · <span lang="ru">Сертификат</span><span lang="en">Certificate</span></p>
+        <h3><span lang="ru">Вместо «infeasible» — «не хватает 358,68 минуты»</span><span lang="en">Instead of "infeasible": "358.68 minutes short"</span></h3>
+        <p><span lang="ru">Цикл отрицательного веса в графе ограничений называет конфликтующие условия, а его вес равен дефициту времени. Текст объяснения пишется по-русски и по-английски.</span><span lang="en">A negative cycle in the constraint graph names the conflicting conditions, and its weight equals the missing time. The explanation is written in Russian and English.</span></p>
         <pre class="cert" tabindex="0"><span lang="ru">Маршрут 2 невыполним при любом расписании: не хватает <b>358.68 мин</b>.
 подача 12 — начало не позже 29; заявка 12 в пути не дольше 30 мин;
 высадка 1 — начало не раньше 402; высадка 1 → высадка 12: 3 + 15.68 мин.</span><span lang="en">Route 2 cannot be timed: short by <b>358.68 min</b>.
@@ -170,7 +148,7 @@ dropoff 1 cannot start before 402; dropoff 1 → dropoff 12 takes 3 + 15.68 min.
 <section id="fleet" class="sec">
   <div class="wrap">
     <p class="kicker reveal"><span lang="ru">Смешанный парк</span><span lang="en">Mixed fleet</span></p>
-    <h2 class="reveal"><span lang="ru">Свои машины — первыми. Наёмные — когда своих не хватает.</span><span lang="en">Own vehicles first. Hired ones only when they run out.</span></h2>
+    <h2 class="reveal"><span lang="ru">Свои машины и наёмные</span><span lang="en">Own and hired vehicles</span></h2>
     <p class="sub reveal"><span lang="ru">Один городской день: два склада, фургоны 1,5 т, грузовики 5 и 10 т, тягач 20 т, свои и наёмные. У заказа — вес, объём и паллеты, окно доставки, рефрижератор, гидроборт или ДОПОГ. Добавляйте заказы: решатель сам выбирает, какие машины выпустить и кого нанять.</span><span lang="en">One city day: two depots, 1.5-t vans, 5-t and 10-t trucks, a 20-t tractor, own and hired. Each order has weight, volume and pallets, a delivery window, and may need refrigeration, a tail lift or ADR. Add orders: the solver decides which vehicles go out and whom to hire.</span></p>
     <div class="fleet reveal">
       <div class="card flush fleet-map"><svg id="fleet-map" viewBox="0 0 600 600" role="img" aria-label="Routes of the freight day"></svg></div>
@@ -191,8 +169,8 @@ dropoff 1 cannot start before 402; dropoff 1 → dropoff 12 takes 3 + 15.68 min.
 
 <section id="dispatch" class="sec alt">
   <div class="wrap">
-    <p class="kicker reveal"><span lang="ru">Живая диспетчеризация</span><span lang="en">Live dispatch</span></p>
-    <h2 class="reveal"><span lang="ru">Ответ на заявку — за долю миллисекунды. С причиной, если «нет».</span><span lang="en">An answer in a fraction of a millisecond. With a reason when it is no.</span></h2>
+    <p class="kicker reveal"><span lang="ru">Диспетчеризация</span><span lang="en">Dispatch</span></p>
+    <h2 class="reveal"><span lang="ru">Заявки в течение дня</span><span lang="en">Orders during the day</span></h2>
     <p class="sub reveal"><span lang="ru">Смена внутризаводской логистики: перевозки паллет между цехами появляются в течение дня. Каждая получает ответ сразу — вставку в ту часть плана, которую машина ещё не проехала, или отказ с причиной. Раз в 30 минут живое состояние переоптимизируется ALNS.</span><span lang="en">A shift of in-plant logistics: pallet moves between workshops appear during the day. Each gets an answer at once: an insertion into the part of a plan the vehicle has not driven yet, or a refusal with the reason. Every 30 minutes the live state is re-optimised by ALNS.</span></p>
     <div class="disp reveal">
       <figure class="stage">
@@ -219,8 +197,8 @@ dropoff 1 cannot start before 402; dropoff 1 → dropoff 12 takes 3 + 15.68 min.
 <section id="rules" class="sec">
   <div class="wrap">
     <p class="kicker reveal"><span lang="ru">Правила эксплуатации</span><span lang="en">Operating rules</span></p>
-    <h2 class="reveal"><span lang="ru">Перерывы, рейсы и пробки — ограничения, а не допущения.</span><span lang="en">Rests, trips and traffic are constraints, not assumptions.</span></h2>
-    <p class="sub reveal"><span lang="ru">Без этих трёх правил план не выйдет на линию. Каждое проверяет независимый верификатор; цифры — на синтетических днях, по пять дней на правило.</span><span lang="en">Without these three rules a plan does not leave the depot. The independent verifier checks each; numbers come from synthetic days, five per rule.</span></p>
+    <h2 class="reveal"><span lang="ru">Перерывы, рейсы и пробки</span><span lang="en">Breaks, trips and traffic</span></h2>
+    <p class="sub reveal"><span lang="ru">План, который не учитывает эти правила, на линии не выполнить. Каждое правило проверяет верификатор; цифры получены на синтетических днях, по пять дней на правило.</span><span lang="en">A plan that ignores these rules cannot be driven. The verifier checks each rule; the numbers come from synthetic days, five per rule.</span></p>
     <div class="grid3">
       <article class="card reveal"><p class="tag warn"><span lang="ru">4,5 ч → 45 мин</span><span lang="en">4.5 h → 45 min</span></p><p class="rule-num">4–6</p><h3><span lang="ru">маршрутов в день без места для перерыва</span><span lang="en">routes a day with no room for a rest</span></h3><p><span lang="ru">Если планировать без нормы труда и отдыха. Верификатор называет конфликт и минуты, которых не хватает; план с нормой дороже на 2–5,5%.</span><span lang="en">When the plan ignores the driving-time rule. The verifier names the conflict and the minutes missing; the compliant plan costs 2–5.5% more.</span></p></article>
       <article class="card reveal"><p class="tag warn"><span lang="ru">2 рейса</span><span lang="en">2 trips</span></p><p class="rule-num">60/60</p><h3><span lang="ru">магазинов вместо 52–55</span><span lang="en">stores instead of 52–55</span></h3><p><span lang="ru">Склад и две волны доставки. Машина загружается снова и уходит во второй рейс: 12–15 машин вместо 21, наёмных — 3–6 вместо 12.</span><span lang="en">A DC and two delivery waves. A vehicle reloads and leaves for a second trip: 12–15 vehicles instead of 21, 3–6 of them hired instead of 12.</span></p></article>
@@ -233,7 +211,7 @@ dropoff 1 cannot start before 402; dropoff 1 → dropoff 12 takes 3 + 15.68 min.
 <section id="sheets" class="sec alt">
   <div class="wrap">
     <p class="kicker reveal"><span lang="ru">Маршрутные листы</span><span lang="en">Route sheets</span></p>
-    <h2 class="reveal"><span lang="ru">От координат — к маршрутному листу. Без часа простоя у ворот.</span><span lang="en">From coordinates to a route sheet. Without an hour idling at the gate.</span></h2>
+    <h2 class="reveal"><span lang="ru">Маршрутные листы</span><span lang="en">Route sheets</span></h2>
     <p class="sub reveal"><span lang="ru">Синтетический день в Набережных Челнах: склад, три поставщика, 45 заказов, свои и наёмные фургоны и грузовики, норма труда и отдыха, второй рейс для фургонов. Нажмите на маршрут или строку диаграммы — появятся маршрутный лист машины и выбор времени выезда.</span><span lang="en">A synthetic day in Naberezhnye Chelny: a depot, three suppliers, 45 orders, own and hired vans and trucks, the driving-time rule, a second trip for vans. Click a route or a chart row to see that vehicle's route sheet and the choice of its departure.</span></p>
     <div class="sheets reveal">
       <div class="card flush sheets-map"><svg id="sheets-map" viewBox="0 0 600 600" role="img" aria-label="Routes of the Naberezhnye Chelny day"></svg></div>
@@ -274,7 +252,7 @@ dropoff 1 cannot start before 402; dropoff 1 → dropoff 12 takes 3 + 15.68 min.
 <section id="prices" class="sec">
   <div class="wrap">
     <p class="kicker reveal"><span lang="ru">Цены</span><span lang="en">Prices</span></p>
-    <h2 class="reveal"><span lang="ru">Сколько стоит каждый заказ. И чего стоит нехватка своей машины.</span><span lang="en">What every order costs. And what running out of own vehicles costs.</span></h2>
+    <h2 class="reveal"><span lang="ru">Цены заказов и машин</span><span lang="en">Prices of orders and vehicles</span></h2>
     <p class="sub reveal"><span lang="ru">Тот же день в Челнах. Маршруты, которые перебрал поиск, складываются в задачу линейного программирования; её двойственные оценки — цены: заказа и машины каждого типа. Круг тем больше, чем дороже заказ. Наведите или нажмите.</span><span lang="en">The same day in Chelny. The routes the search went through make a linear programme; its dual values are prices: of an order and of a vehicle of each type. The larger the circle, the dearer the order. Hover or tap.</span></p>
     <div class="sheets reveal">
       <div class="card flush sheets-map"><svg id="prices-map" viewBox="0 0 600 600" role="img" aria-label="Orders of the day sized by their price"></svg></div>
@@ -307,7 +285,7 @@ dropoff 1 cannot start before 402; dropoff 1 → dropoff 12 takes 3 + 15.68 min.
 <section id="bench" class="sec">
   <div class="wrap">
     <p class="kicker reveal"><span lang="ru">Эталоны</span><span lang="en">Benchmarks</span></p>
-    <h2 class="reveal"><span lang="ru">130 открытых задач. Каждый план проверен.</span><span lang="en">130 public instances. Every plan verified.</span></h2>
+    <h2 class="reveal"><span lang="ru">130 открытых эталонов</span><span lang="en">130 public instances</span></h2>
     <p class="sub reveal"><span lang="ru">Solomon (VRPTW), Li &amp; Lim и Sartori–Buriol (PDPTW на реальных дорожных временах OSRM), Cordeau (DARP). Клетка — один инстанс: цвет показывает разрыв к лучшему известному решению при том же числе машин. Наведите или нажмите.</span><span lang="en">Solomon (VRPTW), Li &amp; Lim and Sartori–Buriol (PDPTW on real OSRM road times), Cordeau (DARP). One cell, one instance: colour is the gap to the best known solution at the same vehicle count. Hover or tap.</span></p>
     <div class="card heat reveal" id="heat"></div>
     <div class="grid3">
@@ -333,7 +311,7 @@ dropoff 1 cannot start before 402; dropoff 1 → dropoff 12 takes 3 + 15.68 min.
 <section id="compare" class="sec alt">
   <div class="wrap">
     <p class="kicker reveal"><span lang="ru">Сравнение</span><span lang="en">Comparison</span></p>
-    <h2 class="reveal"><span lang="ru">Чем отличается от OR-Tools, VROOM, PyVRP и готовых сервисов.</span><span lang="en">How it differs from OR-Tools, VROOM, PyVRP and finished services.</span></h2>
+    <h2 class="reveal"><span lang="ru">Сравнение с другими решателями</span><span lang="en">Comparison with other solvers</span></h2>
     <p class="sub reveal"><span lang="ru">Возможности сверены по документации проектов 14.11.2026. Замеры — при равном времени на один поток, каждый план проверен одним верификатором: против OR-Tools на 18 задачах по 10 секунд, против PyVRP, VROOM и jsprit на 56 задачах Solomon и на задачах в 1000 клиентов.</span><span lang="en">Capabilities checked against each project's documentation on 2026-11-14. Measured at equal time on one thread, every plan checked by the same verifier: against OR-Tools on 18 instances at 10 seconds each, against PyVRP, VROOM and jsprit on the 56 Solomon instances and on 1000-customer instances.</span></p>
     <div class="vs-stats reveal">
       <div class="good"><b>12 / 18</b><span><span lang="ru">задач: план ALNS лучше, чем у OR-Tools; на остальных шести — одинаково, хуже — ни на одной</span><span lang="en">instances where the ALNS plan beats OR-Tools; the other six are ties, none is worse</span></span></div>
@@ -369,8 +347,8 @@ dropoff 1 cannot start before 402; dropoff 1 → dropoff 12 takes 3 + 15.68 min.
 
 <section id="proof" class="sec">
   <div class="wrap">
-    <p class="kicker reveal"><span lang="ru">Доказательства</span><span lang="en">Proof</span></p>
-    <h2 class="reveal"><span lang="ru">Одна задача. Все решатели. Один судья.</span><span lang="en">One problem. Every solver. One judge.</span></h2>
+    <p class="kicker reveal"><span lang="ru">Точные модели</span><span lang="en">Exact models</span></p>
+    <h2 class="reveal"><span lang="ru">Все решатели на эталоне a2-16</span><span lang="en">Every solver on a2-16</span></h2>
     <p class="sub reveal"><span lang="ru">Эталон Cordeau (2006) a2-16 с доказанным оптимумом 294.25. Каждый ответ пересчитан независимым проверяющим модулем.</span><span lang="en">Cordeau (2006) a2-16 with a proven optimum of 294.25. Every answer is recomputed by the independent verifier.</span></p>
     <div class="grid2">
       <article class="card reveal">
@@ -393,8 +371,8 @@ dropoff 1 cannot start before 402; dropoff 1 → dropoff 12 takes 3 + 15.68 min.
 
 <section id="lab" class="sec alt">
   <div class="wrap">
-    <p class="kicker reveal"><span lang="ru">Попробуйте сами</span><span lang="en">Try it</span></p>
-    <h2 class="reveal"><span lang="ru">Измените маршрут — верификатор ответит в вашем браузере.</span><span lang="en">Change the route. The verifier answers in your browser.</span></h2>
+    <p class="kicker reveal"><span lang="ru">Проверка</span><span lang="en">Check</span></p>
+    <h2 class="reveal"><span lang="ru">Проверка маршрута в браузере</span><span lang="en">Checking a route in the browser</span></h2>
     <p class="sub reveal"><span lang="ru">Это тот же алгоритм, что в ядре, перенесённый на JavaScript и сверенный с Python на 513 перестановках. Выберите остановку и сдвиньте её.</span><span lang="en">The same algorithm as in the kernel, ported to JavaScript and checked against Python on 513 permutations. Pick a stop and move it.</span></p>
     <div class="lab reveal">
       <div class="lab-edit">
@@ -422,7 +400,7 @@ dropoff 1 cannot start before 402; dropoff 1 → dropoff 12 takes 3 + 15.68 min.
 <section id="scope" class="sec">
   <div class="wrap">
     <p class="kicker reveal"><span lang="ru">Возможности</span><span lang="en">Scope</span></p>
-    <h2 class="reveal"><span lang="ru">Что движок умеет сегодня — и что в плане.</span><span lang="en">What the engine does today, and what is planned.</span></h2>
+    <h2 class="reveal"><span lang="ru">Что сделано и что дальше</span><span lang="en">Done and planned</span></h2>
     <div class="card reveal flush"><div class="scroll-x" tabindex="0" role="region" aria-label="Capabilities"><table class="scope">
       <thead><tr><th scope="col"><span lang="ru">Задача маршрутизации</span><span lang="en">Routing capability</span></th><th scope="col"><span lang="ru">Статус</span><span lang="en">Status</span></th><th scope="col"><span lang="ru">Как реализовано</span><span lang="en">How</span></th></tr></thead>
       <tbody>
@@ -468,25 +446,25 @@ dropoff 1 cannot start before 402; dropoff 1 → dropoff 12 takes 3 + 15.68 min.
 
 <section class="sec alt">
   <div class="wrap">
-    <p class="kicker reveal"><span lang="ru">Инженерная дисциплина</span><span lang="en">Engineering discipline</span></p>
-    <h2 class="reveal"><span lang="ru">Каждое число на этой странице воспроизводится.</span><span lang="en">Every number on this page is reproducible.</span></h2>
+    <p class="kicker reveal"><span lang="ru">Воспроизводимость</span><span lang="en">Reproducibility</span></p>
+    <h2 class="reveal"><span lang="ru">Как проверить цифры</span><span lang="en">How to check the numbers</span></h2>
     <div class="grid3 eng">
-      <article class="card reveal"><h3>604 <span lang="ru">теста</span><span lang="en">tests</span></h3><p><span lang="ru">Верификатор, сверка Rust с эталоном на Python, 11 свойств Hypothesis, атаки на проверку: подделанные часы, перегруз, спрятанное ожидание. Покрытие 92%.</span><span lang="en">The verifier, Rust against its Python reference, 11 Hypothesis properties, attacks on the check: forged clocks, overloads, hidden waiting. 92% coverage.</span></p></article>
+      <article class="card reveal"><h3><span lang="ru">Около 600 тестов</span><span lang="en">About 600 tests</span></h3><p><span lang="ru">Верификатор, сверка Rust с эталоном на Python, 11 свойств Hypothesis, планы с подделанными часами, перегрузом и спрятанным ожиданием. Покрытие 92%.</span><span lang="en">The verifier, Rust against its Python reference, 11 Hypothesis properties, plans with forged clocks, overloads and hidden waiting. 92% coverage.</span></p></article>
       <article class="card reveal"><h3>mypy --strict · ruff · clippy</h3><p><span lang="ru">Строгая типизация Python, предупреждения Rust считаются ошибками. Девять проверок CI на каждый запрос на слияние.</span><span lang="en">Strict Python typing, Rust warnings are errors. Nine CI checks on every pull request.</span></p></article>
       <article class="card reveal"><h3>SHA-256</h3><p><span lang="ru">Сравнение с литературой публикуется только для побайтно того же файла эталона и только после проверки плана.</span><span lang="en">A literature comparison is published only for the byte-identical instance and only after the plan is verified.</span></p></article>
     </div>
     <div class="grid2 end">
       <div class="reveal">
-        <h3 class="h3"><span lang="ru">Честные границы</span><span lang="en">Honest limits</span></h3>
+        <h3 class="h3"><span lang="ru">Ограничения</span><span lang="en">Limitations</span></h3>
         <ul class="limits">
-          <li><span lang="ru">Данные — открытые эталоны и синтетические дни. Данных заказчика и пилота нет, обещаний экономии тоже.</span><span lang="en">Data: public benchmarks and synthetic days. No customer data, no pilot, no savings claims.</span></li>
+          <li><span lang="ru">Данные — открытые эталоны и синтетические дни. Данных перевозчика и пилота не было, поэтому никаких обещаний экономии.</span><span lang="en">Data: public benchmarks and synthetic days. There has been no carrier's data and no pilot, so no savings claims.</span></li>
           <li><span lang="ru">Перерыв — один за смену; пробки — один профиль скорости на всю сеть; живой диспетчер этих правил пока не учитывает.</span><span lang="en">One rest per shift; traffic is one speed profile for the whole network; the live dispatcher does not handle these rules yet.</span></li>
           <li><span lang="ru">Эвристики не доказывают оптимум; разрыв к лучшим решениям опубликован по каждому инстансу.</span><span lang="en">Heuristics prove no optimum; the gap to the best known solution is published per instance.</span></li>
           <li><span lang="ru">Замеры скорости — на одной машине, это не SLA.</span><span lang="en">Speed numbers come from one machine and are not an SLA.</span></li>
         </ul>
       </div>
       <div class="reveal">
-        <h3 class="h3"><span lang="ru">Четыре команды до проверенного плана</span><span lang="en">Four commands to a verified plan</span></h3>
+        <h3 class="h3"><span lang="ru">Запуск</span><span lang="en">Running it</span></h3>
         <div class="code"><button class="pill-btn copy" type="button" data-copy="cmds" aria-label="Copy commands">copy</button><pre tabindex="0"><code id="cmds">pip install -e ".[dev]" maturin
 maturin develop --release -m native/mobiroute_native/Cargo.toml
 mobiroute vrp-solve --generate cargo --orders 120 --out-dir out --svg
