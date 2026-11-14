@@ -43,8 +43,8 @@ def available() -> bool:
 def build_kernel(c: Compiled) -> Any | None:
     """Flatten the compiled instance into the kernel's arrays (shared matrices once)."""
     module = _module()
-    if module is None or c.has_traffic:
-        # Time-dependent travel runs on the Python reference only.
+    if module is None or c.has_traffic or c.has_split:
+        # Time-dependent travel and split breaks run on the Python reference only.
         return None
     matrices: list[list[float]] = []
     index: dict[int, int] = {}

@@ -328,3 +328,85 @@ def test_traffic_round_trip_and_unsupported_mixes() -> None:
         _with_rests(jam, 270.0, 45.0)
     with pytest.raises(ValueError, match="VRP_SPEED_PROFILE_INVALID"):
         with_traffic(_two_wave_day(1), SpeedProfile((0.0, 0.0), (1.0, 0.5)))
+
+
+# -- split break (15 + 30) ------------------------------------------------------
+
+
+def _split_day(split: tuple[float, float] | None) -> Instance:
+    """Depot, A, B, C on a loop; gap slacks 0, 18, 32 and 2.6 minutes.
+
+    Driving 40 + 40 + 40 + 89.4 = 209.4 > D = 120 needs a break; no gap has
+    the 45 minutes a whole break takes, but 18 >= 15 and 32 >= 30.
+    """
+    pts = [(0.0, 0.0), (40.0, 0.0), (80.0, 0.0), (80.0, 40.0)]
+    windows = [(0.0, 262.0), (40.0, 40.0), (98.0, 98.0), (170.0, 170.0)]
+    nodes = tuple(
+        Node(k, lo, hi, 0.0, x, y)
+        for k, ((x, y), (lo, hi)) in enumerate(zip(pts, windows, strict=True))
+    )
+    requests = tuple(Request(str(k), None, k, (1.0,)) for k in (1, 2, 3))
+    vt = VehicleType(
+        id="truck",
+        capacity=(10.0,),
+        count=1,
+        shift_start=0.0,
+        shift_end=262.0,
+        breaks=BreakRule(120.0, 45.0, split),
+    )
+    return Instance(
+        name="split",
+        nodes=nodes,
+        requests=requests,
+        vehicle_types=(vt,),
+        profiles=single_profile(euclidean_matrix(pts)),
+    )
+
+
+def test_split_break_fits_where_a_whole_break_does_not() -> None:
+    from mobiroute.vrp.native import build_kernel
+    from mobiroute.vrp.schedule import compact_schedule, route_arcs
+    from mobiroute.vrp.sheets import route_sheets, sheets_markdown
+
+    whole, split = _split_day(None), _split_day((15.0, 30.0))
+    route = [1, 2, 3]
+    assert not route_timing(whole, 0, route).feasible
+    assert not route_exact(Compiled(whole), 0, route)
+    timing = route_timing(split, 0, route)
+    assert timing.feasible and (timing.first_gap, timing.rest_gap) == (1, 2)
+    assert route_exact(Compiled(split), 0, route)
+    # The dispatcher's schedule keeps every constraint with both parts in place.
+    tight = compact_schedule(split, 0, route)
+    _z, arcs = route_arcs(split, 0, route, rest_gap=tight.rest_gap, first_gap=tight.first_gap)
+    b = [*tight.earliest, 0.0]
+    assert all(b[a.head] - b[a.tail] <= a.weight + 1e-6 for a in arcs)
+    plan = Solution([Route(0, route)], set())
+    verdict = verify(split, plan)
+    assert verdict.feasible
+    (sheet,) = route_sheets(split, plan, verdict)
+    breaks = [(row.kind, row.end - row.start) for row in sheet.rows if row.kind.startswith("rest")]
+    assert breaks == [("rest_first", pytest.approx(15.0)), ("rest", pytest.approx(30.0))]
+    # The first part does not reset the counter: 40 + 40 + 40 = 120 before the second.
+    assert sheet.longest_stint == pytest.approx(120.0) and sheet.compliant()
+    assert "перерыв, 1-я часть" in sheets_markdown([sheet], ("load",))
+    assert build_kernel(Compiled(split)) is None  # split breaks run on the reference
+    back = instance_from_json(instance_to_json(split))
+    assert back.vehicle_types[0].breaks == BreakRule(120.0, 45.0, (15.0, 30.0))
+    with pytest.raises(ValueError, match="VRP_BREAK_SPLIT_INVALID"):
+        _split_day((0.0, 30.0))
+
+
+@settings(max_examples=60, deadline=None)
+@given(seed=st.integers(0, 10_000), drive=st.floats(30.0, 250.0), size=st.integers(1, 6))
+def test_split_break_check_agrees_with_the_verifier(seed: int, drive: float, size: int) -> None:
+    base = random_instance(seed, n_requests=7, ride_share=0.4)
+    types = tuple(
+        replace(vt, breaks=BreakRule(drive, 45.0, (15.0, 30.0))) for vt in base.vehicle_types
+    )
+    inst = replace(base, vehicle_types=types)
+    c = Compiled(inst)
+    rng = random.Random(seed)
+    for _ in range(6):
+        nodes = _random_sequence(inst, rng, size)
+        for t in range(len(inst.vehicle_types)):
+            assert route_exact(c, t, nodes) == route_timing(inst, t, nodes).feasible

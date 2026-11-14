@@ -42,6 +42,8 @@ from mobiroute.vrp.solution import Route, Solution
 
 #: (duration, time warp, earliest start, latest start, first node, last node)
 Seg = tuple[float, float, float, float, int, int]
+#: Prefix and suffix segments, loads after each stop, and the stop sequence.
+RouteData = tuple[list[Seg], list[Seg], list[float], list[int]]
 
 
 def applies(c: Compiled) -> bool:
@@ -97,7 +99,7 @@ class LocalSearch:
         lat = l2 - delta if l2 - delta < l1 else l1
         return (d1 + d2 + tt + wait, tw1 + tw2 + warp, e - wait, lat + warp, f1, z2)
 
-    def _build(self, t: int, nodes: list[int]) -> tuple[list[Seg], list[Seg], list[float]]:
+    def _build(self, t: int, nodes: list[int]) -> RouteData:
         c = self.c
         seq = [c.start[t], *nodes, c.end[t]]
         last = len(seq) - 1
@@ -113,7 +115,7 @@ class LocalSearch:
         load = [0.0]
         for node in nodes:
             load.append(load[-1] + c.demand[c.node_req[node]][0])
-        return pre, suf, load
+        return pre, suf, load, seq
 
     def _ok(self, t: int, seg: Seg) -> bool:
         return seg[1] <= EPS and seg[0] <= self.c.max_dur[t] + EPS
@@ -122,10 +124,19 @@ class LocalSearch:
         return load <= self.c.cap[t][0] + EPS
 
     # -- the search --------------------------------------------------------
-    def improve(self, sol: Solution) -> Solution:
+    def improve(self, sol: Solution, focus: set[int] | None = None) -> Solution:
+        """Descend to a local optimum.
+
+        With ``focus`` (large instances) the scan starts from those stops only
+        and, after a move, from the stops of the routes it changed: Bentley's
+        don't-look bits on the granular neighbour lists. Without it every stop
+        is scanned in passes until none improves.
+        """
         c = self.c
         if c.dims != 1:
             return sol
+        if focus is not None:
+            return self._improve_focused(sol, focus)
         routes = [Route(r.vehicle_type, list(r.nodes)) for r in sol.routes if r.nodes]
         data = [self._build(r.vehicle_type, r.nodes) for r in routes]
         where: dict[int, tuple[int, int]] = {}
@@ -149,10 +160,14 @@ class LocalSearch:
                     move = self._best_move(routes, data, where, u, v)
                     if move is None:
                         continue
+                    for ri, _ in move:
+                        for node in routes[ri].nodes:
+                            where.pop(node, None)
                     for ri, nodes in move:
                         routes[ri] = Route(routes[ri].vehicle_type, nodes)
                         data[ri] = self._build(routes[ri].vehicle_type, nodes)
-                    index()
+                        for k, node in enumerate(nodes, start=1):
+                            where[node] = (ri, k)
                     improved = improved_any = True
             if not improved:
                 break
@@ -161,13 +176,43 @@ class LocalSearch:
         kept = [r for r in routes if r.nodes]
         return Solution(kept, set(sol.unassigned))
 
-    def _arc(self, t: int, a: int, b: int) -> float:
-        return self.c.cost[t][a][b]
+    def _improve_focused(self, sol: Solution, focus: set[int]) -> Solution:
+        routes = [Route(r.vehicle_type, list(r.nodes)) for r in sol.routes if r.nodes]
+        data = [self._build(r.vehicle_type, r.nodes) for r in routes]
+        where = {node: (ri, k) for ri, r in enumerate(routes) for k, node in enumerate(r.nodes, 1)}
+        active = sorted(u for u in focus if u in where)
+        queued = set(active)
+        improved_any = False
+        while active:
+            u = active.pop()
+            queued.discard(u)
+            for v in self.near.get(u, ()):
+                if v not in where or u not in where:
+                    continue
+                move = self._best_move(routes, data, where, u, v)
+                if move is None:
+                    continue
+                for ri, _ in move:
+                    for node in routes[ri].nodes:
+                        where.pop(node, None)
+                for ri, nodes in move:
+                    routes[ri] = Route(routes[ri].vehicle_type, nodes)
+                    data[ri] = self._build(routes[ri].vehicle_type, nodes)
+                    for k, node in enumerate(nodes, start=1):
+                        where[node] = (ri, k)
+                        if node not in queued:
+                            queued.add(node)
+                            active.append(node)
+                improved_any = True
+                break
+        if not improved_any:
+            return sol
+        return Solution([r for r in routes if r.nodes], set(sol.unassigned))
 
     def _best_move(
         self,
         routes: list[Route],
-        data: list[tuple[list[Seg], list[Seg], list[float]]],
+        data: list[RouteData],
         where: dict[int, tuple[int, int]],
         u: int,
         v: int,
@@ -182,23 +227,18 @@ class LocalSearch:
         t = tu
         time = c.time[t]
         nu, nv = routes[ru].nodes, routes[rv].nodes
-        seq_u = [c.start[t], *nu, c.end[t]]
-        seq_v = [c.start[tv], *nv, c.end[tv]]
-        pre_u, suf_u, load_u = data[ru]
-        pre_v, suf_v, load_v = data[rv]
+        pre_u, suf_u, load_u, seq_u = data[ru]
+        pre_v, suf_v, load_v, seq_v = data[rv]
         q = c.demand[c.node_req[u]][0]
         open_u = c.open_cost[t] if len(nu) == 1 else 0.0
-        arc = self._arc
+        w = c.cost[t]
         su = self._node(t, u, iu, len(seq_u) - 1)
         if ru != rv:
             # Relocate u after v.
             gain = (
-                arc(t, seq_u[iu - 1], u)
-                + arc(t, u, seq_u[iu + 1])
-                - arc(t, seq_u[iu - 1], seq_u[iu + 1])
-                + open_u
+                w[seq_u[iu - 1]][u] + w[u][seq_u[iu + 1]] - w[seq_u[iu - 1]][seq_u[iu + 1]] + open_u
             )
-            add = arc(t, v, u) + arc(t, u, seq_v[iv + 1]) - arc(t, v, seq_v[iv + 1])
+            add = w[v][u] + w[u][seq_v[iv + 1]] - w[v][seq_v[iv + 1]]
             if add < gain - 1e-9 and self._fits(t, load_v[-1] + q):
                 new_v = self._cat(self._cat(pre_v[iv], su, time), suf_v[iv + 1], time)
                 rest_u = self._cat(pre_u[iu - 1], suf_u[iu + 1], time)
@@ -208,7 +248,7 @@ class LocalSearch:
                         (rv, [*nv[:iv], u, *nv[iv:]]),
                     ]
             # Relocate u before v.
-            add = arc(t, seq_v[iv - 1], u) + arc(t, u, v) - arc(t, seq_v[iv - 1], v)
+            add = w[seq_v[iv - 1]][u] + w[u][v] - w[seq_v[iv - 1]][v]
             if add < gain - 1e-9 and self._fits(t, load_v[-1] + q):
                 new_v = self._cat(self._cat(pre_v[iv - 1], su, time), suf_v[iv], time)
                 rest_u = self._cat(pre_u[iu - 1], suf_u[iu + 1], time)
@@ -221,14 +261,14 @@ class LocalSearch:
             qv = c.demand[c.node_req[v]][0]
             sv = self._node(t, v, iv, len(seq_v) - 1)
             delta = (
-                arc(t, seq_u[iu - 1], v)
-                + arc(t, v, seq_u[iu + 1])
-                - arc(t, seq_u[iu - 1], u)
-                - arc(t, u, seq_u[iu + 1])
-                + arc(t, seq_v[iv - 1], u)
-                + arc(t, u, seq_v[iv + 1])
-                - arc(t, seq_v[iv - 1], v)
-                - arc(t, v, seq_v[iv + 1])
+                w[seq_u[iu - 1]][v]
+                + w[v][seq_u[iu + 1]]
+                - w[seq_u[iu - 1]][u]
+                - w[u][seq_u[iu + 1]]
+                + w[seq_v[iv - 1]][u]
+                + w[u][seq_v[iv + 1]]
+                - w[seq_v[iv - 1]][v]
+                - w[v][seq_v[iv + 1]]
             )
             if (
                 delta < -1e-9
@@ -243,10 +283,10 @@ class LocalSearch:
                     return [(ru, a), (rv, b)]
             # 2-opt*: u -> succ(v) and v -> succ(u).
             delta = (
-                arc(t, u, seq_v[iv + 1])
-                + arc(t, v, seq_u[iu + 1])
-                - arc(t, u, seq_u[iu + 1])
-                - arc(t, v, seq_v[iv + 1])
+                w[u][seq_v[iv + 1]]
+                + w[v][seq_u[iu + 1]]
+                - w[u][seq_u[iu + 1]]
+                - w[v][seq_v[iv + 1]]
             )
             new_u_nodes = [*nu[:iu], *nv[iv:]]
             new_v_nodes = [*nv[:iv], *nu[iu:]]
@@ -269,10 +309,10 @@ class LocalSearch:
         # Reverse positions i+1..j so that seq[i] is followed by seq[j].
         pa, pb = seq_u[i], seq_u[i + 1]
         qx, qy = seq_u[j], seq_u[j + 1]
-        delta = arc(t, pa, qx) + arc(t, pb, qy) - arc(t, pa, pb) - arc(t, qx, qy)
+        delta = w[pa][qx] + w[pb][qy] - w[pa][pb] - w[qx][qy]
         if not self.symmetric[t]:
             for k in range(i + 1, j):
-                delta += arc(t, seq_u[k + 1], seq_u[k]) - arc(t, seq_u[k], seq_u[k + 1])
+                delta += w[seq_u[k + 1]][seq_u[k]] - w[seq_u[k]][seq_u[k + 1]]
         if delta >= -1e-9:
             return None
         last = len(seq_u) - 1

@@ -47,7 +47,7 @@ from mobiroute.vrp.local_search import applies as local_search_applies
 from mobiroute.vrp.merge import RouteMerger
 from mobiroute.vrp.model import Instance
 from mobiroute.vrp.setpart import RoutePool, solve_set_partitioning
-from mobiroute.vrp.solution import MUST_SERVE_PENALTY, Solution, evaluate
+from mobiroute.vrp.solution import MUST_SERVE_PENALTY, RouteCosts, Solution, evaluate
 from mobiroute.vrp.verify import Verdict, verify
 
 Backend = Literal["auto", "python", "native"]
@@ -126,8 +126,8 @@ class SolveResult:
     pool_size: int = 0
 
 
-def search_objective(inst: Instance, sol: Solution) -> float:
-    cost = evaluate(inst, sol)
+def search_objective(inst: Instance, sol: Solution, costs: RouteCosts | None = None) -> float:
+    cost = evaluate(inst, sol, costs=costs)
     return cost.total + inst.vehicle_penalty * cost.vehicles + cost.penalty
 
 
@@ -160,6 +160,24 @@ def make_repair(c: Compiled, backend: Backend) -> tuple[RepairFn, str]:
 def _by_distance(row: tuple[float, ...], n: int) -> list[int]:
     """Node indices sorted by distance from the row's node (ties by index)."""
     return sorted(range(n), key=lambda b: (row[b], b))
+
+
+#: From this many requests on the search runs in granular mode: worst removal
+#: prices a request by the arcs around its stops instead of re-summing its
+#: route, and local search on a new best plan starts only from the routes that
+#: changed (don't-look bits). Smaller instances keep the full scans, so every
+#: published table reproduces bit for bit.
+GRANULAR_FROM = 400
+
+
+def _kth_in(order: list[int], pool: set[int], k: int) -> int:
+    """The ``k``-th element of ``order`` that is in ``pool`` (0-based)."""
+    for r in order:
+        if r in pool:
+            if k == 0:
+                return r
+            k -= 1
+    raise IndexError(k)
 
 
 class _Destroy:
@@ -200,6 +218,29 @@ class _Destroy:
     def worst(self, sol: Solution, served: list[int], q: int) -> set[int]:
         c = self.c
         saving: dict[int, float] = {}
+        if c.inst.n_requests >= GRANULAR_FROM:
+            # Removal gain from the arcs around each stop: O(1) per stop.
+            for route in sol.routes:
+                t = route.vehicle_type
+                cost = c.cost[t]
+                seq = [c.start[t], *route.nodes, c.end[t]]
+                first_at: dict[int, int] = {}
+                for k in range(1, len(seq) - 1):
+                    node = seq[k]
+                    r = c.node_req[node]
+                    if r < 0:  # a reload stop belongs to no request
+                        continue
+                    a, b = seq[k - 1], seq[k + 1]
+                    i = first_at.get(r)
+                    if i is None:
+                        first_at[r] = k
+                        saving[r] = cost[a][node] + cost[node][b] - cost[a][b]
+                    elif i == k - 1:  # pickup right before its delivery: cut both
+                        p0, pick = seq[i - 1], seq[i]
+                        saving[r] = cost[p0][pick] + cost[pick][node] + cost[node][b] - cost[p0][b]
+                    else:
+                        saving[r] += cost[a][node] + cost[node][b] - cost[a][b]
+            return self._pick_worst(served, saving, q)
         for route in sol.routes:
             cost = c.cost[route.vehicle_type]
             seq = [c.start[route.vehicle_type], *route.nodes, c.end[route.vehicle_type]]
@@ -209,6 +250,9 @@ class _Destroy:
                 drop = {c.pick[r], c.deliv[r]}
                 rest = [n for n in seq if n not in drop]
                 saving[r] = base - sum(cost[a][b] for a, b in pairwise(rest))
+        return self._pick_worst(served, saving, q)
+
+    def _pick_worst(self, served: list[int], saving: dict[int, float], q: int) -> set[int]:
         ranked = sorted(served, key=lambda r: (-saving.get(r, 0.0), r))
         out: set[int] = set()
         while len(out) < q and ranked:
@@ -228,18 +272,19 @@ class _Destroy:
         pool = set(served)
         if focus:
             # Make room next to an order that is still waiting for a vehicle.
-            near = [r for r in self.ranked(self.rng.choice(focus)) if r in pool]
-            first = near[int(len(near) * self.rng.random() ** 6)]
+            ranked = self.ranked(self.rng.choice(focus))
+            first = _kth_in(ranked, pool, int(len(pool) * self.rng.random() ** 6))
         else:
             first = self.rng.choice(served)
         out = {first}
         pool.discard(first)
         while len(out) < q and pool:
             ref = self.rng.choice(sorted(out))
-            rest = [r for r in self.ranked(ref) if r in pool]
-            k = int(len(rest) * self.rng.random() ** 6)
-            out.add(rest[k])
-            pool.discard(rest[k])
+            # ranked() lists every request, so the filtered list has len(pool)
+            # items; walking to the k-th is enough (k is small: random() ** 6).
+            pick = _kth_in(self.ranked(ref), pool, int(len(pool) * self.rng.random() ** 6))
+            out.add(pick)
+            pool.discard(pick)
         return out
 
     def string(self, sol: Solution, served: list[int], q: int, focus: list[int]) -> set[int]:
@@ -301,6 +346,8 @@ class Alns:
         self.cfg = config or AlnsConfig()
         self.c = Compiled(inst)
         self.rng = random.Random(self.cfg.seed)
+        self._costs: RouteCosts = {}
+        self._polished_routes: set[tuple[int, ...]] = set()
         self.repair, self.backend = make_repair(self.c, self.cfg.backend)
         self.kernel = _kernel_for(self.c) if self.backend == "native" else None
         self.assigner = TypeAssigner(self.c, self._route_ok)
@@ -350,7 +397,15 @@ class Alns:
         )
 
     def _served(self, sol: Solution) -> list[int]:
-        return sorted(self.c.requests_of(n for r in sol.routes for n in r.nodes))
+        """Served requests in ascending order: marks instead of a set and a sort."""
+        req = self.c.node_req
+        mark = bytearray(self.c.inst.n_requests)
+        for route in sol.routes:
+            for n in route.nodes:
+                r = req[n]
+                if r >= 0:
+                    mark[r] = 1
+        return [r for r, hit in enumerate(mark) if hit]
 
     def _removal_count(self, n_served: int) -> int:
         cfg = self.cfg
@@ -395,7 +450,13 @@ class Alns:
         if self.merger is not None:
             sol = self.merger.improve(sol)
         if self.local is not None:
-            sol = self.local.improve(sol)
+            if self.c.inst.n_requests >= GRANULAR_FROM:
+                seen = self._polished_routes
+                focus = {n for r in sol.routes if tuple(r.nodes) not in seen for n in r.nodes}
+                sol = self.local.improve(sol, focus)
+                self._polished_routes = {tuple(r.nodes) for r in sol.routes}
+            else:
+                sol = self.local.improve(sol)
         return sol
 
     def _setpart(self, best: Solution) -> tuple[Solution, float] | None:
@@ -407,8 +468,8 @@ class Alns:
         if res.solution is None:
             return None
         sol = self._polish(self.assigner.improve(res.solution))
-        obj = search_objective(self.inst, sol)
-        if obj >= search_objective(self.inst, best) - 1e-9:
+        obj = search_objective(self.inst, sol, self._costs)
+        if obj >= search_objective(self.inst, best, self._costs) - 1e-9:
             return None
         self.sp_improved += 1
         self.pool.add(sol)
@@ -430,7 +491,7 @@ class Alns:
     ) -> Solution:
         cfg = self.cfg
         cur = start
-        cur_obj = search_objective(self.inst, cur)
+        cur_obj = search_objective(self.inst, cur, self._costs)
         best, best_obj = cur, cur_obj
         base = self._money(start) or 1.0
         t0 = -cfg.start_worse * base / math.log(0.5)
@@ -454,12 +515,12 @@ class Alns:
                 progress = max(progress, (self._elapsed() - began) / span)
             temp = t0 * (t_end / t0) ** min(1.0, progress)
             cand, d_op, r_op, n_op = self._step(cur, cap)
-            obj = search_objective(self.inst, cand)
+            obj = search_objective(self.inst, cand, self._costs)
             score = 0.0
             if obj < best_obj - 1e-9:
                 polished = self._polish(cand)
                 if polished is not cand:
-                    cand, obj = polished, search_objective(self.inst, polished)
+                    cand, obj = polished, search_objective(self.inst, polished, self._costs)
                 best, best_obj = cand, obj
                 cur, cur_obj = cand, obj
                 score = cfg.score_best
@@ -629,7 +690,7 @@ class Alns:
             best = cur
             if self.pool is not None:
                 self.pool.add(best)
-            self._record(best, search_objective(self.inst, best))
+            self._record(best, search_objective(self.inst, best, self._costs))
         return best, budget - iterations
 
     def solve(self, initial: Solution | None = None) -> SolveResult:
@@ -642,7 +703,7 @@ class Alns:
         if start.unassigned:
             start = self.repair(start, 2, 0.0, cfg.seed, None)
         start = self._polish(self.assigner.improve(start))
-        self._record(start, search_objective(self.inst, start))
+        self._record(start, search_objective(self.inst, start, self._costs))
         if self.pool is not None:
             self.pool.add(start)
         best = start
@@ -670,7 +731,7 @@ class Alns:
             found = self._setpart(best)
             if found is not None:
                 best = found[0]
-        objective = search_objective(self.inst, best)
+        objective = search_objective(self.inst, best, self._costs)
         return SolveResult(
             instance=self.inst.name,
             solution=best,

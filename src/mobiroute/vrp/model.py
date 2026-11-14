@@ -78,12 +78,18 @@ class BreakRule:
     driving limit of ``2 * max_driving``: a route that drives more than
     ``max_driving`` minutes needs one rest of ``duration`` minutes, taken
     between two services so that neither side drives more than
-    ``max_driving``. A rest is not work: it is not priced, and waiting for a
-    window counts towards it.
+    ``max_driving``. A rest is not work: it is not priced, and idle time in
+    its gap can hold it.
+
+    ``split`` allows the break in two parts, the first of at least
+    ``split[0]`` and the second of at least ``split[1]`` minutes, in this
+    order (15 + 30 under art. 7 of the EU regulation and Order No. 424). The
+    driving counter resets only after the second part.
     """
 
     max_driving: float = 270.0
     duration: float = 45.0
+    split: tuple[float, float] | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -171,6 +177,10 @@ class Instance:
     dimensions: tuple[str, ...] = ("load",)
     vehicle_penalty: float = 0.0
     source: str = ""
+    #: What ``cost_per_time`` pays for: ``"operating"`` (driving and service,
+    #: the default) or ``"duty"`` (the whole shift from departure to return,
+    #: waiting included: the shortest feasible duration of the route).
+    time_cost: str = "operating"
     _owner: tuple[int, ...] = field(init=False, repr=False, compare=False)
 
     _reload_owner: tuple[int, ...] = field(init=False, repr=False, compare=False)
@@ -238,6 +248,8 @@ def _validate(inst: Instance) -> tuple[tuple[int, ...], tuple[int, ...]]:
     dims = len(inst.dimensions)
     if n == 0:
         raise ValueError("VRP_NO_NODES")
+    if inst.time_cost not in ("operating", "duty"):
+        raise ValueError(f"VRP_TIME_COST_INVALID:{inst.time_cost}")
     if dims == 0 or len(set(inst.dimensions)) != dims:
         raise ValueError("VRP_DIMENSIONS_INVALID")
     for k, node in enumerate(inst.nodes):
@@ -285,6 +297,10 @@ def _validate(inst: Instance) -> tuple[tuple[int, ...], tuple[int, ...]]:
                 raise ValueError(f"VRP_COST_INVALID:{vt.id}")
         if vt.breaks is not None and not (vt.breaks.max_driving > 0 and vt.breaks.duration >= 0):
             raise ValueError(f"VRP_BREAK_RULE_INVALID:{vt.id}")
+        if vt.breaks is not None and vt.breaks.split is not None:
+            first, second = vt.breaks.split
+            if not (first > 0 and second > 0 and first + second >= vt.breaks.duration - 1e-9):
+                raise ValueError(f"VRP_BREAK_SPLIT_INVALID:{vt.id}")
         if vt.max_trips < 1 or (vt.max_trips > 1) != bool(vt.reload_nodes):
             raise ValueError(f"VRP_TRIPS_INVALID:{vt.id}")
         depots.update((vt.start_depot, vt.end_depot))

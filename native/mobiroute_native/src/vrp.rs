@@ -63,6 +63,26 @@ fn pick_min(a: f64, b: f64) -> f64 {
 type Candidate = (f64, usize, usize);
 
 #[inline(always)]
+/// The `k` smallest values of `row` in ascending order (all of them if fewer),
+/// written to `out`. Equal values are interchangeable, so every prefix sum the
+/// regret uses equals the one taken from a fully sorted row.
+fn smallest_k(row: &[f64], k: usize, out: &mut Vec<f64>) {
+    out.clear();
+    for &v in row {
+        if out.len() == k {
+            if v.partial_cmp(&out[k - 1]) != Some(std::cmp::Ordering::Less) {
+                continue;
+            }
+            out.pop();
+        }
+        let mut at = out.len();
+        while at > 0 && v < out[at - 1] {
+            at -= 1;
+        }
+        out.insert(at, v);
+    }
+}
+
 fn less(a: &Candidate, b: &Candidate) -> bool {
     a.0 < b.0 || (a.0 == b.0 && (a.1 < b.1 || (a.1 == b.1 && a.2 < b.2)))
 }
@@ -351,6 +371,39 @@ impl VrpKernel {
             .collect()
     }
 
+    /// Whether `r` fits on top of the load after position `k`; the same
+    /// comparison as `fits()`, without building the whole vector.
+    #[inline]
+    fn fits_at(&self, st: &RouteState, r: usize, k: usize) -> bool {
+        let dims = self.dims;
+        let cap = &self.cap[st.t * dims..st.t * dims + dims];
+        let q = &self.demand[r * dims..r * dims + dims];
+        if dims == 1 {
+            return st.load[k] <= cap[0] - q[0] + EPS;
+        }
+        (0..dims).all(|d| st.load[k * dims + d] + q[d] <= cap[d] + EPS)
+    }
+
+    /// Positions a single stop may take on a route without reloads: a delivery
+    /// from the depot needs room from the start (a prefix), a collection to the
+    /// end (a suffix).
+    fn single_bounds(&self, st: &RouteState, r: usize, prefix: bool) -> (usize, usize) {
+        let m = st.seq.len() - 2;
+        if prefix {
+            let mut last = 0;
+            while last <= m && self.fits_at(st, r, last) {
+                last += 1;
+            }
+            (0, last)
+        } else {
+            let mut first = m + 1;
+            while first > 0 && self.fits_at(st, r, first - 1) {
+                first -= 1;
+            }
+            (first, m + 1)
+        }
+    }
+
     #[allow(clippy::too_many_arguments)]
     fn min_duration_ok(
         &self,
@@ -615,6 +668,7 @@ impl VrpKernel {
         &self,
         st: &RouteState,
         u: usize,
+        r: usize,
         fits: &[bool],
         extra: f64,
         check_dur: bool,
@@ -626,23 +680,9 @@ impl VrpKernel {
         let (seq, begin, late) = (&st.seq, &st.begin, &st.late);
         let s = &self.s;
         let (eu, lu, su) = (self.e[u], self.l[u], self.s[u]);
-        let m = seq.len() - 2;
         let mut best: Option<Candidate> = None;
         // A delivery from the depot rides from its trip's start, a collection to
         // its trip's end; without reloads the trip is the whole route.
-        let (lo, hi) = if prefix {
-            let mut last = 0;
-            while last <= m && fits[last] {
-                last += 1;
-            }
-            (0, last)
-        } else {
-            let mut first = m + 1;
-            while first > 0 && fits[first - 1] {
-                first -= 1;
-            }
-            (first, m + 1)
-        };
         let mut visit = |i: usize| {
             let (a, b) = (seq[i], seq[i + 1]);
             let arr = begin[i] + s[a] + self.tm(t, a, u);
@@ -669,6 +709,7 @@ impl VrpKernel {
                 visit(i);
             }
         } else {
+            let (lo, hi) = self.single_bounds(st, r, prefix);
             for i in lo..hi {
                 visit(i);
             }
@@ -773,7 +814,13 @@ impl VrpKernel {
         let rests = self.brk_drive[t] < f64::INFINITY;
         let lazy = (self.has_ride && (st.has_ride || self.max_ride[r] < f64::INFINITY)) || rests;
         let check_dur = !lazy && self.max_dur[t] < f64::INFINITY;
-        let fits = self.fits(st, r);
+        // The per-position vector is read only by pairs and by trips cut at
+        // reloads; a single stop on a plain route needs just its bounds.
+        let fits = if (p >= 0 && d >= 0) || st.trip_start.is_some() {
+            self.fits(st, r)
+        } else {
+            Vec::new()
+        };
         let m = st.seq.len() - 2;
         let sp = if p >= 0 { self.s[p as usize] } else { 0.0 };
         let sd = if d >= 0 { self.s[d as usize] } else { 0.0 };
@@ -788,11 +835,11 @@ impl VrpKernel {
             )
         } else if d >= 0 {
             self.single_candidates(
-                st, d as usize, &fits, extra, check_dur, lazy, true, &mut out,
+                st, d as usize, r, &fits, extra, check_dur, lazy, true, &mut out,
             )
         } else {
             self.single_candidates(
-                st, p as usize, &fits, extra, check_dur, lazy, false, &mut out,
+                st, p as usize, r, &fits, extra, check_dur, lazy, false, &mut out,
             )
         };
         if !lazy {
@@ -898,9 +945,9 @@ impl VrpKernel {
         while !pending.is_empty() {
             let mut pick: Option<(usize, (f64, f64, usize))> = None;
             for (idx, &r) in pending.iter().enumerate() {
-                sorted_row.clear();
-                sorted_row.extend_from_slice(&table[idx]);
-                sorted_row.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
+                // Regret-k needs the k smallest costs in ascending order, not a
+                // sorted row: a linear selection gives the same values, O(S).
+                smallest_k(&table[idx], k, &mut sorted_row);
                 let c1 = if sorted_row.is_empty() {
                     MISSING
                 } else {
