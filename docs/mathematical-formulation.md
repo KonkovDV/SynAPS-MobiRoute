@@ -178,6 +178,82 @@ keep the model sound and well scaled:
 [benchmarks/setpart-solvers.md](benchmarks/setpart-solvers.md) compares
 CP-SAT with SCIP, HiGHS and CBC on the same pools.
 
+### Prices: the dual of the pool's LP
+
+Relax $x, y \ge 0$ in the model above. Its dual gives every order a price
+$u_r$ and every vehicle type a rent $-v_k$ (`mobiroute.vrp.prices`,
+`vrp-solve --prices`):
+
+$$
+\max \sum_r u_r + \sum_k n_k v_k
+\quad\text{s.t.}\quad
+\sum_{r \in \rho} u_r + v_k \le c_\rho\ \ \forall \rho \in P_k,\qquad
+u_r \le \pi_r,\qquad v_k \le 0 .
+$$
+
+Reading. No route of the pool is cheaper than the prices of its orders plus
+the rent of its type (dual feasibility); a route used by an optimal LP
+solution costs exactly that (complementary slackness); and the prices add up
+to the LP value plus the rents, $\sum_r u_r = z_{LP} + \sum_k n_k(-v_k)$
+(strong duality). So when the plan attains the LP value, the prices split its
+cost among the orders, after the rents of the types that ran out. A rent is
+positive only for a type all of whose units are in use: for the LP, one more
+unit lowers the value by at most $-v_k$ (the value of a minimisation LP is
+convex in its right-hand side and the dual is a subgradient). Rows for
+classes of reload stops add their own non-positive duals in the same way.
+
+**Lemma 5.** Let the plan be an optimal solution of the pool's LP, $\rho$ a
+route of the plan on type $k$, $r \in \rho$, and let the route
+$\rho \setminus r$ ($\rho$ with the stops of $r$ taken out) be a column of
+type $k$. Then every optimal dual has
+
+$$
+u_r \ \ge\ c_\rho - c_{\rho \setminus r},
+$$
+
+the saving of dropping $r$ from the plan as it stands.
+
+*Proof.* $x_\rho = 1 > 0$, so by complementary slackness
+$\sum_{q \in \rho} u_q + v_k = c_\rho$. Dual feasibility for the column
+$\rho \setminus r$ gives $\sum_{q \in \rho,\, q \ne r} u_q + v_k \le
+c_{\rho \setminus r}$. Subtracting, $u_r \ge c_\rho - c_{\rho \setminus
+r}$. If $r$ is alone on $\rho$ the saving is $c_\rho$ and
+$u_r = c_\rho - v_k \ge c_\rho$. A reload-class dual $w \le 0$ enters both
+rows with multiplicities $m \ge m'$, and $m w \le m' w$ keeps the inequality.
+$\square$
+
+The module puts these columns into the pool (and the plan's routes on every
+other type that can run them, so that a scarce type shows its rent in a thin
+pool). Two caveats are part of the result, not footnotes:
+
+* **Degeneracy.** Set-partitioning LPs have many optimal duals, and a simplex
+  vertex typically charges a whole route to one of its orders. Among all
+  optimal duals the one with the smallest $\sum_r |u_r - (c_\rho -
+  c_{\rho \setminus r})|$ is returned: a second LP over the optimal face.
+* **Restricted master.** $P$ is what the search happened to visit. The prices
+  are exact for $P$ and an estimate for the full problem: a route outside $P$
+  with $\sum_{r \in \rho} u_r + v_k > c_\rho$ would change them, and finding
+  it is the pricing subproblem of column generation, an elementary shortest
+  path with all the rules of section 1 (Lübbecke & Desrosiers 2005; Feillet
+  2010), which is not solved here. The same holds for a rent as a forecast:
+  it is a rate for a fraction of a vehicle on the routes of $P$, while one
+  whole vehicle and a new search can save less (integrality) or more (routes
+  outside $P$). On the synthetic Chelny day the rents of own vans and trucks
+  are 2,104 and 5,378, and solving the day again with one more unit saves 641
+  and 2,160: the rent names the scarce types, the re-solve gives the amount.
+
+### Orders that may be refused
+
+With a finite $\pi_r$ an order is worth serving only while it costs less than
+$\pi_r$. The repair inserts every order that fits, so a separate step
+follows it: orders are taken out one at a time, largest
+$c_\rho - c_{\rho \setminus r} - \pi_r > 0$ first, and when no single order
+gains, a route all of whose orders are optional is dropped whole if
+$c_\rho > \sum_{r \in \rho} \pi_r$ (a far cluster: no order alone pays for
+the trip back). Orders left out stay in the bank, so the next repair offers
+them again. Against the exact model on instances where refusing is cheap:
+[benchmarks/exact-vs-alns.md](benchmarks/exact-vs-alns.md).
+
 ## 4. Timing of a fixed sequence: difference constraints
 
 For a fixed order of stops, every rule above is $B_v - B_u \le w_{uv}$:
@@ -447,10 +523,12 @@ at the reference vehicle count when the reference ranks vehicles first.
 * Cordeau, J.-F. (2006). A branch-and-cut algorithm for the dial-a-ride problem. *Operations Research* 54(3):573–586.
 * Dumas, Y., Desrosiers, J., Soumis, F. (1991). The pickup and delivery problem with time windows. *EJOR* 54(1):7–22.
 * European Parliament and Council (2006). Regulation (EC) No 561/2006 on driving times and rest periods, art. 7.
+* Feillet, D. (2010). A tutorial on column generation and branch-and-price for vehicle routing problems. *4OR* 8(4):407–424.
 * Furtado, M., Munari, P., Morabito, R. (2017). Pickup and delivery problem with time windows: a new compact two-index formulation. *Operations Research Letters* 45(4):334–341.
 * Goel, A. (2009). Vehicle scheduling and routing with drivers' working hours. *Transportation Science* 43(1):17–26.
 * Ichoua, S., Gendreau, M., Potvin, J.-Y. (2003). Vehicle dispatching with time-dependent travel times. *EJOR* 144(2):379–396.
 * Kindervater, G.A.P., Savelsbergh, M.W.P. (1997). Vehicle routing: handling edge exchanges. In Aarts & Lenstra (eds.), *Local Search in Combinatorial Optimization*, Wiley, 337–360.
+* Lübbecke, M.E., Desrosiers, J. (2005). Selected topics in column generation. *Operations Research* 53(6):1007–1023.
 * Nagata, Y., Bräysy, O. (2009). A powerful route minimization heuristic for the vehicle routing problem with time windows. *Operations Research Letters* 37(5):333–338.
 * Potvin, J.-Y., Rousseau, J.-M. (1993). A parallel route building algorithm for the VRPTW. *EJOR* 66(3):331–340.
 * Rochat, Y., Taillard, É.D. (1995). Probabilistic diversification and intensification in local search for vehicle routing. *Journal of Heuristics* 1(1):147–167.

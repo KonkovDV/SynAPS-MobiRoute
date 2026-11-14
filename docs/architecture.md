@@ -57,7 +57,7 @@ flowchart LR
 
 | Package | Role |
 | --- | --- |
-| `vrp` | rich VRP engine: model (rests, reload stops, speed profiles), readers, input in coordinates with offline or OSRM matrices, insertion algebra, ALNS, merge operator, VRPTW local search, set partitioning, exact CP-SAT, OR-Tools lane, lateness, live dispatch, verifier, route sheets, SVG |
+| `vrp` | rich VRP engine: model (rests, reload stops, speed profiles), readers, input in coordinates with offline or OSRM matrices, insertion algebra, ALNS, merge operator, VRPTW local search, set partitioning and its LP duals (order prices, vehicle rents), exact CP-SAT, OR-Tools lane, lateness, live dispatch, verifier, route sheets, SVG |
 | `benchmarks` | Cordeau literature lane (exact CP-SAT and MIP on SCIP/HiGHS/CBC, LP bound, Bellman-Ford verifier) and the claim gate for open-data runs |
 | `domain`, `solvers`, `dispatch`, `validation` | paratransit DARP kernel ([darp-kernel.md](darp-kernel.md)) |
 | `adapters` | synthetic paratransit days, Cordeau adapter, fingerprints |
@@ -131,6 +131,10 @@ exits with status 2.
   types) → `alns.solve` → `verify.verify` → `sheets.route_sheets`
   (`schedule.compact_schedule` per route) → `route-sheets.csv`,
   `route-sheets.md`, `route-sheets.svg`.
+* `mobiroute vrp-solve --geo day.geo.json --prices` → `prices.solve_with_prices`
+  (`alns.Alns` with the route pool kept → `prices.shadow_prices`: the pool's
+  LP dual on GLOP, then a second LP over the optimal face) → `prices.json`,
+  `prices.md`.
 * `mobiroute vrp-dispatch --day plant --policy insertion+alns` →
   `realtime.Dispatcher.run` → per order `_insert` (≈0.1 ms), every 30 min
   `snapshot` → `alns.solve(initial=current plan)` → apply if better.
