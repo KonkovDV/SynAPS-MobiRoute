@@ -43,6 +43,16 @@ guess.
 5. **Guided ejection.** One ejection step made about 200 Python→Rust calls
    (1.1 ms). The whole scan moved into `VrpKernel.eject_insert`: one call per
    step, same choice as the Python reference.
+6. **A thousand customers.** On X-n1001-k43 (60 s, one thread) the profile
+   showed full scans everywhere: worst removal over every stop, local search
+   over every route, Shaw removal and served-request lookups over all orders.
+   From 400 requests the search now works on granular neighbourhoods (removal
+   gains from the arcs around a stop, local search from the routes that
+   changed), the objective memoizes route costs, and the Rust regret-k picks
+   the k smallest costs by linear selection instead of sorting. Iterations a
+   minute went from 8,577 to 24,748 and the gap to the best known from 5.75%
+   to 3.4%. Instances under 400 requests keep their full scans, so their
+   published trajectories do not change.
 
 Current cost per iteration ([benchmarks/vrp-speed.md](benchmarks/vrp-speed.md),
 `python benchmark/measure_vrp_speed.py`): Rust is 10× faster on Solomon R101,

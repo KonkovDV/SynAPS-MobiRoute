@@ -475,9 +475,9 @@ CP-SAT proves the optimum of all 40 random instances of the full model in
 [benchmarks/exact-vs-alns.md](benchmarks/exact-vs-alns.md); ALNS reaches it on
 all 40.
 
-## 7. Literature lane: Cordeau (2006) DARP
+## 7. Cordeau (2006) DARP as published
 
-`benchmarks/cordeau_exact.py` solves the published algebra exactly:
+`benchmarks/cordeau_exact.py` solves the published model exactly:
 
 * CP-SAT with `AddMultipleCircuit`, route labels ($V_j = V_i$ along arcs, the
   first pickup names the route, $V_i = V_{n+i}$), load and time propagation,
@@ -486,8 +486,8 @@ all 40.
   arc-specific big-M $M_{ij} = \max(0, l_i + s_i + t_{ij} - e_j)$, solved by
   SCIP, HiGHS or CBC, and its LP relaxation as a bound.
 
-a2-16: CP-SAT proves 294.25 in 0.7 s; SCIP and HiGHS reach it in 26.2 s and
-41.3 s; the LP bound is 85.27 (big-M is weak: 71% gap) —
+a2-16: CP-SAT proves 294.25 in 0.6 s; SCIP and HiGHS reach it in 25.9 s and
+40.4 s; the LP bound is 85.27 (big-M is weak: 71% gap) —
 [benchmarks/solver-lab-a2-16.md](benchmarks/solver-lab-a2-16.md).
 
 ## 8. Paratransit kernel specifics
@@ -495,7 +495,7 @@ a2-16: CP-SAT proves 294.25 in 0.7 s; SCIP and HiGHS reach it in 26.2 s and
 Integer minutes on a zone graph (Floyd-Warshall), curb dwell
 $\max(\text{board}, 5)$, alighting no earlier than 30 min before an
 appointment, detour cap, wheelchair places, accessibility skills, quotas,
-linked trips. Valid inequality used by search and notary alike:
+linked trips. Valid inequality used by search and verifier alike:
 
 $$
 B_{p_r} \ge \max\big(e_r,\ \underline{a}_r - \bar L_r - s_r\big),

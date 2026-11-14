@@ -70,7 +70,7 @@ next.
   start or a fixed departure has to shift it by hand, and the rest's place is
   the first admissible gap the verifier finds, not a driver's preference.
 * Every vehicle returns to its end depot; open routes need a zero-cost return.
-* The OR-Tools lane, the exact CP-SAT model and the live dispatcher do not
+* The OR-Tools baseline, the exact CP-SAT model and the live dispatcher do not
   model rests, multi-trip days or time-dependent travel; they refuse such
   instances with an explicit error. In the dispatcher, ride limits have to be
   written as delivery deadlines, and vehicles idle where they finish instead
@@ -89,7 +89,7 @@ next.
 * The exact CP-SAT model proves optima on small instances (about ten orders).
   `OPTIMAL` refers to its integer model with travel rounded up to 0.01 min;
   the verifier re-prices the plan in real numbers.
-* The OR-Tools lane is the common configuration (PCI + GLS, integer time grid,
+* The OR-Tools baseline is the common configuration (PCI + GLS, integer time grid,
   disjunctions), not a tuned setup; the comparison says how far the default
   gets in the same time, not what OR-Tools can do with tuning. Its matrices
   are registered on the C++ side, so the time limit is spent on the search.

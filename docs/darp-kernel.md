@@ -28,7 +28,7 @@ days. The general cargo and passenger engine is in `mobiroute.vrp`
 Pickup floor. With alight floor `a = max(0, appt - 30)`, ride cap
 `L = min(max_ride, detour cap)` and curb service `s = max(board, 5)`, every
 feasible schedule starts the pickup at or after `max(earliest, a - L - s)`
-(Dumas, Desrosiers & Soumis 1991). Search, Python oracle and notary share
+(Dumas, Desrosiers & Soumis 1991). Search, Python oracle and verifier share
 `pickup_service_floor`, so an early vehicle waits for it without losing any
 schedule.
 
@@ -52,13 +52,13 @@ snapshot. Malformed input raises `ValueError`; the CLI maps it to exit code 2.
 | Beam over insertions | `solvers/beam.py` | no |
 | ALNS (random, Shaw, worst, route; SA) | `solvers/alns.py` | no |
 | Rolling horizon | `solvers/rolling_horizon.py` | no |
-| CP-SAT tiny, sequential (no pooling), at most 40 requests / 12 vehicles | `solvers/cpsat.py` | only if OR-Tools proves it **and** the notary passes |
+| CP-SAT tiny, sequential (no pooling), at most 40 requests / 12 vehicles | `solvers/cpsat.py` | only if OR-Tools proves it **and** the verifier accepts the plan |
 
-Above the CP-SAT size gate, or without OR-Tools, the lane returns the greedy
+Above the CP-SAT size limit, or without OR-Tools, the solver returns the greedy
 plan relabelled `CPSAT_FALLBACK_GREEDY` with its own `config_hash`; it is never
 `OPTIMAL`.
 
-## Notary
+## Verifier
 
 `validation/feasibility.check_plan` re-simulates every route from the problem,
 not from solver bookkeeping: travel, windows, waits, curb dwell, ride and
@@ -74,8 +74,8 @@ vehicle or driver dropping out.
 
 * Frozen trips (already promised) keep vehicle, driver and pickup/dropoff
   clocks; an insertion that would move them is refused.
-* Every result is re-verified by the notary against the updated problem.
-* Identity: only `finalize_result` publishes `input_hash`; every lane that
+* Every result is re-verified against the updated problem.
+* Identity: only `finalize_result` publishes `input_hash`; every solver that
   republishes a plan (RHC, ALNS, repair, fallback, manual override) signs its
   own `config_hash` and `plan_id`; a baseline without a plan id is referenced
   as `unsigned:<content hash>`.
@@ -102,7 +102,7 @@ vehicle or driver dropping out.
 
 Every served trip records vehicle, driver, times, active constraints and the
 alternatives considered and rejected; every rejected trip has a non-empty
-reason code (an empty one is a notary violation). Fairness is always reported
+reason code (an empty one is a verifier violation). Fairness is always reported
 as several metrics: service rate by zone and eligibility class, medical and
 wheelchair on-time rates, mean and P95 wait and ride, worst-group wait, Jain
 index, maximum disparity, unexplained-reject share.
@@ -131,7 +131,7 @@ pipeline with disruptions and 8 urgent inserts 13.1 s. See
 
 ## Tests
 
-`tests/test_core.py`, `test_adversarial.py`, `test_redteam*.py` (forged
+`tests/test_core.py`, `test_adversarial.py`, `test_edge_cases.py`, `test_stacked_scenarios.py` (forged
 clocks, hidden onboard dwell, overloads), `test_online_*`, `test_plan_diff.py`,
 `test_rejection_evidence.py`, `test_operator_policy.py`, `test_linked_policy.py`,
 `test_quota_*`, `test_privacy_boundary.py`, `test_insertion_kernel.py`

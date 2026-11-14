@@ -36,7 +36,7 @@ cargo clippy --manifest-path native/mobiroute_native/Cargo.toml --release -- -D 
 * **Errors are codes.** Raise `ValueError` with a stable code first
   (`GEO_UNKNOWN_DEPOT:van`, `VRP_CAPACITY_INVALID:van`) and test for the code;
   the CLI turns it into one line on stderr and exit status 2.
-* **Lanes say what they do not model.** A solver that ignores a rule of the
+* **A solver says what it does not model.** A solver that ignores a rule of the
   instance (rests, trips, traffic) refuses it with an error code instead of
   returning a plan that silently breaks the rule.
 * **Commits** use a short prefix: `feat`, `fix`, `perf`, `test`, `docs`,

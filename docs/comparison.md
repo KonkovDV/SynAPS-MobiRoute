@@ -1,4 +1,4 @@
-# Сравнение с аналогами и мировой практикой
+# Сравнение с другими решателями и литературой
 
 Язык: **RU** | [EN](#english-summary)
 
@@ -7,36 +7,25 @@
 нет. Замеры при равном времени есть против OR-Tools, PyVRP, VROOM и jsprit;
 для Timefold и Яндекс Маршрутизации оценок «лучше / хуже» здесь нет.
 
-## Коротко
+## В двух словах
 
-**Чем движок отличается**
+От других инструментов этот движок отличается в основном проверкой. Любой
+план пересчитывает отдельный верификатор, а если рейс невозможен, он
+возвращает сертификат: какие ограничения конфликтуют и сколько минут не
+хватает. На малых задачах та же модель решается точно в CP-SAT и MIP, так что
+эвристику можно сверить с доказанным оптимумом: на 40 случайных задачах
+полной модели ALNS нашёл его все 40 раз. Режим труда и отдыха здесь —
+ограничение на время за рулём, а не на интервалы, и каждый маршрутный лист
+показывает, как оно соблюдено. Окна, забор и доставка, свои и наёмные машины,
+вектор ёмкости, несколько рейсов и пробки задаются в одной модели.
 
-1. **Каждый план проверяет независимый верификатор.** Он пересчитывает
-   загрузку, расписание и стоимость и не берёт у решателя ничего. Если рейс
-   невозможен, верификатор возвращает сертификат: какие ограничения
-   конфликтуют и сколько минут не хватает.
-2. **Эвристика сверяется с доказанным оптимумом.** Точные модели CP-SAT и MIP
-   решают ту же модель. На 40 случайных задачах полной модели ALNS находит
-   доказанный оптимум все 40 раз.
-3. **Правило рабочего времени водителя — ограничение по времени за рулём**:
-   перерыв не позже чем через 4,5 ч вождения, не больше 9 ч за смену. Каждый
-   маршрутный лист показывает, как правило соблюдено.
-4. **Одна модель для грузовой логистики**: окна, забор и доставка,
-   разнородный парк из своих и наёмных машин, вектор ёмкости, несколько
-   рейсов за смену, пробки по часам суток.
-5. **Числа публикуются по каждому инстансу** и воспроизводятся одной
-   командой.
-
-**Профиль других инструментов**
-
-* **PyVRP** — итерированный локальный поиск на C++ для классических CVRP и
-  VRPTW; правил труда и отдыха в открытой версии нет.
-* **VROOM** — быстрый движок на C++ со связкой с OSRM, Openrouteservice и
-  Valhalla; задачи без нескольких рейсов и без доказательства оптимума.
-* **OR-Tools** — универсальная библиотека с большим сообществом.
-* **Timefold** — платформа планирования для Java, с коммерческой версией.
-* **Яндекс Маршрутизация** — готовый сервис с картами, пробками и интерфейсом
-  логиста; модель закрыта.
+У остальных инструментов своя ниша. PyVRP — итерированный локальный поиск на
+C++ для классических CVRP и VRPTW, без правил труда и отдыха в открытой
+версии. VROOM — быстрый движок на C++ в связке с OSRM, Openrouteservice и
+Valhalla, без нескольких рейсов и без доказательства оптимума. OR-Tools —
+универсальная библиотека с большим сообществом. Timefold — платформа
+планирования на Java с коммерческой версией. Яндекс Маршрутизация — готовый
+сервис с картами, пробками и интерфейсом логиста, модель у него закрыта.
 
 ## Возможности
 
@@ -107,7 +96,7 @@ OR-Tools получает матрицы времени и стоимости н
 таблица — [benchmarks/solvers.md](benchmarks/solvers.md), воспроизведение —
 `python benchmark/solvers_study.py`.
 
-## Мировая практика → что взято в движок
+## Что взято из литературы и практики
 
 | Источник | Идея | В движке |
 | --- | --- | --- |
@@ -128,12 +117,12 @@ OR-Tools получает матрицы времени и стоимости н
 
 ## Когда что выбирать
 
-* **Чистые CVRP / VRPTW, максимальная скорость на тысячах точек** — PyVRP или
-  VROOM.
-* **Готовый интерфейс логиста, карты, сопровождение** — коммерческий сервис.
-* **Своя модель с правилами рабочего времени, несколькими рейсами и
-  разнородным парком, где каждый план надо проверить и объяснить, а на малых
-  задачах доказать оптимум** — этот движок.
+Для классических CVRP и VRPTW на тысячах точек, где важна прежде всего
+скорость, лучше подойдут PyVRP или VROOM. Если нужен готовый интерфейс
+логиста с картами и сопровождением, разумнее взять коммерческий сервис. Этот
+движок имеет смысл, когда модель своя: правила рабочего времени, несколько
+рейсов, разнородный парк, и каждый план нужно проверить и объяснить, а на
+малых задачах ещё и доказать оптимум.
 
 ## Развитие
 
@@ -185,20 +174,19 @@ then vehicles, then cost); on the mixed-fleet freight days it costs
 14.4-16.6% less with one to three vehicles fewer. The baseline reads its
 matrices in C++; with Python callbacks it lost wall clock to the
 interpreter and the tally read 15 : 3 : 0. Against PyVRP 0.14, VROOM 1.15
-and jsprit 2.0: on Solomon (vehicles first) this engine alone is at the
-best-known vehicle count on all 56 instances (PyVRP 50, VROOM 32, jsprit
-30); on 1000-customer instances ranked by distance PyVRP leads (+1.2% to
-the best known), this engine is second (+2.9%), then VROOM (+15%) and
-jsprit (+21%). What sets the engine apart is
-verification (an independent verifier with infeasibility certificates, and
-exact CP-SAT and MIP models that prove the heuristic's optimum on small
-instances: 40 of 40), the driving-time rule as a constraint on time at the
-wheel with a check on every route sheet, and one model for time windows,
-pickup and delivery, a mixed own-and-hired fleet, capacity vectors,
-multi-trip days and rush hours. Other tools have their own profile: PyVRP
-for classic CVRP/VRPTW, VROOM for speed and routing-engine integration,
-OR-Tools for a broad ecosystem, Timefold for Java enterprise planning,
-Yandex Routing as a finished service. Tables:
+and jsprit 2.0: on Solomon (vehicles first) this engine is at the best-known
+vehicle count on all 56 instances (PyVRP 50, VROOM 32, jsprit 30); on
+1000-customer instances ranked by distance PyVRP leads (+1.2% to the best
+known), this engine is second (+2.9%), then VROOM (+15%) and jsprit (+21%).
+The engine differs mostly in how plans are checked: an independent verifier
+with infeasibility certificates, and exact CP-SAT and MIP models on the same
+model, which found the heuristic at the proven optimum on 40 of 40 small
+instances. The driving-time rule is a constraint on time at the wheel, shown
+on every route sheet, and windows, pickup and delivery, a mixed own-and-hired
+fleet, capacity vectors, several trips and rush hours share one model. The
+other tools have their own niches: PyVRP for classic CVRP and VRPTW, VROOM
+for speed and routing-engine integration, OR-Tools for a broad ecosystem,
+Timefold for Java planning, Yandex Routing as a finished service. Tables:
 `docs/benchmarks/ortools-vs-alns.md`, `docs/benchmarks/solvers.md`.
 Next: time-of-day truck bans, multi-day trips with daily and weekly rest,
 split breaks and traffic in the Rust kernel.

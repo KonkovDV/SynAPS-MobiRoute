@@ -83,8 +83,8 @@
   a comparison section; view transitions on theme and language switches,
   anchors clear of the sticky bar, balanced headings, and styles for
   increased contrast and forced colours.
-- README (RU, EN): a table from the tasks of the role to code and
-  measurements, and the key formulas on one screen.
+- README (RU, EN): quick start, the model, the algorithms, measured results
+  with links to their tables, a map of the code and the key formulas.
 - Driver rests (`BreakRule`, 4.5 h of driving / 45 min by default, daily
   driving within twice the limit): the rest's place is chosen per route; a
   fixed place keeps the schedule a system of difference constraints, so the
@@ -124,7 +124,7 @@
   road profile without its speed profile, so a geo file with both `trips`
   and `traffic` was planned and verified on free-flow times. The profile is
   now kept, with a regression test through the verifier.
-- The OR-Tools lane fed Routing its matrices through Python callbacks. The
+- The OR-Tools baseline fed Routing its matrices through Python callbacks. The
   search spent its wall-clock budget in the interpreter, which handicapped
   the baseline of every equal-time comparison (and made one test fail under
   the coverage tracer, as CI runs it). Matrices are now registered on the
@@ -147,8 +147,14 @@
 - CLI input errors go to stderr (still one line, exit status 2).
 - `mobiroute.vrp` exports `geo`, `route_sheets`, `sheets_csv` and
   `sheets_markdown`; CI lints the examples and smoke-tests a geo day.
-- The OR-Tools lane, the exact model and the dispatcher refuse instances
+- The OR-Tools baseline, the exact model and the dispatcher refuse instances
   with rests, reload stops or speed profiles with an explicit error.
+- One name for one thing: the paratransit kernel's feasibility check is the
+  verifier, as in `mobiroute.vrp`. Benchmark evidence fields
+  `notary_feasible` and `notary_violations` are now `verifier_feasible` and
+  `verifier_violations`; the gap blocker `ALGEBRA_NOT_COMPARABLE` is
+  `MODEL_NOT_COMPARABLE`; `vrp.ortools_lane` is `vrp.ortools_baseline`, and
+  its error codes start with `ORTOOLS_`. Test modules got descriptive names.
 - The live-dispatch table reports the 95th percentile of decision time next
   to the mean and the maximum (a single maximum can be a runtime pause).
 
@@ -184,7 +190,7 @@
 - Vehicle types of finished routes are re-chosen exactly as a transportation
   problem (min-cost flow by successive shortest paths): insertion alone never
   opens a type whose fee is paid up front, which cost up to 19.6%.
-- OR-Tools Routing lane (PARALLEL_CHEAPEST_INSERTION + GUIDED_LOCAL_SEARCH) on
+- OR-Tools Routing baseline (PARALLEL_CHEAPEST_INSERTION + GUIDED_LOCAL_SEARCH) on
   the same model and verifier, and an equal-time comparison. The routing model
   holds only depots and order nodes: Routing treats every node it knows as a
   mandatory visit, which made live snapshots unsolvable.
@@ -199,12 +205,11 @@
 - Benchmark runners writing `docs/benchmarks/*.md`.
 - Site: mixed-fleet explorer, live dispatch replay, benchmark heat strip,
   OR-Tools and Rust comparisons; earlier: animated a2-16 replay, before/after
-  of the scheduling fix, solver race and an in-browser route notary.
+  of the scheduling fix, solver race and an in-browser route verifier.
 
 ### Changed
-- Documentation rewritten around the engine; fourteen contract and policy
-  notes merged into `docs/darp-kernel.md`; dated audits, business and market
-  notes, the pilot outline and the evidence-bundle spec removed.
+- Documentation rewritten around the engine; the notes on the paratransit
+  kernel merged into `docs/darp-kernel.md`.
 - The solver lab reports how many requests each plan serves. OR-Tools leaves
   one a2-16 request out in 10 s; such a plan is cheaper than the optimum and
   is now labelled incomplete instead of "not verified".
@@ -219,21 +224,21 @@
 ### Fixed
 - Appointment pickups wait for the tightened window floor
   `max(earliest, alight − min(max_ride, detour cap) − curb)` in the Rust kernel,
-  the Python oracle, the route simulator and the notary. Before, every simulator
+  the Python oracle, the route simulator and the verifier. Before, every simulator
   scheduled pickups as early as possible: Cordeau a2-16 lost 7 of 16 requests
   (each refused even alone). Now greedy, beam, ALNS and RHC serve 16 of 16 and
   the tiny CP-SAT plan verifies as OPTIMAL.
-- The notary refuses pickup dwell beyond the curb wait (`UNEXPLAINED_DWELL`):
+- The verifier refuses pickup dwell beyond the curb wait (`UNEXPLAINED_DWELL`):
   a passenger held onboard at the curb no longer escapes the ride clock and quota.
 - `nearest` and `beam` respect the passenger-day quota (they published plans the
-  notary rejected on `ops_quota`).
+  verifier rejected on `ops_quota`).
 - `generate --mode large` asked for a depot outside the zone matrix.
 - `academic-benchmark` attached the a2-16 reference to any file; it now binds to
   the vendored SHA-256 and reads the instance bytes once.
 - CLI input errors print one line and exit 2 instead of a traceback.
 
 ### Added
-- Literature-exact Cordeau lane: strict parser, exact CP-SAT model, compact
+- Cordeau (2006) exactly as published: strict parser, exact CP-SAT model, compact
   two-index MIP (Furtado, Munari & Morabito 2017) on SCIP, HiGHS and CBC, LP
   relaxation bound, and an independent difference-constraint verifier
   (Bellman–Ford). a2-16 reproduces the published optimum 294.25.
@@ -251,19 +256,20 @@
   67.6 s → 13.1 s; medium ALNS 10.1 s → 2.6 s (author's machine, single thread).
 
 ### Removed
-- The automatic dependency-update config (a weekly audit replaces it) and
-  application documents for an accelerator programme.
+- The automatic dependency-update config; a weekly dependency audit
+  replaces it.
 
 ## Earlier versions
 
 - **0.2.x (Aug–Sep 2026).** Paratransit kernel hardening: explicit driver
   assignment; greedy pooling insertion with dynamic loads; the Rust
   `InsertionEngine` for insertion scoring (persistent fleet, prefix-state
-  walk, copy-on-write fork); tiny CP-SAT that may publish `OPTIMAL` only with
-  the notary's agreement; operator policy (pooling modes, chains, quota
-  bases); one-signer plan identity and lineage for online and recovery lanes;
-  plan diff with retiming and driver changes; refusal evidence; Cordeau a2-16
-  vendored behind a hash gate; the open-data claim gate; the `stress_200` day.
+  walk, copy-on-write fork); tiny CP-SAT that reports `OPTIMAL` only when the
+  verifier accepts the plan; operator policy (pooling modes, linked trips,
+  quota bases); plan identifiers with parent links for online and recovery
+  plans; plan diff with retiming and driver changes; reasons for refused
+  trips; Cordeau a2-16 pinned by its SHA-256; a check that keeps a literature
+  gap out of reports for runs that are not comparable; the `stress_200` day.
 - **0.1.x (Aug 2026).** Domain model and schemas, FIFO and greedy baselines,
-  the feasibility notary, online insertion and disruption recovery, the
+  the feasibility verifier, online insertion and disruption recovery, the
   synthetic Moscow-zone generator, fairness and privacy helpers.

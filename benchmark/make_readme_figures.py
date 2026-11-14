@@ -1,17 +1,14 @@
 # ruff: noqa: RUF001
-"""README figures: key results, the infeasibility certificate, Lemma 4.
+"""README figures: the infeasibility certificate and Lemma 4.
 
-Dependency-free SVG with light and dark themes. Numbers come from
-benchmark/results/*.json where a result file exists.
+Dependency-free SVG with light and dark themes.
 
     python benchmark/make_readme_figures.py
 """
 
 from __future__ import annotations
 
-import json
 from pathlib import Path
-from typing import Any
 
 ROOT = Path(__file__).resolve().parents[1]
 IMG = ROOT / "docs" / "img"
@@ -51,84 +48,6 @@ def svg(width: int, height: int, label: str, body: list[str]) -> str:
             "</svg>\n",
         ]
     )
-
-
-def _load(result: str, published: str) -> Any:
-    """A fresh result file if the study was rerun, else the copy the site publishes."""
-    path = ROOT / "benchmark" / "results" / result
-    if not path.exists():
-        path = ROOT / "site" / "data" / published
-    return json.loads(path.read_text())
-
-
-def _results() -> dict[str, str]:
-    bench = _load("vrp/vrp_benchmark.json", "benchmarks.json")
-    sol = [r for r in bench["rows"] if r["family"] == "solomon"]
-    at_ref = sum(r["vehicles"] <= r["ref_vehicles"] for r in sol)
-    published = json.loads((ROOT / "site" / "data" / "comparisons.json").read_text())
-    exact = _load("exact_vs_alns.json", "comparisons.json")
-    summary = exact.get("exact", exact)["summary"]
-    ortools = _load("ortools_vs_alns.json", "comparisons.json")
-    rows = ortools.get("ortools", ortools)["rows"]
-    assert rows == published["ortools"]["rows"], "run export_vrp_site_data.py first"
-    better = equal = worse = 0
-    saving, fewer = 0.0, 0
-    for base, ours in zip(rows[::2], rows[1::2], strict=True):
-        assert base["instance"] == ours["instance"] and ours["solver"].startswith("ALNS")
-        a = (-ours["served"], ours["vehicles"], ours["cost"])
-        b = (-base["served"], base["vehicles"], base["cost"])
-        better += a < b
-        equal += a == b
-        worse += a > b
-        if ours["instance"].startswith("cargo-day"):
-            saving = max(saving, 100.0 * (1.0 - ours["cost"] / base["cost"]))
-            fewer = max(fewer, base["vehicles"] - ours["vehicles"])
-    return {
-        "solomon": f"{at_ref} / {len(sol)}",
-        "exact": f"{summary['alns_matches_optimum']} / {summary['proven_optimal']}",
-        "ortools": f"{better} · {equal} · {worse}",
-        "cargo": f"−{saving:.0f}%",
-        "fewer": str(fewer),
-    }
-
-
-def kpi(lang: str) -> str:
-    r = _results()
-    tiles = {
-        "ru": [
-            (r["solomon"], "Solomon: число машин", "лучшего известного решения"),
-            (r["exact"], "оптимумов CP-SAT", "найдено эвристикой"),
-            (r["ortools"], "против OR-Tools, 10 с:", "лучше · наравне · хуже"),
-            (r["cargo"], "стоимость грузового дня,", f"машин меньше: до {r['fewer']}"),
-            ("×49", "ядро Rust против Python", "при том же плане"),
-            ("0,1 мс", "ответ диспетчера", "на новую заявку"),
-        ],
-        "en": [
-            (r["solomon"], "Solomon instances at", "the best-known fleet size"),
-            (r["exact"], "CP-SAT optima", "found by the heuristic"),
-            (r["ortools"], "vs OR-Tools, 10 s:", "better · equal · worse"),
-            (r["cargo"], "cost of a cargo day,", f"up to {r['fewer']} vehicles fewer"),
-            ("×49", "Rust kernel vs Python,", "identical plan"),
-            ("0.1 ms", "dispatcher response", "to a new order"),
-        ],
-    }[lang]
-    w, h, cols = 960, 250, 3
-    tw, th = 296, 96
-    body = []
-    for i, (value, l1, l2) in enumerate(tiles):
-        x = 24 + (i % cols) * (tw + 12)
-        y = 24 + (i // cols) * (th + 12)
-        body += [
-            f'<rect x="{x}" y="{y}" width="{tw}" height="{th}" rx="8" fill="none" '
-            f'class="line" stroke-width="1"/>',
-            f'<rect x="{x}" y="{y + 18}" width="3" height="{th - 36}" rx="1.5" class="accent"/>',
-            f'<text class="ink" x="{x + 20}" y="{y + 50}" font-size="30" '
-            f'font-weight="600">{value}</text>',
-            f'<text class="ink2" x="{x + 20}" y="{y + 70}" font-size="13">{l1}</text>',
-            f'<text class="ink2" x="{x + 20}" y="{y + 86}" font-size="13">{l2}</text>',
-        ]
-    title = "Ключевые результаты" if lang == "ru" else "Key results"
-    return svg(w, h, title, body)
 
 
 def certificate(lang: str) -> str:
@@ -275,7 +194,6 @@ def lemma4(lang: str) -> str:
 
 def main() -> None:
     for lang, suffix in (("ru", ""), ("en", ".en")):
-        (IMG / f"key-results{suffix}.svg").write_text(kpi(lang), encoding="utf-8")
         (IMG / f"certificate{suffix}.svg").write_text(certificate(lang), encoding="utf-8")
         (IMG / f"lemma4{suffix}.svg").write_text(lemma4(lang), encoding="utf-8")
 

@@ -21,11 +21,11 @@ Rules every number in this repository follows.
 8. **Seeds and tests for method comparisons.** A change to the search is
    judged on several seeds per instance and paired runs, with the
    Wilcoxon signed-rank test; one seed is one draw.
-9. **Two algebras on Cordeau.** The paratransit kernel uses operator rules
+9. **Two models of Cordeau.** The paratransit kernel uses operator rules
    (integer minutes, curb dwell, alighting slack) and is never compared with the
-   literature; the claim gate in `benchmarks/academic.py` blocks such a gap.
+   literature; `benchmarks/academic.py` refuses to report such a gap.
    The rich-VRP engine and `benchmarks/cordeau_exact.py` use the published
-   algebra and are compared.
+   model and are compared.
 
 ## Commands and outputs
 

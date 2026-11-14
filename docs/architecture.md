@@ -20,7 +20,7 @@ flowchart LR
     SP[setpart<br/>route pool · CP-SAT / MIP]
     TR[traffic<br/>speeds by time of day]
     X[exact<br/>CP-SAT per-vehicle circuits]
-    O[ortools_lane<br/>Routing PCI + GLS]
+    O[ortools_baseline<br/>Routing PCI + GLS]
     L[lateness<br/>bisection · LP]
     T[realtime<br/>freeze · insert · re-optimise]
     V[verify + schedule<br/>Bellman-Ford, certificates]
@@ -57,8 +57,8 @@ flowchart LR
 
 | Package | Role |
 | --- | --- |
-| `vrp` | rich VRP engine: model (rests, reload stops, speed profiles), readers, input in coordinates with offline or OSRM matrices, insertion algebra, ALNS, merge operator, VRPTW local search, set partitioning and its LP duals (order prices, vehicle rents), exact CP-SAT, OR-Tools lane, lateness, live dispatch, verifier, route sheets, SVG |
-| `benchmarks` | Cordeau literature lane (exact CP-SAT and MIP on SCIP/HiGHS/CBC, LP bound, Bellman-Ford verifier) and the claim gate for open-data runs |
+| `vrp` | rich VRP engine: model (rests, reload stops, speed profiles), readers, input in coordinates with offline or OSRM matrices, constant-time insertion tests, ALNS, merge operator, VRPTW local search, set partitioning and its LP duals (order prices, vehicle rents), exact CP-SAT, OR-Tools baseline, lateness, live dispatch, verifier, route sheets, SVG |
+| `benchmarks` | Cordeau (2006) as published: exact CP-SAT and MIP on SCIP/HiGHS/CBC, LP bound, Bellman-Ford verifier; a check that keeps non-comparable gaps out of reports |
 | `domain`, `solvers`, `dispatch`, `validation` | paratransit DARP kernel ([darp-kernel.md](darp-kernel.md)) |
 | `adapters` | synthetic paratransit days, Cordeau adapter, fingerprints |
 | `reporting` | JSON, Markdown, CSV, SVG |
@@ -87,9 +87,9 @@ vehicle's position becomes its depot, orders on board become depot deliveries
 locked to it by a private skill. Every solver in the package then works on
 live state without special cases.
 
-**Rules are data; lanes say what they do not model.** Rests, reload stops
+**Rules are data; a solver says what it does not model.** Rests, reload stops
 and speed profiles live in the instance. The heuristics, the Rust kernel and
-the verifier implement them; the OR-Tools lane, the exact model and the
+the verifier implement them; the OR-Tools baseline, the exact model and the
 dispatcher refuse such instances with an error code instead of silently
 ignoring a rule.
 
@@ -113,8 +113,8 @@ The objective memoizes route costs either way; the Rust kernel keeps the
 same arithmetic as the Python reference in both modes.
 
 **Deterministic runs.** Seeds everywhere, SHA-256 of instance bytes in every
-benchmark row, one thread unless stated, CP-SAT with one worker in the
-literature lane.
+benchmark row, one thread unless stated, CP-SAT with one worker on the
+literature instances.
 
 **Errors are codes.** Every input problem raises a `ValueError` whose message
 starts with a stable code (`GEO_UNKNOWN_DEPOT:van`, `VRP_CAPACITY_INVALID:van`,
