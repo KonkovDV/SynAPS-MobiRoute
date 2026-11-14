@@ -91,6 +91,8 @@ class AlnsConfig:
     sp_every: int = 0
     #: Budget of one set-partitioning solve (CP-SAT deterministic seconds).
     sp_time: float = 2.0
+    #: Solve the set-partitioning model once more after the last phase.
+    sp_final: bool = True
     backend: Backend = "auto"
 
 
@@ -664,7 +666,7 @@ class Alns:
         best = self._anneal(
             best, iterations=max(0, total), limit=limit, cap=None, stop_when_complete=False
         )
-        if self.pool is not None:
+        if self.pool is not None and cfg.sp_final:
             found = self._setpart(best)
             if found is not None:
                 best = found[0]

@@ -366,3 +366,20 @@ def test_ortools_lane_ignores_nodes_of_absent_orders() -> None:
     inst = replace(day, requests=day.requests[:3])
     run = solve_ortools(inst, time_limit=1.0)
     assert run.verdict.feasible and not run.solution.unassigned
+
+
+@pytest.mark.parametrize("backend", ["CP-SAT", "SCIP", "HIGHS", "CBC"])
+def test_set_partitioning_returns_a_verified_plan_no_worse(backend: str) -> None:
+    from mobiroute.vrp.alns import Alns
+    from mobiroute.vrp.setpart import SpBackend, solve_set_partitioning
+
+    inst = cargo_day(5, n_orders=30)
+    cfg = AlnsConfig(iterations=300, seed=2, setpart=True, sp_every=10**9, sp_final=False)
+    alns = Alns(inst, cfg)
+    res = alns.solve()
+    assert alns.pool is not None and len(alns.pool) > 0
+    chosen: SpBackend = backend  # type: ignore[assignment]
+    sp = solve_set_partitioning(alns.pool, res.solution, backend=chosen, time_limit=5.0)
+    assert sp.solution is not None, sp.status
+    assert verify(inst, sp.solution).feasible
+    assert search_objective(inst, sp.solution) <= search_objective(inst, res.solution) + 1e-6
