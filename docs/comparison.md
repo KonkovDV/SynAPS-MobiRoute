@@ -159,7 +159,7 @@ pickup and delivery, a mixed own-and-hired fleet, capacity vectors,
 multi-trip days and rush hours. Other tools have their own profile: PyVRP
 for classic CVRP/VRPTW, VROOM for speed and routing-engine integration,
 OR-Tools for a broad ecosystem, Timefold for Java enterprise planning,
-Yandex Routing as a finished service. The head-to-head with PyVRP, VROOM and
-jsprit at equal time is in [benchmarks/solvers.md](benchmarks/solvers.md).
+Yandex Routing as a finished service. The head-to-head harness for PyVRP, VROOM and
+jsprit at equal time is `benchmark/solvers_study.py`.
 Next: time-of-day truck bans, multi-day trips with daily and weekly rest,
 split breaks and traffic in the Rust kernel.
