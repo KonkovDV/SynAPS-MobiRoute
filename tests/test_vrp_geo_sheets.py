@@ -448,6 +448,28 @@ def test_compact_schedule_under_traffic_is_admissible_and_shortest(
 # -- route sheets ----------------------------------------------------------------
 
 
+@settings(max_examples=200, deadline=None)
+@given(seed=st.integers(0, 10_000), drive=st.floats(40.0, 200.0), size=st.integers(2, 7))
+def test_every_route_sheet_keeps_the_driving_time_rule(seed: int, drive: float, size: int) -> None:
+    """A labour inspector's property: no sheet shows a stint over the limit."""
+    inst = _with_rests(random_instance(seed, n_requests=8, ride_share=0.3), drive, 30.0)
+    rng = random.Random(seed)
+    for _ in range(5):
+        nodes = _random_sequence(inst, rng, size)
+        t = rng.randrange(len(inst.vehicle_types))
+        served = {inst.request_of(n) for n in nodes}
+        solution = Solution([Route(t, nodes)], set(range(inst.n_requests)) - served)
+        verdict = verify(inst, solution)
+        if not verdict.feasible:
+            continue
+        (sheet,) = route_sheets(inst, solution, verdict)
+        assert sheet.compliant(), (sheet.longest_stint, sheet.stint_limit)
+        assert sheet.longest_stint <= drive + 1e-6
+        assert sheet.driving <= 2 * drive + 1e-6
+        rests = [row for row in sheet.rows if row.kind == "rest"]
+        assert len(rests) == (1 if sheet.driving > drive + 1e-6 else 0)
+
+
 def test_sheet_leaves_late_rests_and_counts_load() -> None:
     doc = _doc()
     doc["profiles"]["road"]["speed_kmh"] = 15
@@ -460,11 +482,25 @@ def test_sheet_leaves_late_rests_and_counts_load() -> None:
     ]  # fmt: skip
     rest = sheet.rows[3]
     assert rest.end - rest.start == pytest.approx(30.0)
-    assert rest.start == pytest.approx(sheet.rows[2].end)
+    # Lemma 1 admits the rest before the drive or on arrival; this route needs
+    # the second: resting at the supplier would leave 109 min of driving after.
+    assert rest.place == sheet.rows[4].place == "customer"
+    assert rest.arrive == rest.start > sheet.rows[2].end
+    assert sheet.rows[4].arrive == pytest.approx(rest.end)
     # Both drops ride from the depot; the collection rides back to it.
     assert sheet.rows[0].load == (1000.0, 2.5)
     assert [row.load[0] for row in sheet.rows[1:]] == [600, 900, 900, 600, 700, 100, 0]
     assert sheet.driving > 90.0 and sheet.trips == 1
+    # The driving-time rule as an inspector reads it: each stint within 90 min,
+    # the day within 180, the shift within the cap (none set here).
+    assert 0 < sheet.longest_stint <= 90.0 < sheet.driving <= 180.0
+    assert (sheet.stint_limit, sheet.driving_limit, sheet.shift_limit) == (90.0, 180.0, None)
+    assert sheet.compliant()
+    text = sheets_markdown([sheet], built.instance.dimensions)
+    assert "Режим труда и отдыха соблюдён: непрерывно за рулём" in text
+    late = replace(sheet, shift_limit=60.0)
+    assert not late.compliant()
+    assert "Driving-time rules VIOLATED" in sheets_markdown([late], ("kg", "m3"), lang="en")
     # No idle start: the van leaves later than the shift opens and does not wait.
     assert sheet.depart > 420.0 and sheet.waiting == pytest.approx(0.0, abs=1e-6)
     for row in sheet.rows:

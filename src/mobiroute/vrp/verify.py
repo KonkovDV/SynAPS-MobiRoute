@@ -30,7 +30,8 @@ class VerifiedRoute:
     min_duration: float
     #: Trips of the day (reload stops plus one).
     trips: int = 1
-    #: Driving minutes, and the stop after which the driver rests (``None``: no rest).
+    #: Driving minutes, and the stop whose following gap holds the driver's
+    #: rest (``None``: no rest); the rest comes before or after that gap's drive.
     driving: float = 0.0
     rest_after: int | None = None
 

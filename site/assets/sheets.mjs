@@ -145,7 +145,7 @@ function sheets({ $, tr, lang, svgEl, reduce, rerender }, data) {
       sub.textContent = `${v.hired ? tr("наёмная", "hired") : tr("своя", "own")} · ${tripsText(v.trips)}`;
       let prev = v.rows[0];
       for (const r of v.rows.slice(1)) {
-        if (r.k !== "rest" && r.a > prev.e + EPS) {
+        if (r.a > prev.e + EPS) {
           svgEl("line", { x1: gx(prev.e), y1: y, x2: gx(r.a), y2: y, stroke: "var(--muted)", "stroke-width": 2.5, "stroke-linecap": "round" }, bars);
         }
         if (r.s > r.a + 0.5) {

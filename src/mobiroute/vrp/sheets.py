@@ -24,6 +24,7 @@ import math
 from collections.abc import Sequence
 from dataclasses import dataclass
 from html import escape
+from itertools import pairwise
 
 from mobiroute.vrp.geo import Place, clock
 from mobiroute.vrp.insertion import Compiled, route_loads
@@ -76,6 +77,26 @@ class RouteSheet:
     waiting: float
     cost: float
     rows: tuple[SheetRow, ...]
+    #: Labour-rule check: the longest drive between breaks and the limits it
+    #: is held to (``None`` where the vehicle type sets no such limit).
+    longest_stint: float = 0.0
+    stint_limit: float | None = None
+    driving_limit: float | None = None
+    shift_limit: float | None = None
+
+    @property
+    def shift(self) -> float:
+        """On-duty time from departure to return, waiting included."""
+        return self.back - self.depart
+
+    def compliant(self) -> bool:
+        """Every labour limit of the vehicle type holds on this sheet."""
+        checks = (
+            (self.longest_stint, self.stint_limit),
+            (self.driving, self.driving_limit),
+            (self.shift, self.shift_limit),
+        )
+        return all(limit is None or value <= limit + 1e-6 for value, limit in checks)
 
 
 def route_sheets(
@@ -114,7 +135,11 @@ def route_sheets(
             raise ValueError("SHEETS_ROUTES_MISMATCH")
         seq = [vt.start_depot, *route.nodes, vt.end_depot]
         starts = timing.earliest
-        arrivals, driving = arrival_times(inst, route.vehicle_type, seq, starts, timing.rest_gap)
+        gap = timing.rest_gap
+        rest_first = gap is None or _rest_before_drive(inst, route.vehicle_type, seq, gap)
+        arrivals, driving = arrival_times(
+            inst, route.vehicle_type, seq, starts, gap, rest_first=rest_first
+        )
         loads = route_loads(c, route.nodes)
         rest = vt.breaks.duration if vt.breaks is not None else 0.0
         rows: list[SheetRow] = []
@@ -123,6 +148,16 @@ def route_sheets(
         for k, node in enumerate(seq):
             info = inst.nodes[node]
             label, lat, lon = where(node)
+            arrive = arrivals[k]
+            if gap is not None and not rest_first and k == gap + 1:
+                # Lemma 1's other case: drive first, rest on arrival, then work.
+                here = rows[-1].load
+                rows.append(
+                    SheetRow(
+                        trip, "rest", "", label, lat, lon, None, arrive, arrive, arrive + rest, here
+                    )
+                )
+                arrive += rest
             window: tuple[float, float] | None = (info.earliest, info.latest)
             order = ""
             if k == 0:
@@ -139,11 +174,9 @@ def route_sheets(
             load = zeros if k == last else _tidy(loads[k])
             end = starts[k] + (info.service if k < last else 0.0)
             rows.append(
-                SheetRow(
-                    trip, kind, order, label, lat, lon, window, arrivals[k], starts[k], end, load
-                )
+                SheetRow(trip, kind, order, label, lat, lon, window, arrive, starts[k], end, load)
             )
-            if k == timing.rest_gap:
+            if k == gap and rest_first:
                 rows.append(
                     SheetRow(trip, "rest", "", label, lat, lon, None, end, end, end + rest, load)
                 )
@@ -155,6 +188,16 @@ def route_sheets(
             + vt.cost_per_time * (free_flow + service)
         )
         waiting = math.fsum(max(0.0, row.start - row.arrive) for row in rows)
+        # Continuous driving between breaks: legs add up until a rest row.
+        stint = longest = 0.0
+        prev = rows[0]
+        for row in rows[1:]:
+            stint += max(0.0, row.arrive - prev.end)
+            longest = max(longest, stint)
+            if row.kind == "rest":
+                stint = 0.0
+            prev = row
+        rule = vt.breaks
         sheets.append(
             RouteSheet(
                 vehicle=f"{vt.id} #{numbers[vt.id]}",
@@ -168,6 +211,10 @@ def route_sheets(
                 waiting=waiting,
                 cost=money,
                 rows=tuple(rows),
+                longest_stint=longest,
+                stint_limit=None if rule is None else rule.max_driving,
+                driving_limit=None if rule is None else 2 * rule.max_driving,
+                shift_limit=vt.max_duration,
             )
         )
     if len(sheets) != len(verdict.routes):
@@ -181,12 +228,15 @@ def arrival_times(
     seq: Sequence[int],
     starts: Sequence[float],
     rest_gap: int | None,
+    *,
+    rest_first: bool = True,
 ) -> tuple[list[float], float]:
     """Arrival at every stop of ``seq`` given its service starts, and driving minutes.
 
-    The start depot's arrival is its departure; the rest, when the route
-    has one, is taken before driving on from stop ``rest_gap``. Under
-    traffic a leg takes what the speed profile gives at its departure.
+    The start depot's arrival is its departure. The rest, when the route has
+    one, sits in gap ``rest_gap``: before the drive (``rest_first``) or on
+    arrival at the next stop, before its work. Under traffic a leg takes
+    what the speed profile gives at its departure.
     """
     from mobiroute.vrp.traffic import arrive
 
@@ -197,12 +247,29 @@ def arrival_times(
     legs: list[float] = []
     for k in range(1, len(seq)):
         a, b = seq[k - 1], seq[k]
-        leave = starts[k - 1] + inst.nodes[a].service + (rest if k - 1 == rest_gap else 0.0)
+        pause = rest if k - 1 == rest_gap and rest_first else 0.0
+        leave = starts[k - 1] + inst.nodes[a].service + pause
         free = profile.time[a][b]
         reach = leave + free if profile.speed is None else arrive(profile.speed, leave, free)
         legs.append(reach - leave)
         out.append(reach)
     return out, math.fsum(legs)
+
+
+def _rest_before_drive(inst: Instance, vehicle_type: int, seq: Sequence[int], gap: int) -> bool:
+    """Whether the rest of gap ``gap`` may come before its drive (Lemma 1).
+
+    Both stints around the rest must stay within the driving limit; the
+    verifier accepted the gap, so if resting before the drive breaks that,
+    resting after it does not.
+    """
+    vt = inst.vehicle_types[vehicle_type]
+    assert vt.breaks is not None
+    time = inst.profiles[vt.profile].time
+    legs = [time[a][b] for a, b in pairwise(seq)]
+    before = math.fsum(legs[:gap])
+    limit = vt.breaks.max_driving + 1e-6
+    return before <= limit and math.fsum(legs) - before <= limit
 
 
 def _cell(text: str) -> str:
@@ -302,6 +369,7 @@ def sheets_markdown(
                 f"ожидание {sheet.waiting:.0f} мин; стоимость {cost}{unit}"
             )
             header = "| Рейс | Что | Заказ | Где | Окно | Прибытие | Начало | Конец | "
+            labour = _labour(sheet, ru=True)
         else:
             summary = (
                 f"Departure {clock(sheet.depart)}, return {clock(sheet.back)}; "
@@ -309,11 +377,13 @@ def sheets_markdown(
                 f"{sheet.waiting:.0f} min waiting; cost {cost}{unit}"
             )
             header = "| Trip | What | Order | Where | Window | Arrive | Start | End | "
+            labour = _labour(sheet, ru=False)
         lines += [
             f"## {_md(sheet.vehicle)} · {own} · {trips}",
             "",
             summary,
             "",
+            *([labour, ""] if labour else []),
             header + " | ".join(dimensions) + " |",
             "| ---: | --- | --- | --- | --- | ---: | ---: | ---: | "
             + " | ".join("---:" for _ in dimensions)
@@ -418,7 +488,7 @@ def sheets_svg(
         )
         prev = sheet.rows[0]
         for row in sheet.rows[1:]:
-            if row.kind != "rest" and row.arrive > prev.end + 1e-6:
+            if row.arrive > prev.end + 1e-6:
                 out.append(
                     f'<line class="drive" x1="{x(prev.end):.1f}" y1="{y:.1f}" '
                     f'x2="{x(row.arrive):.1f}" y2="{y:.1f}"/>'
@@ -442,6 +512,32 @@ def sheets_svg(
             prev = row
     out.append("</svg>")
     return "\n".join(out) + "\n"
+
+
+def _hm(minutes: float) -> str:
+    total = round(minutes)
+    return f"{total // 60}:{total % 60:02d}"
+
+
+def _labour(sheet: RouteSheet, *, ru: bool) -> str:
+    """One line on the driving-time rules: value against limit for each."""
+    parts = []
+    if sheet.stint_limit is not None:
+        name = "непрерывно за рулём" if ru else "longest drive between breaks"
+        parts.append(f"{name} {_hm(sheet.longest_stint)} / {_hm(sheet.stint_limit)}")
+    if sheet.driving_limit is not None:
+        name = "за рулём за смену" if ru else "driving in the shift"
+        parts.append(f"{name} {_hm(sheet.driving)} / {_hm(sheet.driving_limit)}")
+    if sheet.shift_limit is not None:
+        name = "смена" if ru else "shift"
+        parts.append(f"{name} {_hm(sheet.shift)} / {_hm(sheet.shift_limit)}")
+    if not parts:
+        return ""
+    if ru:
+        head = "Режим труда и отдыха " + ("соблюдён" if sheet.compliant() else "НАРУШЕН")
+    else:
+        head = "Driving-time rules " + ("met" if sheet.compliant() else "VIOLATED")
+    return f"{head}: " + "; ".join(parts) + "."
 
 
 def _trips_ru(n: int) -> str:
