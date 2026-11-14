@@ -8,8 +8,8 @@ durations are minutes, distances kilometres::
       "name": "city-day",
       "currency": "RUB",
       "dimensions": ["kg", "m3", "pallets"],
-      "depots": [{"id": "DC", "lat": 55.74, "lon": 52.40,
-                  "open": "06:00", "close": "22:00", "name": "warehouse"}],
+      "depots": [{"id": "DC", "lat": 55.74, "lon": 52.40, "open": "06:00",
+                  "close": "22:00", "load_min": 20, "name": "warehouse"}],
       "orders": [{"id": "A17",
                   "pickup":   {"lat": ..., "lon": ..., "from": "08:00", "to": "10:00",
                                "service_min": 20, "name": "supplier"},
@@ -254,7 +254,9 @@ def _build(data: Mapping[str, Any], source: MatrixSource) -> GeoInstance:
         places.append(Place(lat, lon, name or did, None, "depot"))
         open_at = minutes(dep["open"]) if dep.get("open") else 0.0
         close_at = minutes(dep["close"]) if dep.get("close") else math.inf
-        raw_nodes.append((open_at, close_at, 0.0, name or did))
+        # Loading before the first departure counts in the shift and the windows.
+        load_min = float(dep.get("load_min", 0.0))
+        raw_nodes.append((open_at, close_at, load_min, name or did))
     requests: list[Request] = []
     seen: set[str] = set()
     for order in data["orders"]:

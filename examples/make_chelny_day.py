@@ -68,7 +68,7 @@ def day(seed: int, n_orders: int) -> dict[str, Any]:
         "dimensions": ["kg", "m3", "pallets"],
         "depots": [
             {"id": "WH", "lat": 55.7585, "lon": 52.4512, "open": "06:30", "close": "21:00",
-             "name": "Склад (условн.)"}
+             "load_min": 20, "name": "Склад (условн.)"}
         ],
         "orders": orders,
         "vehicle_types": [

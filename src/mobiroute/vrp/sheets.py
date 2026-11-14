@@ -37,10 +37,10 @@ from mobiroute.vrp.verify import Verdict
 CURRENCY_SIGNS = {"RUB": "₽", "EUR": "€", "USD": "$", "CNY": "¥"}
 
 KINDS = {
-    "depart": ("выезд", "departure"),
+    "depart": ("загрузка и выезд", "loading, departure"),
     "pickup": ("погрузка", "pickup"),
     "delivery": ("выгрузка", "delivery"),
-    "reload": ("перезагрузка", "reload"),
+    "reload": ("загрузка на складе", "reload"),
     "rest": ("перерыв", "rest"),
     "return": ("возврат", "return"),
 }
@@ -77,6 +77,8 @@ class RouteSheet:
     waiting: float
     cost: float
     rows: tuple[SheetRow, ...]
+    #: Per trip, the depot goods in loading order: the last drop goes in first.
+    loading: tuple[tuple[str, ...], ...] = ()
     #: Labour-rule check: the longest drive between breaks and the limits it
     #: is held to (``None`` where the vehicle type sets no such limit).
     longest_stint: float = 0.0
@@ -198,6 +200,13 @@ def route_sheets(
                 stint = 0.0
             prev = row
         rule = vt.breaks
+        # Depot goods go into the body in reverse order of their drops (LIFO).
+        picked = {row.order for row in rows if row.kind == "pickup"}
+        by_trip: dict[int, list[str]] = {}
+        for row in rows:
+            if row.kind == "delivery" and row.order not in picked:
+                by_trip.setdefault(row.trip, []).append(row.order)
+        loading = tuple(tuple(reversed(by_trip.get(t, []))) for t in range(1, trip + 1))
         sheets.append(
             RouteSheet(
                 vehicle=f"{vt.id} #{numbers[vt.id]}",
@@ -211,6 +220,7 @@ def route_sheets(
                 waiting=waiting,
                 cost=money,
                 rows=tuple(rows),
+                loading=loading,
                 longest_stint=longest,
                 stint_limit=None if rule is None else rule.max_driving,
                 driving_limit=None if rule is None else 2 * rule.max_driving,
@@ -362,17 +372,22 @@ def sheets_markdown(
         own = ("наёмная" if ru else "hired") if sheet.hired else ("своя" if ru else "own")
         trips = _trips_ru(sheet.trips) if ru else f"{sheet.trips} trip{'s' * (sheet.trips > 1)}"
         cost = f"{sheet.cost:,.0f}".replace(",", " ") if ru else f"{sheet.cost:,.0f}"
+        leave = sheet.rows[0].end
         if ru:
+            start = f"Начало {clock(sheet.depart)}, выезд" if leave > sheet.depart else "Выезд"
             summary = (
-                f"Выезд {clock(sheet.depart)}, возврат {clock(sheet.back)}; "
-                f"{sheet.distance:.1f} км, за рулём {sheet.driving:.0f} мин, "
+                f"{start} {clock(leave)}, возврат {clock(sheet.back)}; "
+                f"{_dec(sheet.distance, ru)} км, за рулём {sheet.driving:.0f} мин, "
                 f"ожидание {sheet.waiting:.0f} мин; стоимость {cost}{unit}"
             )
             header = "| Рейс | Что | Заказ | Где | Окно | Прибытие | Начало | Конец | "
             labour = _labour(sheet, ru=True)
         else:
+            start = (
+                f"Start {clock(sheet.depart)}, departure" if leave > sheet.depart else "Departure"
+            )
             summary = (
-                f"Departure {clock(sheet.depart)}, return {clock(sheet.back)}; "
+                f"{start} {clock(leave)}, return {clock(sheet.back)}; "
                 f"{sheet.distance:.1f} km, {sheet.driving:.0f} min driving, "
                 f"{sheet.waiting:.0f} min waiting; cost {cost}{unit}"
             )
@@ -384,6 +399,7 @@ def sheets_markdown(
             summary,
             "",
             *([labour, ""] if labour else []),
+            *([_loading(sheet, ru=ru), ""] if any(sheet.loading) else []),
             header + " | ".join(dimensions) + " |",
             "| ---: | --- | --- | --- | --- | ---: | ---: | ---: | "
             + " | ".join("---:" for _ in dimensions)
@@ -401,7 +417,7 @@ def sheets_markdown(
                 clock(row.arrive),
                 clock(row.start),
                 clock(row.end),
-                *[f"{q:g}" for q in row.load],
+                *[_dec(q, ru, "g") for q in row.load],
             ]
             lines.append("| " + " | ".join(cells) + " |")
         lines.append("")
@@ -445,13 +461,13 @@ def sheets_svg(
     distance = sum(s.distance for s in sheets)
     money = f"{cost:,.0f}".replace(",", " " if ru else ",")
     head = (
-        f"{len(sheets)} машин · {distance:.1f} км · стоимость {money}{unit}"
+        f"{len(sheets)} машин · {_dec(distance, True)} км · стоимость {money}{unit}"
         if ru
         else f"{len(sheets)} vehicles · {distance:.1f} km · cost {money}{unit}"
     )
     legend = (
         "линия — в пути · серый фон — ожидание · цвет — выгрузка (светлее — погрузка) · "
-        "тёмное — перезагрузка · жёлтое — перерыв"
+        "тёмное — загрузка на складе · жёлтое — перерыв"
         if ru
         else "line: driving · grey: waiting · colour: delivery (lighter: pickup) · "
         "dark: reload · amber: rest"
@@ -512,6 +528,22 @@ def sheets_svg(
             prev = row
     out.append("</svg>")
     return "\n".join(out) + "\n"
+
+
+def _dec(value: float, ru: bool, spec: str = ".1f") -> str:
+    """A number for people: decimal comma in Russian (CSV keeps the point)."""
+    text = format(value, spec)
+    return text.replace(".", ",") if ru else text
+
+
+def _loading(sheet: RouteSheet, *, ru: bool) -> str:
+    """Loading order at the depot per trip, last drop first (LIFO)."""
+    trips = [(t, orders) for t, orders in enumerate(sheet.loading, start=1) if orders]
+    if ru:
+        body = "; ".join(f"рейс {t}: " + ", ".join(o) for t, o in trips)
+        return f"Порядок загрузки на складе, обратный порядку выгрузки: {body}."
+    body = "; ".join(f"trip {t}: " + ", ".join(o) for t, o in trips)
+    return f"Loading order at the depot, reverse of the drops: {body}."
 
 
 def _hm(minutes: float) -> str:
