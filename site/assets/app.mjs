@@ -3,6 +3,7 @@
 import { nodeName, phrase, verifyRoute } from "./notary.mjs";
 import { initVrp } from "./vrp.mjs";
 import { initSheets } from "./sheets.mjs";
+import { initPrices } from "./prices.mjs";
 
 const root = document.documentElement;
 const $ = (id) => document.getElementById(id);
@@ -538,3 +539,4 @@ load("data/a2-16.json").then((inst) => { hero(inst); laboratory(inst); }).catch(
 load("data/solver-lab.json").then(race).catch((err) => console.error(err));
 initVrp({ $, tr, lang, svgEl, reduce, rerender, onReveal, load });
 initSheets({ $, tr, lang, svgEl, reduce, rerender, onReveal, load });
+initPrices({ $, tr, lang, svgEl, reduce, rerender, onReveal, load });
