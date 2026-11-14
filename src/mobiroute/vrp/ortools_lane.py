@@ -97,14 +97,14 @@ def solve_ortools(
 
     service = [nd.service for nd in inst.nodes]
 
-    def loc(index: int) -> int:
-        return int(manager.IndexToNode(index))
-
     def node(index: int) -> int:
-        return local[loc(index)]
+        return local[int(manager.IndexToNode(index))]
 
-    # One cost and one time evaluator per vehicle type (callbacks must stay alive).
-    keep: list[Any] = []
+    # One cost and one time matrix per vehicle type. They are registered as
+    # matrices, not Python callbacks: the search then reads them in C++ and its
+    # wall-clock budget goes to moves instead of interpreter calls, so the
+    # baseline is not handicapped by the binding (and a profiler or coverage
+    # tracer on the Python side cannot change the plan it reaches).
     time_cb: dict[int, int] = {}
     cost_cb: dict[int, int] = {}
     for t, vt in enumerate(inst.vehicle_types):
@@ -126,16 +126,8 @@ def solve_ortools(
             ]
             for a in local
         ]
-
-        def time_fn(i: int, j: int, tm: list[list[int]] = tm) -> int:
-            return tm[loc(i)][loc(j)]
-
-        def cost_fn(i: int, j: int, cm: list[list[int]] = cm) -> int:
-            return cm[loc(i)][loc(j)]
-
-        keep += [time_fn, cost_fn]
-        time_cb[t] = routing.RegisterTransitCallback(time_fn)
-        cost_cb[t] = routing.RegisterTransitCallback(cost_fn)
+        time_cb[t] = routing.RegisterTransitMatrix(tm)
+        cost_cb[t] = routing.RegisterTransitMatrix(cm)
     for v, t in enumerate(unit_type):
         vt = inst.vehicle_types[t]
         routing.SetArcCostEvaluatorOfVehicle(cost_cb[t], v)
@@ -157,12 +149,7 @@ def solve_ortools(
                 deltas[pos[req.pickup]] = q
             if req.delivery is not None:
                 deltas[pos[req.delivery]] = -q
-
-        def demand_fn(i: int, deltas: list[int] = deltas) -> int:
-            return deltas[loc(i)]
-
-        keep.append(demand_fn)
-        cb = routing.RegisterUnaryTransitCallback(demand_fn)
+        cb = routing.RegisterUnaryTransitVector(deltas)
         caps = [math.floor(inst.vehicle_types[t].capacity[d] * scale + 1e-9) for t in unit_type]
         routing.AddDimensionWithVehicleCapacity(cb, 0, caps, False, f"load{d}")
         dim: Any = routing.GetDimensionOrDie(f"load{d}")

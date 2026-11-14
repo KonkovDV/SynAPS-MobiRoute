@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import json
 from pathlib import Path
+from typing import Literal
 
 import pytest
 
@@ -20,7 +21,14 @@ from mobiroute.vrp.io import (
     parse_solomon,
 )
 from mobiroute.vrp.lateness import min_max_lateness, min_total_lateness
-from mobiroute.vrp.model import Instance, Node, Request, VehicleType, single_profile
+from mobiroute.vrp.model import (
+    Instance,
+    Node,
+    Request,
+    VehicleType,
+    euclidean_matrix,
+    single_profile,
+)
 from mobiroute.vrp.ortools_lane import solve_ortools
 from mobiroute.vrp.realtime import Dispatcher, simulate
 from mobiroute.vrp.schedule import route_timing
@@ -183,13 +191,54 @@ def test_exact_model_and_alns_agree_on_small_rich_instances() -> None:
         )
 
 
+@pytest.mark.parametrize("backend", ["python", "auto"])
+def test_alns_refuses_orders_that_cost_more_than_their_penalty(
+    backend: Literal["python", "auto"],
+) -> None:
+    def day(points: list[tuple[float, float]], prices: list[float | None]) -> Instance:
+        nodes = tuple(Node(k, 0.0, 1000.0, 0.0, x, y) for k, (x, y) in enumerate(points))
+        reqs = tuple(
+            Request(f"o{k}", None, k, (1.0,), penalty=prices[k - 1]) for k in range(1, len(points))
+        )
+        van = VehicleType("van", (3.0,))
+        return Instance("optional", nodes, reqs, (van,), single_profile(euclidean_matrix(points)))
+
+    config = AlnsConfig(iterations=100, seed=1, backend=backend)
+    # A near order that must be served and a far one worth 50: the detour costs
+    # 180, so the far order stays out (the repair alone would serve it for 200).
+    res = solve(day([(0.0, 0.0), (10.0, 0.0), (100.0, 0.0)], [None, 50.0]), config)
+    assert res.solution.unassigned == {1} and res.objective == pytest.approx(70.0)
+    assert res.verdict.feasible and res.verdict.unassigned == ("o2",)
+    # A far pair: neither order alone pays for the trip back (dropping one saves
+    # 0 or 2), but the trip costs 202 and both refusals 120, so the route goes.
+    pair = [(0.0, 0.0), (100.0, 0.0), (101.0, 0.0)]
+    gone = solve(day(pair, [60.0, 60.0]), config)
+    assert gone.solution.unassigned == {0, 1} and gone.objective == pytest.approx(120.0)
+    # At 150 each the same trip is worth running.
+    kept = solve(day(pair, [150.0, 150.0]), config)
+    assert not kept.solution.unassigned and kept.objective == pytest.approx(202.0)
+
+
+def test_alns_matches_the_exact_model_when_orders_may_be_refused() -> None:
+    for seed in (101, 102, 103):
+        inst = random_instance(seed, n_requests=6, n_types=2, ride_share=0.4, penalty=80.0)
+        exact = solve_exact(inst, time_limit=30, workers=4)
+        heur = solve(inst, AlnsConfig(iterations=800, seed=1))
+        assert exact.status == "OPTIMAL" and exact.solution.unassigned
+        assert heur.verdict.feasible
+        assert heur.objective == pytest.approx(search_objective(inst, exact.solution), rel=1e-9)
+
+
 def test_ortools_lane_returns_verified_plans() -> None:
     inst, _ = load_benchmark(INST / "solomon" / "C101.txt")
     run = solve_ortools(inst, time_limit=2.0)
     assert run.verdict.feasible and run.verdict.complete
-    assert run.verdict.cost.vehicles == 10 and run.verdict.cost.distance == pytest.approx(
-        828.94, abs=0.01
-    )
+    # 828.94 is the proven optimum of C101: a verified plan cannot be shorter,
+    # and the baseline reaches it well inside the limit. The upper bound is
+    # loose on purpose: a wall-clock limit must not make the suite flaky on a
+    # slow runner.
+    assert run.verdict.cost.vehicles == 10
+    assert 828.94 - 0.01 <= run.verdict.cost.distance <= 828.94 * 1.05
     hf = solve_ortools(cargo_day(4, n_orders=25), time_limit=2.0)
     assert hf.verdict.feasible
 

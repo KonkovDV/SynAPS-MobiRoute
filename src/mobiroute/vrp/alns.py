@@ -32,7 +32,7 @@ from dataclasses import dataclass, field
 from itertools import pairwise
 from typing import Any, Literal
 
-from mobiroute.vrp.fleet import TypeAssigner
+from mobiroute.vrp.fleet import TypeAssigner, route_money
 from mobiroute.vrp.insertion import (
     Compiled,
     RouteState,
@@ -41,13 +41,14 @@ from mobiroute.vrp.insertion import (
     regret_repair,
     remove_requests,
     route_exact,
+    tidy_reloads,
 )
 from mobiroute.vrp.local_search import LocalSearch
 from mobiroute.vrp.local_search import applies as local_search_applies
 from mobiroute.vrp.merge import RouteMerger
 from mobiroute.vrp.model import Instance
 from mobiroute.vrp.setpart import RoutePool, solve_set_partitioning
-from mobiroute.vrp.solution import MUST_SERVE_PENALTY, RouteCosts, Solution, evaluate
+from mobiroute.vrp.solution import MUST_SERVE_PENALTY, Route, RouteCosts, Solution, evaluate
 from mobiroute.vrp.verify import Verdict, verify
 
 Backend = Literal["auto", "python", "native"]
@@ -93,6 +94,9 @@ class AlnsConfig:
     sp_time: float = 2.0
     #: Solve the set-partitioning model once more after the last phase.
     sp_final: bool = True
+    #: Keep the route pool without solving set partitioning, for
+    #: :mod:`mobiroute.vrp.prices`; collecting it does not change the search.
+    keep_pool: bool = False
     backend: Backend = "auto"
 
 
@@ -364,7 +368,9 @@ class Alns:
         self.local = (
             LocalSearch(self.c) if self.cfg.local_search and local_search_applies(self.c) else None
         )
-        self.pool = RoutePool(self.c) if self.cfg.setpart else None
+        self.pool = RoutePool(self.c) if self.cfg.setpart or self.cfg.keep_pool else None
+        #: Orders that may be refused at a price (a finite ``penalty``).
+        self._optional = {r for r, price in enumerate(self.c.penalty) if price < MUST_SERVE_PENALTY}
         self._sp_every = self.cfg.sp_every or max(250, self.cfg.iterations // 8)
         self.sp_calls = self.sp_improved = 0
         self.sp_seconds = 0.0
@@ -443,7 +449,56 @@ class Alns:
         )
         if self.merger is not None and self.iteration % max(1, self.cfg.merge_every) == 0:
             cand = self.merger.improve(cand)
-        return cand, d_op, r_op, n_op
+        return self._drop_unprofitable(cand), d_op, r_op, n_op
+
+    def _drop_unprofitable(self, sol: Solution) -> Solution:
+        """Leave out optional orders that cost more to serve than to refuse.
+
+        The repair inserts every order that fits, whatever its price. An order
+        with a finite ``penalty`` is worth serving only while taking it out of
+        its route saves less than the penalty. Orders are dropped one at a
+        time, best gain first, on the plan as it stands; when no single order
+        gains, a route whose orders are all optional is dropped whole if it
+        costs more than their penalties together (a far cluster: no order
+        alone pays for the trip back). Orders left out stay in ``unassigned``,
+        so the next repair offers them again in a new plan. Instances whose
+        orders must all be served never get here.
+        """
+        if not self._optional:
+            return sol
+        c = self.c
+        cur = sol
+        while True:
+            best: tuple[float, int, list[int], set[int]] | None = None
+            whole: tuple[float, int, list[int], set[int]] | None = None
+            for ri, route in enumerate(cur.routes):
+                on = c.requests_of(route.nodes)
+                free = on & self._optional
+                if not free:
+                    continue
+                t = route.vehicle_type
+                money = route_money(c, t, route.nodes)
+                if free == on:
+                    gain = money - sum(c.penalty[r] for r in on)
+                    if gain > 1e-9 and (whole is None or gain > whole[0]):
+                        whole = (gain, ri, [], set(on))
+                for r in sorted(free):
+                    rest = [n for n in route.nodes if c.node_req[n] != r]
+                    if c.has_reload:
+                        rest = tidy_reloads(c, rest)
+                    if not rest or not self._route_ok(t, rest):
+                        continue  # the whole-route case, or no triangle inequality
+                    gain = money - route_money(c, t, rest) - c.penalty[r]
+                    if gain > 1e-9 and (best is None or gain > best[0]):
+                        best = (gain, ri, rest, {r})
+            pick = best if best is not None else whole
+            if pick is None:
+                return cur
+            _gain, ri, rest, dropped = pick
+            routes = [r.copy() for k, r in enumerate(cur.routes) if k != ri]
+            if rest:
+                routes.insert(ri, Route(cur.routes[ri].vehicle_type, rest))
+            cur = Solution(routes, set(cur.unassigned) | dropped)
 
     def _polish(self, sol: Solution) -> Solution:
         """Merge scan and local search on a plan about to become the best one."""
@@ -533,7 +588,7 @@ class Alns:
                 score = cfg.score_accepted
             if score > 0.0 and self.pool is not None:
                 self.pool.add(cand)
-            if self.pool is not None and self.iteration % self._sp_every == 0:
+            if self.cfg.setpart and self.iteration % self._sp_every == 0:
                 found = self._setpart(best)
                 if found is not None:
                     best, best_obj = found
@@ -702,7 +757,7 @@ class Alns:
         )
         if start.unassigned:
             start = self.repair(start, 2, 0.0, cfg.seed, None)
-        start = self._polish(self.assigner.improve(start))
+        start = self._drop_unprofitable(self._polish(self.assigner.improve(start)))
         self._record(start, search_objective(self.inst, start, self._costs))
         if self.pool is not None:
             self.pool.add(start)
@@ -727,7 +782,7 @@ class Alns:
         best = self._anneal(
             best, iterations=max(0, total), limit=limit, cap=None, stop_when_complete=False
         )
-        if self.pool is not None and cfg.sp_final:
+        if cfg.setpart and cfg.sp_final:
             found = self._setpart(best)
             if found is not None:
                 best = found[0]
