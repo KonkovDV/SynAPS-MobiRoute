@@ -22,7 +22,7 @@ from __future__ import annotations
 
 import math
 from collections.abc import Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from itertools import pairwise
 
 from mobiroute.vrp.model import Instance
@@ -118,6 +118,9 @@ class RouteTiming:
     #: ``start + nodes + end``), ``None`` when the route needs no rest.
     rest_gap: int | None = None
     driving: float = 0.0
+    #: Departure of a shortest schedule (``nan`` when infeasible). Without
+    #: traffic it also reaches the end depot at the earliest possible time.
+    departure: float = math.nan
 
 
 def route_arcs(
@@ -186,7 +189,11 @@ def _timing_with(
     assert from_zero is not None and from_end is not None
     earliest = tuple(-to_zero[k] for k in range(m))
     latest = tuple(from_zero[k] for k in range(m))
-    return RouteTiming(True, earliest, latest, -from_end[0], None, rest_gap, driving)
+    shortest = -from_end[0]
+    # Projected onto (t_0, t_end) the system keeps its difference form, so the
+    # earliest finish minus the shortest duration is an admissible departure.
+    departure = min(max(earliest[-1] - shortest, earliest[0]), latest[0])
+    return RouteTiming(True, earliest, latest, shortest, None, rest_gap, driving, departure)
 
 
 def _timing_traffic(inst: Instance, vehicle_type: int, nodes: Sequence[int]) -> RouteTiming:
@@ -226,11 +233,46 @@ def _timing_traffic(inst: Instance, vehicle_type: int, nodes: Sequence[int]) -> 
         for x in duration_candidates(speed, seq, e_all, s_all, profile.time)
         if lo0 <= x <= latest[0]
     ]
-    shortest = min(forward(speed, seq, x, e_all, s_all, profile.time)[-1] - x for x in options)
+    # Shortest duration; among equally short departures the earliest one.
+    shortest, departure = min(
+        (forward(speed, seq, x, e_all, s_all, profile.time)[-1] - x, x) for x in options
+    )
     if vt.max_duration is not None and shortest > vt.max_duration + TIME_EPS:
         over = Infeasibility(round(shortest - vt.max_duration, 6), ("DURATION", "TRAFFIC"))
         return RouteTiming(False, (), (), math.inf, over, None, driving)
-    return RouteTiming(True, tuple(begin), tuple(latest), shortest, None, None, driving)
+    return RouteTiming(True, tuple(begin), tuple(latest), shortest, None, None, driving, departure)
+
+
+def compact_schedule(inst: Instance, vehicle_type: int, nodes: Sequence[int]) -> RouteTiming:
+    """The schedule a dispatcher would hand out: no idle start.
+
+    The earliest schedule leaves the depot at the shift start and may wait an
+    hour at the first window. This one leaves at :attr:`RouteTiming.departure`
+    and is the earliest schedule from there: the shortest duration, and
+    without traffic also the earliest return (both follow from the
+    difference form of the constraints projected onto departure and
+    return). ``earliest`` of the result holds these service starts; the
+    other fields are those of :func:`route_timing`.
+    """
+    from mobiroute.vrp.traffic import forward
+
+    timing = route_timing(inst, vehicle_type, nodes)
+    if not timing.feasible or timing.departure <= timing.earliest[0]:
+        return timing
+    vt = inst.vehicle_types[vehicle_type]
+    profile = inst.profiles[vt.profile]
+    if profile.speed is not None:
+        seq = [vt.start_depot, *nodes, vt.end_depot]
+        e_all = [nd.earliest for nd in inst.nodes]
+        s_all = [nd.service for nd in inst.nodes]
+        starts = forward(profile.speed, seq, timing.departure, e_all, s_all, profile.time)
+        return replace(timing, earliest=tuple(starts))
+    z, arcs = route_arcs(inst, vehicle_type, nodes, rest_gap=timing.rest_gap)
+    arcs.append(Arc(0, z, -timing.departure, "DEPARTURE"))
+    to_zero, _cycle = shortest_paths(z + 1, arcs, z, to_root=True)
+    if to_zero is None:  # rounding at the boundary; the earliest schedule stays valid
+        return timing
+    return replace(timing, earliest=tuple(-to_zero[k] for k in range(z)))
 
 
 def route_timing(inst: Instance, vehicle_type: int, nodes: Sequence[int]) -> RouteTiming:

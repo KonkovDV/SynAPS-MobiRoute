@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import sys
 import time
 from pathlib import Path
 
@@ -103,6 +104,19 @@ def main(argv: list[str] | None = None) -> int:
     src.add_argument(
         "--generate", choices=["cargo", "shuttle", "plant"], help="synthetic operating day"
     )
+    src.add_argument(
+        "--geo", type=Path, help="orders and fleet with coordinates (mobiroute.vrp.geo.v1 JSON)"
+    )
+    v.add_argument(
+        "--osrm", default=None, help="OSRM server URL for road matrices of --geo (else offline)"
+    )
+    v.add_argument("--osrm-profile", default="driving")
+    v.add_argument(
+        "--sheets",
+        action="store_true",
+        help="also write route sheets: route-sheets.csv, .md and a Gantt chart .svg",
+    )
+    v.add_argument("--lang", choices=["ru", "en"], default="ru", help="language of route sheets")
     v.add_argument("--seed", type=int, default=7)
     v.add_argument("--orders", type=int, default=None, help="size of a generated day")
     v.add_argument("--solver", choices=["alns", "ortools", "exact"], default="alns")
@@ -128,8 +142,9 @@ def main(argv: list[str] | None = None) -> int:
         return _dispatch(args)
     except (ValueError, OSError) as exc:
         # Validation codes (UNKNOWN_DEPOT_ZONE, ...), schema errors and unreadable
-        # files are input problems: report the code and exit 2, never a traceback.
-        print(log_safe(f"error: {type(exc).__name__}: {str(exc)[:500]}"))
+        # files are input problems: report the code on stderr and exit 2, never
+        # a traceback.
+        print(log_safe(f"error: {type(exc).__name__}: {str(exc)[:500]}"), file=sys.stderr)
         return 2
 
 
@@ -381,18 +396,24 @@ def _dispatch(args: argparse.Namespace) -> int:
     return 1
 
 
-def _vrp_instance(args: argparse.Namespace) -> object:
+def _vrp_instance(args: argparse.Namespace) -> tuple[object, object]:
+    """The instance and, for ``--geo``, the :class:`GeoInstance` it came from."""
     from mobiroute.vrp.generators import cargo_day, plant_day, shuttle_day
     from mobiroute.vrp.io import load_benchmark
 
+    if args.geo is not None:
+        from mobiroute.vrp import geo
+
+        built = geo.load(str(args.geo), osrm=args.osrm, osrm_profile=args.osrm_profile)
+        return built.instance, built
     if args.instance is not None:
         inst, _digest = load_benchmark(args.instance)
-        return inst
+        return inst, None
     if args.generate == "cargo":
-        return cargo_day(args.seed, n_orders=args.orders or 120)
+        return cargo_day(args.seed, n_orders=args.orders or 120), None
     if args.generate == "shuttle":
-        return shuttle_day(args.seed, n_orders=args.orders or 160)
-    return plant_day(args.seed, n_moves=args.orders or 140)
+        return shuttle_day(args.seed, n_orders=args.orders or 160), None
+    return plant_day(args.seed, n_moves=args.orders or 140), None
 
 
 def _vrp_solve(args: argparse.Namespace) -> int:
@@ -402,7 +423,7 @@ def _vrp_solve(args: argparse.Namespace) -> int:
     from mobiroute.vrp.ortools_lane import solve_ortools
     from mobiroute.vrp.verify import Verdict
 
-    inst = _vrp_instance(args)
+    inst, built = _vrp_instance(args)
     assert isinstance(inst, Instance)
     started = time.perf_counter()
     verdict: Verdict
@@ -460,6 +481,26 @@ def _vrp_solve(args: argparse.Namespace) -> int:
         (args.out_dir / "routes.svg").write_text(
             routes_svg(inst, solution, title=f"{inst.name}: {label}"), encoding="utf-8"
         )
+    if args.sheets and verdict.feasible:
+        from mobiroute.vrp.geo import GeoInstance
+        from mobiroute.vrp.sheets import route_sheets, sheets_csv, sheets_markdown, sheets_svg
+
+        geo_in = built if isinstance(built, GeoInstance) else None
+        sheets = route_sheets(inst, solution, verdict, geo_in.places if geo_in else None)
+        (args.out_dir / "route-sheets.csv").write_text(
+            sheets_csv(sheets, inst.dimensions), encoding="utf-8"
+        )
+        markdown = sheets_markdown(
+            sheets, inst.dimensions, lang=args.lang, currency=geo_in.currency if geo_in else ""
+        )
+        (args.out_dir / "route-sheets.md").write_text(markdown, encoding="utf-8")
+        gantt = sheets_svg(
+            sheets,
+            title=f"{inst.name}: {'route sheets' if args.lang == 'en' else 'путевые листы'}",
+            lang=args.lang,
+            currency=geo_in.currency if geo_in else "",
+        )
+        (args.out_dir / "route-sheets.svg").write_text(gantt, encoding="utf-8")
     print(log_safe(f"{inst.name}: {verdict.summary()} [{label}, {elapsed:.1f} s]"))
     return 0 if verdict.feasible else 2
 
