@@ -1,7 +1,7 @@
 /* SynAPS-MobiRoute site. No framework, no web fonts, no third-party requests. */
 :root {
   --bg: #ffffff; --alt: #f5f5f7; --card-on-bg: #f5f5f7; --card-on-alt: #ffffff;
-  --ink: #1d1d1f; --ink2: #56565b; --muted: #6e6e73;
+  --ink: #1d1d1f; --ink2: #56565b; --muted: #636368; /* >= 4.9:1 on tinted cards (WCAG AA) */
   --line: rgba(0, 0, 0, .1); --grid: #e3e3e8;
   --s1: #2a78d6; --s2: #eb6834; --s1-strong: #1f63b8; --s2-strong: #b8431a;
   --link: #1f63b8; --accent: #b8431a; --accent-strong: #8a3210; --good: #006300; --bad: #b3261e;
@@ -300,7 +300,11 @@ td.num { color: var(--ink); }
 .slider .ticks { display: flex; justify-content: space-between; font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; }
 .kpis { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
 .kpis div { padding: 12px 14px; border-radius: 14px; background: color-mix(in srgb, var(--ink) 5%, transparent); }
-.kpis dt { font-size: 11.5px; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
+.kpis dt { font-size: 11.5px; letter-spacing: .06em; text-transform: uppercase; color: var(--ink2); }
+/* A route's colour as a swatch, the text itself in body ink: series colours are
+   too light for small text on white (amber, pink) or too dark on black (blue). */
+.tag.swatch { color: var(--ink2); }
+.tag.swatch::before { content: ""; display: inline-block; width: .8em; height: .8em; margin-right: .45em; border-radius: 50%; background: var(--swatch, currentColor); vertical-align: -.05em; }
 .kpis dd { font-size: 22px; font-weight: 700; font-variant-numeric: tabular-nums; letter-spacing: -.01em; }
 .mix { display: grid; gap: 10px; }
 .mix-row { display: grid; grid-template-columns: 120px minmax(0, 1fr) 54px; gap: 10px; align-items: center; font-size: 14px; }
@@ -330,7 +334,7 @@ td.num { color: var(--ink); }
 .feed { display: grid; gap: 6px; margin-top: 14px; max-height: 330px; overflow: hidden; mask-image: linear-gradient(#000 70%, transparent); }
 .feed li { display: grid; grid-template-columns: 54px minmax(0, 1fr) auto; gap: 10px; align-items: baseline; padding: 9px 12px; border-radius: 12px; background: color-mix(in srgb, var(--ink) 5%, transparent); font-size: 13.5px; animation: feed-in .45s cubic-bezier(.2, .8, .2, 1); }
 .feed li.no { background: color-mix(in srgb, var(--bad) 10%, transparent); }
-.feed time { font-variant-numeric: tabular-nums; color: var(--muted); }
+.feed time { font-variant-numeric: tabular-nums; color: var(--ink2); }
 .feed .ms { font: 600 12px var(--mono); color: var(--good); white-space: nowrap; }
 .feed li.no .ms { color: var(--bad); }
 @keyframes feed-in { from { opacity: 0; transform: translateY(-8px); } to { opacity: 1; transform: none; } }

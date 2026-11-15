@@ -29,7 +29,8 @@ function setLang(next) {
   root.lang = next;
   const btn = $("lang");
   btn.textContent = next === "ru" ? "EN" : "RU";
-  btn.setAttribute("aria-label", next === "ru" ? "Switch language to English" : "Переключить язык на русский");
+  // The accessible name starts with the visible label (WCAG 2.5.3, label in name).
+  btn.setAttribute("aria-label", next === "ru" ? "EN: switch language to English" : "RU: переключить язык на русский");
   document.title = next === "ru"
     ? "SynAPS-MobiRoute — маршрутизация смешанного парка"
     : "SynAPS-MobiRoute — routing for a mixed fleet";

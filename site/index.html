@@ -45,7 +45,7 @@
     <a href="#lab"><span lang="ru">Попробовать</span><span lang="en">Try it</span></a>
   </div>
   <div class="nav-act">
-    <button class="pill-btn" id="lang" type="button" aria-label="Switch language to English">EN</button>
+    <button class="pill-btn" id="lang" type="button" aria-label="EN: switch language to English">EN</button>
     <button class="pill-btn icon" id="theme" type="button" aria-label="Тема: светлая или тёмная"><svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path fill="currentColor" d="M12 3a9 9 0 1 0 0 18V3z"/><circle cx="12" cy="12" r="8.25" fill="none" stroke="currentColor" stroke-width="1.5"/></svg></button>
     <a class="pill-btn solid" href="https://github.com/KonkovDV/SynAPS-MobiRoute">GitHub</a>
   </div>
@@ -216,9 +216,9 @@ dropoff 1 cannot start before 402; dropoff 1 → dropoff 12 takes 3 + 15.68 min.
     <h2 class="reveal"><span lang="ru">Маршрутные листы</span><span lang="en">Route sheets</span></h2>
     <p class="sub reveal"><span lang="ru">Синтетический день в Набережных Челнах: склад, три поставщика, 45 заказов, свои и наёмные фургоны и грузовики, норма труда и отдыха, второй рейс для фургонов. Нажмите на маршрут или строку диаграммы — появятся маршрутный лист машины и выбор времени выезда.</span><span lang="en">A synthetic day in Naberezhnye Chelny: a depot, three suppliers, 45 orders, own and hired vans and trucks, the driving-time rule, a second trip for vans. Click a route or a chart row to see that vehicle's route sheet and the choice of its departure.</span></p>
     <div class="sheets reveal">
-      <div class="card flush sheets-map"><svg id="sheets-map" viewBox="0 0 600 600" role="img" aria-label="Routes of the Naberezhnye Chelny day"></svg></div>
+      <div class="card flush sheets-map"><svg id="sheets-map" viewBox="0 0 600 600" role="group" aria-label="Routes of the Naberezhnye Chelny day: choose a route"></svg></div>
       <div class="card sheets-side">
-        <div class="card-head"><h3 id="sheets-title">—</h3><span class="tag" id="sheets-tag"></span></div>
+        <div class="card-head"><h3 id="sheets-title">—</h3><span class="tag swatch" id="sheets-tag"></span></div>
         <dl class="kpis" id="sheets-kpis"></dl>
         <svg id="sheets-load" viewBox="0 0 520 200" role="img" aria-label="Load on board along the route"></svg>
         <p class="fine"><span lang="ru">Загрузка после каждой точки: груз со склада едет с начала рейса, при повторной загрузке на складе кузов наполняется снова. Ёмкость проверяется по каждому измерению и рейсу.</span><span lang="en">Load after every stop: depot goods ride from the start of their trip, and a reload fills the body again. Capacity is checked per dimension and per trip.</span></p>
@@ -226,7 +226,7 @@ dropoff 1 cannot start before 402; dropoff 1 → dropoff 12 takes 3 + 15.68 min.
     </div>
     <div class="card gantt-card reveal">
       <div class="card-head"><h3><span lang="ru">День по часам</span><span lang="en">The day by the hour</span></h3><span class="fine" id="sheets-day"></span></div>
-      <svg id="sheets-gantt" role="img" aria-label="Gantt chart of the day"></svg>
+      <svg id="sheets-gantt" role="group" aria-label="Gantt chart of the day: choose a vehicle"></svg>
       <div class="legend"><span><i></i><span lang="ru">в пути</span><span lang="en">driving</span></span><span><i class="box wait"></i><span lang="ru">ожидание окна</span><span lang="en">waiting for a window</span></span><span><i class="box svc"></i><span lang="ru">выгрузка (светлее — погрузка)</span><span lang="en">delivery (lighter: pickup)</span></span><span><i class="box reload"></i><span lang="ru">загрузка на складе</span><span lang="en">reload</span></span><span><i class="box rest"></i><span lang="ru">перерыв</span><span lang="en">rest</span></span></div>
     </div>
     <div class="card sheet-card reveal">
@@ -257,7 +257,7 @@ dropoff 1 cannot start before 402; dropoff 1 → dropoff 12 takes 3 + 15.68 min.
     <h2 class="reveal"><span lang="ru">Цены заказов и машин</span><span lang="en">Prices of orders and vehicles</span></h2>
     <p class="sub reveal"><span lang="ru">Тот же день в Челнах. Маршруты, которые перебрал поиск, складываются в задачу линейного программирования; её двойственные оценки — цены: заказа и машины каждого типа. Круг тем больше, чем дороже заказ. Наведите или нажмите.</span><span lang="en">The same day in Chelny. The routes the search went through make a linear programme; its dual values are prices: of an order and of a vehicle of each type. The larger the circle, the dearer the order. Hover or tap.</span></p>
     <div class="sheets reveal">
-      <div class="card flush sheets-map"><svg id="prices-map" viewBox="0 0 600 600" role="img" aria-label="Orders of the day sized by their price"></svg></div>
+      <div class="card flush sheets-map"><svg id="prices-map" viewBox="0 0 600 600" role="group" aria-label="Orders of the day sized by their price: choose an order"></svg></div>
       <div class="card sheets-side">
         <div class="card-head"><h3 id="prices-order">—</h3><span class="tag"><span lang="ru">заказ</span><span lang="en">order</span></span></div>
         <dl class="kpis" id="prices-kpis"></dl>

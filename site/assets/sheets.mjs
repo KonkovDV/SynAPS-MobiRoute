@@ -179,7 +179,7 @@ function sheets({ $, tr, lang, svgEl, reduce, rerender }, data) {
     $("sheet-name").textContent = v.id;
     loadChart(v);
     $("sheets-tag").textContent = `${v.hired ? tr("наёмная", "hired") : tr("своя", "own")} · ${tripsText(v.trips)}`;
-    $("sheets-tag").style.color = color(sel);
+    $("sheets-tag").style.setProperty("--swatch", color(sel));
     $("sheets-kpis").innerHTML = [
       [tr("начало → выезд → возврат", "start → out → back"), `${hhmm(first.s)} → ${hhmm(first.e)} → ${hhmm(last.s)}`],
       [tr("пробег / порожний", "distance / empty"), `${num(v.distance, 1)} / ${num(v.empty ?? 0, 1)} ${tr("км", "km")}`],
