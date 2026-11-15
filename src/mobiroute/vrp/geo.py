@@ -407,7 +407,7 @@ def build(
         return _build(data, source)
     except KeyError as exc:
         raise ValueError(f"GEO_FIELD_MISSING:{exc.args[0]}") from exc
-    except (TypeError, IndexError, AttributeError) as exc:
+    except (TypeError, IndexError, AttributeError, OverflowError) as exc:
         raise ValueError(f"GEO_FIELD_INVALID:{exc}") from exc
 
 
