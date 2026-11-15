@@ -118,8 +118,10 @@ class Dispatcher:
         self.alns_iterations = alns_iterations
         self.ortools_time_limit = ortools_time_limit
         self.seed = seed
+        # A day never uses more vehicles than it has orders.
+        cap = max(1, inst.n_requests)
         self.units: list[_Unit] = [
-            _Unit(t) for t, vt in enumerate(inst.vehicle_types) for _ in range(vt.count)
+            _Unit(t) for t, vt in enumerate(inst.vehicle_types) for _ in range(min(vt.count, cap))
         ]
         self.reopt_seconds = 0.0
         self.reopt_runs = 0

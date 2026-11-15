@@ -229,3 +229,22 @@ def test_the_docs_do_not_leave_traffic_and_split_breaks_on_python() -> None:
     assert "эталоне Python" not in cargo
     assert "эталон на Python" not in comparison
     assert "split breaks and traffic in the Rust kernel" not in comparison
+
+
+def test_the_plant_note_names_the_orders_no_vehicle_can_carry() -> None:
+    """docs/industrial-transport.md explains the two orders the plant day leaves out."""
+    from mobiroute.vrp.generators import plant_day
+
+    inst = plant_day(11, n_moves=140)
+    nobody = {
+        req.id
+        for req in inst.requests
+        if not any(
+            req.skills <= vt.skills
+            and all(q <= c for q, c in zip(req.demand, vt.capacity, strict=True))
+            for vt in inst.vehicle_types
+        )
+    }
+    assert nobody == {"M020", "M120"}
+    text = (ROOT / "docs" / "industrial-transport.md").read_text(encoding="utf-8")
+    assert all(order in text for order in nobody)

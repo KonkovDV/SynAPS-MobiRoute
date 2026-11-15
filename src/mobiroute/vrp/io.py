@@ -26,6 +26,7 @@ from mobiroute.vrp.model import (
     VehicleType,
     euclidean_matrix,
     require_count,
+    require_whole,
     single_profile,
 )
 
@@ -455,18 +456,17 @@ def instance_from_dict(data: Mapping[str, Any]) -> Instance:
         raise ValueError(f"VRP_JSON_FIELD_INVALID:{exc}") from exc
 
 
-def _node_index(value: Any) -> int | None:
-    """A node reference: ``None`` or a whole number (no bools, no ``2.5``)."""
+def _node_index(value: Any, field: str) -> int | None:
+    """A node reference: ``None`` or a whole number (see :func:`require_whole`)."""
     if value is None:
         return None
-    if (
-        isinstance(value, bool)
-        or not isinstance(value, int | float)
-        or not math.isfinite(value)
-        or value != int(value)
-    ):
-        raise TypeError(f"node index {value!r}")
-    return int(value)
+    return require_whole(value, f"VRP_JSON_FIELD_INVALID:{field}")
+
+
+def _whole_list(values: Any, code: str) -> tuple[int, ...]:
+    if isinstance(values, str | bytes) or not isinstance(values, list | tuple):
+        raise ValueError(code)
+    return tuple(require_whole(v, code) for v in values)
 
 
 def _optional_number(value: Any) -> float | None:
@@ -507,7 +507,7 @@ def _instance_from_dict(data: Mapping[str, Any]) -> Instance:
         time_cost=str(data.get("time_cost", "operating")),
         nodes=tuple(
             Node(
-                int(nd["id"]),
+                require_whole(nd["id"], "VRP_JSON_FIELD_INVALID:nodes.id"),
                 float(nd["earliest"]),
                 _inf(nd["latest"]),
                 float(nd["service"]),
@@ -520,8 +520,8 @@ def _instance_from_dict(data: Mapping[str, Any]) -> Instance:
         requests=tuple(
             Request(
                 str(r["id"]),
-                _node_index(r["pickup"]),
-                _node_index(r["delivery"]),
+                _node_index(r["pickup"], "pickup"),
+                _node_index(r["delivery"], "delivery"),
                 tuple(float(q) for q in r["demand"]),
                 _names(r.get("skills", ())),
                 _optional_number(r.get("max_ride")),
@@ -535,8 +535,12 @@ def _instance_from_dict(data: Mapping[str, Any]) -> Instance:
                 id=str(vt["id"]),
                 capacity=tuple(float(c) for c in vt["capacity"]),
                 count=require_count(vt["count"], str(vt.get("id", "?"))),
-                start_depot=int(vt["start_depot"]),
-                end_depot=int(vt["end_depot"]),
+                start_depot=require_whole(
+                    vt["start_depot"], f"VRP_JSON_FIELD_INVALID:{vt.get('id', '?')}.start_depot"
+                ),
+                end_depot=require_whole(
+                    vt["end_depot"], f"VRP_JSON_FIELD_INVALID:{vt.get('id', '?')}.end_depot"
+                ),
                 shift_start=float(vt["shift_start"]),
                 shift_end=_inf(vt["shift_end"]),
                 fixed_cost=float(vt["fixed_cost"]),
@@ -555,8 +559,13 @@ def _instance_from_dict(data: Mapping[str, Any]) -> Instance:
                     if vt["breaks"].get("split") is None
                     else (float(vt["breaks"]["split"][0]), float(vt["breaks"]["split"][1])),
                 ),
-                reload_nodes=tuple(int(x) for x in vt.get("reload_nodes", ())),
-                max_trips=int(vt.get("max_trips", 1)),
+                reload_nodes=_whole_list(
+                    vt.get("reload_nodes", []),
+                    f"VRP_JSON_FIELD_INVALID:{vt.get('id', '?')}.reload_nodes",
+                ),
+                max_trips=require_whole(
+                    vt.get("max_trips", 1), f"VRP_TRIPS_INVALID:{vt.get('id', '?')}", minimum=1
+                ),
             )
             for vt in data["vehicle_types"]
         ),

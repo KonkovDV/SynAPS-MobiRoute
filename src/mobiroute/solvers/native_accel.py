@@ -27,7 +27,8 @@ NativeEval = tuple[
 ]
 
 NATIVE_REQUIRED = (
-    "Greedy, beam, ALNS, and online insertion require mobiroute_native. "
+    "The passenger heuristics (fifo, greedy, beam, alns, rhc) and online insertion "
+    "require mobiroute_native; nearest and cpsat run without it. "
     "Build: python -m maturin develop --release "
     "--manifest-path native/mobiroute_native/Cargo.toml"
 )
