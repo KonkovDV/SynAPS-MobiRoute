@@ -32,8 +32,8 @@ next.
   $D$ minutes of driving and at most $2D$ minutes of driving a day; with
   $D$ = 4.5 h and $b$ = 45 min this is the rule of EU Regulation 561/2006
   (art. 6-7) and of Russian Ministry of Transport Order No. 424 of
-  16.10.2020, including the split into 15 + 30 min (`BreakRule.split`, on
-  the Python reference). The shift cap counts from departure to return,
+  16.10.2020, including the split into 15 + 30 min (`BreakRule.split`, in the
+  Python reference and the Rust kernel). The shift cap counts from departure to return,
   waiting included, as working time does. Not modelled: daily driving
   extended to 10 h twice a week (art. 6 of the EU regulation); weekly and fortnightly driving limits; the meal break of the
   Labour Code (art. 108), which is not working time; daily and weekly rest
@@ -53,9 +53,9 @@ next.
   takes a fixed time whatever the load.
 * Time-dependent travel: one speed profile per road profile (every arc slows
   down by the same factor); the search tests the shift cap soundly but not
-  completely (it may reject a feasible route), time costs are charged on
-  free-flow minutes, and it runs on the Python reference, not the Rust
-  kernel. It is not combined with ride limits or rest rules.
+  completely (it may reject a feasible route), and time costs are charged on
+  free-flow minutes. It runs in the Rust kernel too, with the same plans. It
+  is not combined with ride limits or rest rules.
 * By default cost per time is charged on driving and service, not on
   waiting. `time_cost = "duty"` charges the whole shift instead (the
   shortest feasible duration, waiting included) in the objective, the
@@ -68,11 +68,14 @@ next.
 * Route sheets: the schedule is the shortest one that returns earliest (no
   traffic) or the shortest one (traffic); a dispatcher who prefers an early
   start or a fixed departure has to shift it by hand, and the rest's place is
-  the first admissible gap the verifier finds, not a driver's preference.
+  the one that gives the shortest shift (the earliest such gap), not a
+  driver's preference.
 * Every vehicle returns to its end depot; open routes need a zero-cost return.
 * The OR-Tools baseline, the exact CP-SAT model and the live dispatcher do not
   model rests, multi-trip days or time-dependent travel; they refuse such
-  instances with an explicit error. In the dispatcher, ride limits have to be
+  instances with an explicit error. The OR-Tools baseline and the exact model
+  also refuse `time_cost = "duty"`: they price driving and service, and a
+  result for another objective would be mislabelled. In the dispatcher, ride limits have to be
   written as delivery deadlines, and vehicles idle where they finish instead
   of repositioning.
 

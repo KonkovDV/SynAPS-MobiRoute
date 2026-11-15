@@ -7,8 +7,10 @@ loads separately; these tests hold them to the same answers on random routes
 
 from __future__ import annotations
 
+import math
 import random
 from dataclasses import replace
+from itertools import pairwise
 
 import pytest
 from hypothesis import given, settings
@@ -249,6 +251,58 @@ def _traffic_instance(seed: int, factors: list[float], cap: float | None) -> Ins
     base = random_instance(seed, n_requests=7, ride_share=0.0, max_duration=False)
     types = tuple(replace(vt, max_duration=cap) for vt in base.vehicle_types)
     return with_traffic(replace(base, vehicle_types=types), _profile(factors))
+
+
+def _progress(sp: SpeedProfile, t: float) -> float:
+    """Free-flow minutes covered from a fixed origin until ``t``: the integral of
+    the speed factor, computed period by period (independent of ``arrive``)."""
+    origin = -10_000.0
+    edges = [origin, *sp.starts[1:], math.inf]
+    done = 0.0
+    for k, (lo, hi) in enumerate(pairwise(edges)):
+        if t <= lo:
+            break
+        done += (min(t, hi) - lo) * sp.factors[k]
+    return done
+
+
+def _arrival_by_inversion(sp: SpeedProfile, depart: float, free: float) -> float:
+    """``F^-1(F(depart) + free)`` with ``F = _progress``, by bisection."""
+    target = _progress(sp, depart) + free
+    lo, hi = depart, depart + free / min(sp.factors) + 1.0
+    for _ in range(200):
+        mid = 0.5 * (lo + hi)
+        if _progress(sp, mid) < target:
+            lo = mid
+        else:
+            hi = mid
+    return hi
+
+
+@settings(max_examples=300, deadline=None)
+@given(
+    starts=st.lists(st.floats(5.0, 600.0), min_size=1, max_size=4, unique=True),
+    factors=st.lists(st.floats(0.2, 1.5), min_size=5, max_size=5),
+    depart=st.floats(-50.0, 700.0),
+    free=st.floats(0.0, 300.0),
+    snap=st.booleans(),
+)
+def test_arrival_is_the_inverse_of_accumulated_progress(
+    starts: list[float], factors: list[float], depart: float, free: float, snap: bool
+) -> None:
+    """``arrive`` equals the inverse of the integrated speed factor, also when a
+    trip ends right at or just short of a period boundary (``snap``)."""
+    bounds = sorted(starts)
+    sp = SpeedProfile((0.0, *bounds), tuple(factors[: len(bounds) + 1]))
+    if snap:
+        # Choose the trip so that it ends a fraction of a minute before a boundary.
+        edge = bounds[0]
+        depart = edge - 10.0 - 0.37
+        free = (edge - 0.37 - depart) * sp.factors[0]
+    expected = _arrival_by_inversion(sp, depart, free)
+    got = arrive(sp, depart, free)
+    assert got == pytest.approx(expected, abs=1e-6)
+    assert depart_by(sp, got, free) == pytest.approx(depart, abs=1e-6)
 
 
 @settings(max_examples=60, deadline=None)

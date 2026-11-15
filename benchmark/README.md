@@ -13,6 +13,8 @@ table to `docs/benchmarks/`. Rules: [docs/benchmark-protocol.md](../docs/benchma
 | `realtime_dispatch.py` | live dispatch policies on shuttle and plant days | `docs/benchmarks/realtime-dispatch.md` |
 | `measure_vrp_speed.py` | cost of an ALNS iteration, Python reference vs Rust kernel | `docs/benchmarks/vrp-speed.md` |
 | `profile_vrp.py` | `cProfile` ranking by own time of one ALNS run on both backends | `docs/benchmarks/vrp-profile.md` |
+| `fuzz_differential.py` | Rust kernel vs Python reference, shortest shift vs enumeration, verifier vs arbitrary plans, ALNS on both kernels; exits 1 on any difference | standard output |
+| `mutation_smoke.py` | plants one bug at a time in the verifier, insertion, schedule, sheets and indicators and checks that the tests catch each | standard output |
 | `solver_lab.py` | Cordeau a2-16 through CP-SAT, MIP (SCIP, HiGHS, CBC), LP bound, ALNS and OR-Tools | `docs/benchmarks/solver-lab-a2-16.md` |
 | `rules_study.py` | driver rests, multi-trip days and rush hours on synthetic days | `docs/benchmarks/rules.md` |
 | `seed_study.py` | five seeds on Solomon R2/RC2, with and without local search, Wilcoxon test | `docs/benchmarks/seed-study.md` |
@@ -30,6 +32,8 @@ python benchmark/ortools_vs_alns.py --time-limit 10
 python benchmark/realtime_dispatch.py --with-ortools
 python benchmark/measure_vrp_speed.py
 python benchmark/profile_vrp.py
+python benchmark/fuzz_differential.py 4000
+python benchmark/mutation_smoke.py
 python benchmark/solvers_study.py   # pip install pyvrp==0.14.1 pyvroom==1.15.2; jsprit: see the script
 python benchmark/solver_lab.py
 python benchmark/rules_study.py

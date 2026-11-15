@@ -493,6 +493,30 @@ def test_every_route_sheet_keeps_the_driving_time_rule(seed: int, drive: float, 
         assert len(rests) == (1 if sheet.driving > drive + 1e-6 else 0)
 
 
+def test_sheet_puts_an_early_rest_before_the_drive() -> None:
+    """Lemma 1's first case: the rest right after the work at a stop, then the drive.
+
+    At 20 km/h with a 90-minute limit the admissible gap of route 1-2-3-4-5 is
+    after the supplier, and both stints stay within the limit if the driver
+    rests before leaving it, so the sheet shows the rest there (a mutation
+    that dropped this row went unnoticed before this test).
+    """
+    doc = _doc()
+    doc["profiles"]["road"]["speed_kmh"] = 20
+    doc["vehicle_types"][0]["rests"] = {"max_driving_min": 90, "duration_min": 30}
+    built = geo.build(doc)
+    sheet = _sheet_of(built, [1, 2, 3, 4, 5])
+    kinds = [row.kind for row in sheet.rows]
+    assert kinds == [
+        "depart", "delivery", "pickup", "rest", "delivery", "pickup", "delivery", "return"
+    ]  # fmt: skip
+    work, rest, after = sheet.rows[2], sheet.rows[3], sheet.rows[4]
+    assert rest.place == work.place and rest.start == pytest.approx(work.end)
+    assert rest.end - rest.start == pytest.approx(30.0)
+    assert after.arrive > rest.end  # the drive comes after the rest
+    assert sheet.longest_stint <= 90.0 + 1e-6 and sheet.compliant()
+
+
 def test_sheet_leaves_late_rests_and_counts_load() -> None:
     doc = _doc()
     doc["profiles"]["road"]["speed_kmh"] = 15
