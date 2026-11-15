@@ -229,6 +229,69 @@ def test_alns_matches_the_exact_model_when_orders_may_be_refused() -> None:
         assert heur.objective == pytest.approx(search_objective(inst, exact.solution), rel=1e-9)
 
 
+def test_warm_start_hands_cp_sat_the_heuristic_plan() -> None:
+    """The hint covers every literal and the answer is never worse than it."""
+    inst = random_instance(1005, n_requests=8, n_types=3, ride_share=0.4, penalty=1000.0)
+    heur = solve(inst, AlnsConfig(iterations=800, seed=1))
+    warm = solve_exact(inst, time_limit=5, workers=4, hint=heur.solution, deterministic=True)
+    cold = solve_exact(inst, time_limit=5, workers=4, deterministic=True)
+    assert warm.hinted > 0 and cold.hinted == 0
+    assert warm.status in ("OPTIMAL", "FEASIBLE") and warm.verdict.feasible
+    assert search_objective(inst, warm.solution) <= search_objective(inst, heur.solution) + 1e-6
+
+
+def test_a_deterministic_run_repeats_itself() -> None:
+    """Deterministic time, not the wall clock, ends the run: same plan twice."""
+    inst = random_instance(2000, n_requests=14, n_types=2, ride_share=0.4, penalty=1000.0)
+    runs = [solve_exact(inst, time_limit=1.0, workers=4, deterministic=True) for _ in range(2)]
+    assert all(run.reproducible for run in runs)
+    assert runs[0].status == runs[1].status
+    assert [(r.vehicle_type, r.nodes) for r in runs[0].solution.routes] == [
+        (r.vehicle_type, r.nodes) for r in runs[1].solution.routes
+    ]
+
+
+def test_cli_exact_starts_from_alns_and_reports_the_proof(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    inst = random_instance(102, n_requests=6, n_types=2, ride_share=0.4, penalty=1000.0)
+    path = tmp_path / "small.json"
+    path.write_text(instance_to_json(inst), encoding="utf-8")
+    code = main(
+        ["vrp-solve", "--instance", str(path), "--solver", "exact", "--time-limit", "20",
+         "--out-dir", str(tmp_path / "out")]
+    )  # fmt: skip
+    out = capsys.readouterr().out
+    assert code == 0 and "CP-SAT OPTIMAL, warm start" in out
+    saved = json.loads((tmp_path / "out" / "solution.json").read_text("utf-8"))
+    types = {vt.id: t for t, vt in enumerate(inst.vehicle_types)}
+    ids = {req.id: r for r, req in enumerate(inst.requests)}
+    plan = Solution.from_lists(
+        [(types[r["vehicle_type"]], r["nodes"]) for r in saved["routes"]],
+        [ids[x] for x in saved["unassigned"]],
+    )
+    heur = solve(inst, AlnsConfig(iterations=2000, seed=0))
+    assert verify(inst, plan).feasible
+    assert search_objective(inst, plan) <= search_objective(inst, heur.solution) + 1e-6
+
+
+@pytest.mark.slow
+def test_warm_start_reaches_an_optimum_the_heuristic_misses() -> None:
+    """Seed 2004: ALNS keeps five orders out, the optimum serves one more.
+
+    Serving request 10 needs it inserted and another stop moved in the same
+    step, which no single destroy-and-repair move of ALNS makes; CP-SAT,
+    started from the ALNS plan, proves the better one.
+    """
+    inst = random_instance(2004, n_requests=14, n_types=2, ride_share=0.4, penalty=1000.0)
+    heur = solve(inst, AlnsConfig(iterations=2000, seed=1))
+    assert len(heur.solution.unassigned) == 5
+    warm = solve_exact(inst, time_limit=60, workers=8, hint=heur.solution, deterministic=True)
+    assert warm.status == "OPTIMAL" and warm.verdict.feasible
+    assert len(warm.solution.unassigned) == 4
+    assert search_objective(inst, warm.solution) == pytest.approx(5353.99, abs=0.01)
+
+
 def test_ortools_baseline_returns_verified_plans() -> None:
     inst, _ = load_benchmark(INST / "solomon" / "C101.txt")
     run = solve_ortools(inst, time_limit=2.0)

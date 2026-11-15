@@ -443,7 +443,7 @@ def _vrp_instance(args: argparse.Namespace) -> tuple[object, object]:
 
 
 def _vrp_solve(args: argparse.Namespace) -> int:
-    from mobiroute.vrp.alns import AlnsConfig, solve
+    from mobiroute.vrp.alns import AlnsConfig, search_objective, solve
     from mobiroute.vrp.exact import solve_exact
     from mobiroute.vrp.model import Instance
     from mobiroute.vrp.ortools_baseline import solve_ortools
@@ -460,8 +460,41 @@ def _vrp_solve(args: argparse.Namespace) -> int:
         run = solve_ortools(inst, time_limit=args.time_limit or 10.0)
         solution, verdict, label = run.solution, run.verdict, f"OR-Tools {run.status}"
     elif args.solver == "exact":
-        ex = solve_exact(inst, time_limit=args.time_limit or 60.0)
-        solution, verdict, label = ex.solution, ex.verdict, f"CP-SAT {ex.status}"
+        # As in the SynAPS core: ALNS gives CP-SAT a plan to start from, so the
+        # answer is never worse than the heuristic one; a cold run gets the
+        # other half of the budget, because a hint can also hold the search
+        # near itself. Both runs are deterministic: the same input gives the
+        # same plan on any machine. The cheapest verified plan is kept.
+        budget = (args.time_limit or 60.0) / 2
+        start = solve(inst, AlnsConfig(iterations=args.iterations or 2000, seed=args.seed))
+        hint = start.solution if start.verdict.feasible else None
+        runs = [("warm start", solve_exact(inst, time_limit=budget, hint=hint, deterministic=True))]
+        if runs[0][1].status != "OPTIMAL":
+            runs.append(("cold", solve_exact(inst, time_limit=budget, deterministic=True)))
+        options = [
+            (
+                search_objective(inst, ex.solution),
+                f"CP-SAT {ex.status}, {name}",
+                ex.solution,
+                ex.verdict,
+            )
+            for name, ex in runs
+            if ex.verdict.feasible
+        ]
+        if start.verdict.feasible:
+            options.append(
+                (
+                    search_objective(inst, start.solution),
+                    "ALNS plan, CP-SAT found no better",
+                    start.solution,
+                    start.verdict,
+                )
+            )
+        if options:
+            _, label, solution, verdict = min(options, key=lambda o: o[0])
+        else:
+            ex = runs[-1][1]
+            solution, verdict, label = ex.solution, ex.verdict, f"CP-SAT {ex.status}"
     else:
         if args.iterations is not None:
             iterations = args.iterations

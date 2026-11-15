@@ -79,6 +79,14 @@ the same order, the same tie-breaking and the same SplitMix64 noise stream.
 Tests require identical plans, down to whole ALNS trajectories, so the fast
 path cannot drift from the specification.
 
+**Heuristic first, proof second, both reproducible.** For small instances
+`vrp-solve --solver exact` gives CP-SAT the ALNS plan as a hint and adds a
+cold run when the warm one proves nothing; the cheapest verified plan wins.
+Both runs stop on CP-SAT's deterministic time with one interleaved search,
+so a result repeats on another machine, which a wall-clock limit cannot
+promise. The pattern comes from the SynAPS scheduling core (its ADR on
+strict determinism).
+
 **Constant-time tests, exact checks when needed.** Windows, capacity vector,
 skills and the shift cap are decided by slack arithmetic; ride limits (which
 couple two stops) go to Bellman-Ford for the cheapest candidates only.
