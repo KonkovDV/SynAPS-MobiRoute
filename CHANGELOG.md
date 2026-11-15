@@ -8,7 +8,7 @@
   the same plans. The profiling note, the rules table, the comparison and the
   cargo roadmap now say what the code does, and what is actually still in
   Python (vehicle-type assignment, route merges, the live dispatcher).
-- The README and the site said 695 tests. The fast suite collects 699.
+- The README and the site said 695 tests. The fast suite collects 701.
 - The plant-day mileage figure was rounded to 79%; the measured value is 78.5%.
   The paragraph names seed 11, so it is not read as the seed-5 dispatch table.
 - The site's "order, vehicle, driver" row now says where the driver lives:
@@ -16,6 +16,13 @@
   model checks vehicle skills and the driving-time rule.
 - The Pages workflow pinned its three actions by commit, as the other
   workflows already do.
+- `vrp-solve` exited 0 when every served route was legal, even if a
+  mandatory order was left out. The exit is 0 only when the verdict is
+  feasible and complete, and the summary says `INCOMPLETE`.
+- A fleet `count` of `2.7` or `true` in JSON or a geo file was truncated by
+  `int()`. Both readers refuse it with `VRP_COUNT_INVALID`.
+- The geo format example showed driver rests and a speed profile in one
+  file. That combination is refused; the example no longer contains it.
 
 ### Changed
 - The fleet, route-sheet and price scripts load when their section comes

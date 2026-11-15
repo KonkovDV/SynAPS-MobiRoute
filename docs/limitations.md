@@ -133,6 +133,10 @@ next.
 * Synthetic Moscow-zone days; quota and priority rules are policy shapes, not
   legal eligibility; no integration with a live dispatch system.
 * CP-SAT tiny is a sequential model (no pooling).
+* A manual rejection removes that trip's clocks and marks the plan unverified
+  (`verified_feasible` stays false). The call has no problem instance to
+  re-check the remaining stops, so the old ride and quota totals are dropped
+  rather than republished.
 
 ## Timings
 

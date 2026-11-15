@@ -48,7 +48,12 @@ class Verdict:
     certificates: tuple[tuple[int, Infeasibility], ...]
 
     def summary(self) -> str:
-        state = "feasible" if self.feasible else f"INFEASIBLE ({len(self.violations)} violations)"
+        if self.feasible and self.complete:
+            state = "feasible"
+        elif self.feasible:
+            state = "feasible, INCOMPLETE"
+        else:
+            state = f"INFEASIBLE ({len(self.violations)} violations)"
         return (
             f"{state}; served {len(self.served)}/{len(self.served) + len(self.unassigned)}; "
             f"vehicles {self.cost.vehicles}; distance {self.cost.distance:.2f}; "
