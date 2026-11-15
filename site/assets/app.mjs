@@ -1,9 +1,6 @@
 // Page behaviour. Everything here is progressive: the content is in the HTML,
 // this file adds motion and the interactive verifier.
 import { nodeName, phrase, verifyRoute } from "./verifier.mjs";
-import { initVrp } from "./vrp.mjs";
-import { initSheets } from "./sheets.mjs";
-import { initPrices } from "./prices.mjs";
 
 const root = document.documentElement;
 const $ = (id) => document.getElementById(id);
@@ -563,6 +560,17 @@ setLang(new URLSearchParams(location.search).get("lang") || store.get("mr-lang")
 load("data/a2-16.json").then((inst) => { hero(inst); near($("lab"), () => laboratory(inst)); }).catch((err) => console.error(err));
 near($("proof"), () => load("data/solver-lab.json").then(race).catch((err) => console.error(err)));
 const ctx = { $, tr, lang, svgEl, reduce, rerender, onReveal, load, near };
-initVrp(ctx);
-initSheets(ctx);
-initPrices(ctx);
+// The hero only needs the verifier. Fleet, sheets and prices arrive with
+// their section, so the first screen does not download them.
+const boot = (els, href, start) => {
+  let started = false;
+  const go = () => {
+    if (started) return;
+    started = true;
+    import(href).then((mod) => start(mod)).catch((err) => console.error(err));
+  };
+  for (const el of els) near(el, go);
+};
+boot([$("fleet"), $("dispatch"), $("bench")], "./vrp.mjs", (mod) => mod.initVrp(ctx));
+boot([$("sheets")], "./sheets.mjs", (mod) => mod.initSheets(ctx));
+boot([$("prices")], "./prices.mjs", (mod) => mod.initPrices(ctx));

@@ -10,7 +10,10 @@ checked here too, on the import graph.
 from __future__ import annotations
 
 import ast
+import os
 import re
+import subprocess
+import sys
 from importlib.metadata import Distribution, PackageNotFoundError, distribution
 from pathlib import Path
 
@@ -163,3 +166,66 @@ def test_no_dependency_is_under_gpl_or_agpl() -> None:
         if hits:
             copyleft[key] = hits
     assert not copyleft
+
+
+def test_the_published_test_count_is_the_fast_suite() -> None:
+    """README and the site name the number ``pytest`` collects, slow proofs aside."""
+    stated = set()
+    for path, pattern in (
+        (ROOT / "README.md", r"(\d+) тестов"),
+        (ROOT / "README.en.md", r"(\d+) tests"),
+        (ROOT / "site" / "index.html", r"(\d+) (?:тестов|tests)"),
+    ):
+        stated.update(int(n) for n in re.findall(pattern, path.read_text(encoding="utf-8")))
+    env = os.environ.copy()
+    env.pop("PYTEST_CURRENT_TEST", None)
+    proc = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "pytest",
+            "--collect-only",
+            "-q",
+            "-o",
+            "addopts=",
+            "-m",
+            "not slow",
+        ],
+        cwd=ROOT,
+        env=env,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert proc.returncode == 0, proc.stderr
+    match = re.search(r"(\d+)(?:/\d+)? tests collected", proc.stdout)
+    assert match is not None, proc.stdout
+    assert stated == {int(match.group(1))}
+
+
+def test_workflows_pin_every_action_by_commit() -> None:
+    """A floating tag can change under a green run; the workflows pin the commit."""
+    uses = re.compile(r"^\s*-?\s*uses:\s*(\S+)")
+    floating = []
+    for path in sorted((ROOT / ".github" / "workflows").glob("*.yml")):
+        for lineno, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
+            found = uses.search(line.split("#", 1)[0])
+            if found is None:
+                continue
+            ref = found.group(1).rsplit("@", 1)[-1]
+            if re.fullmatch(r"[0-9a-f]{40}", ref) is None:
+                floating.append(f"{path.name}:{lineno}: {found.group(1)}")
+    assert not floating
+
+
+def test_the_docs_do_not_leave_traffic_and_split_breaks_on_python() -> None:
+    """Since 0.6 the Rust kernel runs both; a leftover sentence would describe 0.5."""
+    native = (ROOT / "docs" / "native-acceleration.md").read_text(encoding="utf-8")
+    rules = (ROOT / "docs" / "benchmarks" / "rules.md").read_text(encoding="utf-8")
+    cargo = (ROOT / "docs" / "cargo-vrp.md").read_text(encoding="utf-8")
+    comparison = (ROOT / "docs" / "comparison.md").read_text(encoding="utf-8")
+    assert "time-dependent travel always run" not in native
+    assert "covers static travel times" not in rules
+    assert "эталоне Python" not in cargo
+    assert "эталон на Python" not in comparison
+    assert "split breaks and traffic in the Rust kernel" not in comparison
