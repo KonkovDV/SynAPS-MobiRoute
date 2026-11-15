@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.6.2 — 2026-11-15
 
 ### Fixed
 - Three documents still described 0.5: time-dependent travel and split breaks
@@ -8,7 +8,7 @@
   the same plans. The profiling note, the rules table, the comparison and the
   cargo roadmap now say what the code does, and what is actually still in
   Python (vehicle-type assignment, route merges, the live dispatcher).
-- The README and the site said 695 tests. The fast suite collects 701.
+- The README and the site said 695 tests. The fast suite collects 717.
 - The plant-day mileage figure was rounded to 79%; the measured value is 78.5%.
   The paragraph names seed 11, so it is not read as the seed-5 dispatch table.
 - The site's "order, vehicle, driver" row now says where the driver lives:
@@ -20,11 +20,35 @@
   mandatory order was left out. The exit is 0 only when the verdict is
   feasible and complete, and the summary says `INCOMPLETE`.
 - A fleet `count` of `2.7` or `true` in JSON or a geo file was truncated by
-  `int()`. Both readers refuse it with `VRP_COUNT_INVALID`.
+  `int()`. Both readers refuse it with `VRP_COUNT_INVALID`. The same holds
+  for every other whole number in the JSON format (node ids, depots, reload
+  stops, `max_trips`, pickup and delivery nodes) and for the geo `trips.max`:
+  `2.7`, `true`, `"6"` and `2.0` are refused instead of becoming 2, 1, 6
+  and 2. `trips.max` of 0 is `VRP_TRIPS_INVALID`.
+- A large fleet grew the instance with its size: `trips` added
+  `count * (max_trips - 1)` reload stops and every matrix grew with their
+  square (20,000 vans with three trips asked for 40,000 stops), and the live
+  dispatcher built one vehicle per unit. Both now stop at the number of
+  orders, which no plan exceeds; the OR-Tools baseline already did.
+- Without the Rust build, `mobiroute solve` with `fifo`, `greedy`, `beam`,
+  `alns` or `rhc` and `mobiroute demo` ended in a Python traceback. The CLI
+  prints one line with the build command and exits 2; the message names the
+  heuristics that need the build and the two (`nearest`, `cpsat`) that do
+  not. The README said the kernel was optional for the whole package; it is
+  optional for the freight engine only.
+- `docs/industrial-transport.md` explains the two orders of the seed-11
+  plant day that both plans leave out: no vehicle type can carry them (the
+  covered van holds 4 pallets and 1500 kg). The morning plan serves all 138
+  feasible orders; a test pins the two ids.
 - The geo format example showed driver rests and a speed profile in one
   file. That combination is refused; the example no longer contains it.
 
 ### Changed
+- `vrp-solve` exit statuses: 0, the plan is verified and complete; 2, the
+  input was refused or the plan breaks a rule; 3 (new), the plan is verified
+  and written but mandatory orders have no vehicle. The CLI lists those
+  orders and names the ones no vehicle type can carry, and `--help` states
+  the three statuses.
 - The fleet, route-sheet and price scripts load when their section comes
   near. The first screen fetches the page script and the verifier it replays.
 

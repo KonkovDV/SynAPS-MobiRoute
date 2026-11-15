@@ -8,6 +8,7 @@ import json
 import sys
 import time
 from pathlib import Path
+from typing import Any
 
 from mobiroute.adapters.synthetic_data import MODES, generate_day
 from mobiroute.dispatch.online_insertion import online_insert, recover_disruption
@@ -18,9 +19,23 @@ from mobiroute.solvers.alns import solve_alns
 from mobiroute.solvers.beam import solve_beam
 from mobiroute.solvers.cpsat import solve_cpsat
 from mobiroute.solvers.greedy import solve_fifo, solve_greedy
+from mobiroute.solvers.native_accel import NATIVE_REQUIRED
 from mobiroute.solvers.nearest import solve_nearest
 from mobiroute.solvers.rolling_horizon import solve_rolling_horizon
 from mobiroute.validation.privacy import log_safe
+
+#: ``vrp-solve`` exit statuses. 0: the plan is verified and serves every
+#: mandatory order. 2: the input was refused or the plan breaks a rule.
+#: 3: the plan is verified and written, but mandatory orders have no vehicle.
+EXIT_OK = 0
+EXIT_ERROR = 2
+EXIT_INCOMPLETE = 3
+
+VRP_SOLVE_EXITS = (
+    "exit status: 0 the plan is verified and serves every mandatory order; "
+    "2 the input was refused or the plan breaks a rule; "
+    "3 the plan is verified and written, but mandatory orders are left without a vehicle"
+)
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -96,6 +111,7 @@ def main(argv: list[str] | None = None) -> int:
     v = sub.add_parser(
         "vrp-solve",
         help="Rich VRP: heterogeneous fleet, capacity vector, windows, pickup and delivery",
+        epilog=VRP_SOLVE_EXITS,
     )
     src = v.add_mutually_exclusive_group(required=True)
     src.add_argument(
@@ -166,7 +182,15 @@ def main(argv: list[str] | None = None) -> int:
         # files are input problems: report the code on stderr and exit 2, never
         # a traceback.
         print(log_safe(f"error: {type(exc).__name__}: {str(exc)[:500]}"), file=sys.stderr)
-        return 2
+        return EXIT_ERROR
+    except RuntimeError as exc:
+        # A missing Rust build is a setup step, not a bug: one line with the
+        # command that fixes it. Any other RuntimeError is a bug and keeps
+        # its traceback.
+        if not str(exc).startswith(NATIVE_REQUIRED):
+            raise
+        print(log_safe(f"error: {str(exc)[:500]}"), file=sys.stderr)
+        return EXIT_ERROR
 
 
 def _dispatch(args: argparse.Namespace) -> int:
@@ -604,10 +628,30 @@ def _vrp_solve(args: argparse.Namespace) -> int:
                 + f"; on duty {kpi.duty / 60:.1f} h, waiting {kpi.waiting / 60:.1f} h"
             )
         )
-    # A feasible plan can still leave a mandatory order out. That is not a
-    # successful solve: ``complete`` is true only when every missing order
-    # was allowed to be refused.
-    return 0 if verdict.feasible and verdict.complete else 2
+    if not verdict.feasible:
+        return EXIT_ERROR
+    if not verdict.complete:
+        # The plan is legal and written, but a mandatory order has no vehicle.
+        # Say which ones, and which of them no vehicle type can take at all
+        # (skills or size), so a dispatcher knows what to change.
+        missing = [r for r in sorted(solution.unassigned) if inst.requests[r].penalty is None]
+        nobody = [r for r in missing if not _carriable(inst, r)]
+        line = "mandatory orders left out: " + ", ".join(inst.requests[r].id for r in missing)
+        if nobody:
+            line += "; no vehicle type can carry " + ", ".join(inst.requests[r].id for r in nobody)
+        print(log_safe(line))
+        return EXIT_INCOMPLETE
+    return EXIT_OK
+
+
+def _carriable(inst: Any, r: int) -> bool:
+    req = inst.requests[r]
+    return any(
+        req.skills <= vt.skills
+        and all(q <= c + 1e-9 for q, c in zip(req.demand, vt.capacity, strict=True))
+        for vt in inst.vehicle_types
+        if vt.count > 0
+    )
 
 
 def _vrp_dispatch(args: argparse.Namespace) -> int:

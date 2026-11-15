@@ -49,8 +49,8 @@ for route sheets) are optional. ``traffic`` is one speed profile for the
 whole network (``starts`` as ``"HH:MM"``, ``factors`` as shares of free-flow
 speed). A file that sets ``traffic`` and also ``rests`` or ``max_ride_min``
 is refused (``VRP_TRAFFIC_WITH_RIDE_LIMITS_OR_RESTS_UNSUPPORTED``): each rule
-is solved, the two are not solved on the same day. ``count`` is a whole
-number; ``2.7`` is an error, not two vehicles.
+is solved, the two are not solved on the same day. ``count`` and
+``trips.max`` are whole numbers; ``2.7`` is an error, not two.
 
 Road matrices come from one of two sources:
 
@@ -87,6 +87,7 @@ from mobiroute.vrp.model import (
     VehicleType,
     add_reload_stops,
     require_count,
+    require_whole,
 )
 
 EARTH_KM = 6371.0088
@@ -540,8 +541,10 @@ def _build(data: Mapping[str, Any], source: MatrixSource) -> GeoInstance:
                 ),
             )
         )
-        if vt.get("trips") and int(vt["trips"]["max"]) > 1:
-            trips.append((vid, int(vt["trips"]["max"]), float(vt["trips"].get("reload_min", 0))))
+        if vt.get("trips"):
+            max_trips = require_whole(vt["trips"]["max"], f"VRP_TRIPS_INVALID:{vid}", minimum=1)
+            if max_trips > 1:
+                trips.append((vid, max_trips, float(vt["trips"].get("reload_min", 0))))
     inst = Instance(
         name=str(data.get("name", "geo")),
         nodes=nodes,

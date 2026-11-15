@@ -5,6 +5,8 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+import pytest
+
 from mobiroute.adapters.fingerprint import fingerprint
 from mobiroute.adapters.synthetic_data import MODES, generate_day
 from mobiroute.cli import main
@@ -82,3 +84,23 @@ def test_privacy_open_synthetic() -> None:
     assert open_p.passengers[0].privacy_class.value in {"OPEN_SYNTHETIC", "PUBLIC_SYNTHETIC"}
     assert "[REDACTED_PHONE]" in log_safe("call +7 495 129-03-30")
     assert assert_no_pii_fields({"id": "x", "phone": "1"}) == ["phone"]
+
+
+def test_a_missing_rust_build_is_one_line_not_a_traceback(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """Without mobiroute_native the passenger heuristics say how to build it."""
+    import mobiroute.solvers.native_accel as native_accel
+
+    problem = tmp_path / "p.json"
+    assert main(["generate", "--mode", "tiny", "--out", str(problem)]) == 0
+    monkeypatch.setattr(native_accel, "_engine_cls", None)
+    monkeypatch.setattr(native_accel, "_native_best_insert", None)
+    code = main(["solve", "--problem", str(problem), "--solver", "greedy",
+                 "--out-dir", str(tmp_path / "out")])  # fmt: skip
+    err = capsys.readouterr().err
+    assert code == 2
+    assert "maturin develop" in err and "nearest and cpsat run without it" in err
+    assert "Traceback" not in err and len(err.strip().splitlines()) == 1
+    assert main(["solve", "--problem", str(problem), "--solver", "nearest",
+                 "--out-dir", str(tmp_path / "near")]) == 0  # fmt: skip

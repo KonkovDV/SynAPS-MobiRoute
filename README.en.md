@@ -6,6 +6,12 @@ with weight, volume and pallets, own and hired vehicles of several types,
 drivers' driving-time rules, several trips per shift and travel speeds that
 change over the day.
 
+It builds the plan for a day of transport — which vehicle carries each order,
+in what order and when — and checks, apart from the search, that the plan
+can be driven. The examples are a city freight day with own and hired
+vehicles, workshops' requests for in-plant transport, and an employee
+shuttle. The data are synthetic; the solvers are tested on public benchmarks.
+
 The main method is ALNS. Its hot path (inserting orders and checking
 schedules, rush hours and split breaks included) is written in Rust and
 returns exactly the same plans as the reference implementation in Python.
@@ -33,8 +39,11 @@ python -m pip install maturin
 python -m maturin develop --release --manifest-path native/mobiroute_native/Cargo.toml
 ```
 
-The Rust kernel is optional: without it Python computes the same plans, only
-slower.
+The freight engine (`vrp-solve`, `vrp-dispatch`) does not need the Rust
+kernel: without it Python computes the same plans, only slower. The passenger
+kernel needs it for the `fifo`, `greedy`, `beam`, `alns` and `rhc` heuristics
+and for `demo`; without the build the CLI says in one line how to make it,
+and `nearest` and `cpsat` run anyway.
 
 ```bash
 # a freight day: 120 orders, own and hired vehicles, an SVG route map
@@ -341,7 +350,7 @@ one more van saves 641 and with one more truck 2,160. Details are in the
   single-purpose classes: `Alns`, `LocalSearch`, `RouteMerger`,
   `TypeAssigner`, `Dispatcher`. A result is a plan (`Solution`) and the
   verifier's `Verdict`, which does not depend on the solver.
-- 701 tests, 13 of them Hypothesis properties that check hundreds of random
+- 717 tests, 13 of them Hypothesis properties that check hundreds of random
   routes against the verifier. A separate set tries to break the engine: NaN
   and infinity in the input, a plan with a vehicle type or node that does
   not exist, arbitrary plans from another system, an input file with one
@@ -372,8 +381,14 @@ one more van saves 641 and with one more truck 2,160. Details are in the
   both backends. Every speed-up started from that table; the story is in
   [docs/native-acceleration.md](docs/native-acceleration.md).
 - Input errors are codes (`GEO_UNKNOWN_DEPOT:van`, `VRP_CAPACITY_INVALID:van`):
-  the CLI prints one line and exits with status 2. A panic in the Rust kernel
-  becomes a Python exception, not a crash of the process.
+  the CLI prints one line and exits with status 2. Whole-number fields (fleet
+  size, depots, trip limit) are never rounded: `2.7` and `true` are errors.
+  A panic in the Rust kernel becomes a Python exception, not a crash of the
+  process.
+- `vrp-solve` exit statuses: 0, the plan is verified and serves every
+  mandatory order; 2, the input was refused or the plan breaks a rule; 3, the
+  plan is verified and written, but mandatory orders are left without a
+  vehicle. The CLI then lists them and names those no vehicle type can carry.
 
 ## Limitations
 

@@ -92,11 +92,22 @@ class BreakRule:
     split: tuple[float, float] | None = None
 
 
+def require_whole(value: object, code: str, *, minimum: int = 0) -> int:
+    """A whole number read from a file, or ``ValueError(code)``.
+
+    ``True``, ``2.7`` and ``"6"`` are refused rather than converted: ``int()``
+    would turn them into 1, 2 and 6 and change what the file says. ``2.0`` is
+    refused too, so that every reader applies one rule: whole numbers are
+    written without a fraction.
+    """
+    if isinstance(value, bool) or not isinstance(value, int) or value < minimum:
+        raise ValueError(code)
+    return value
+
+
 def require_count(value: object, who: str) -> int:
     """A fleet size: a whole number. ``True`` and ``2.7`` are refused, not rounded."""
-    if isinstance(value, bool) or not isinstance(value, int) or value < 0:
-        raise ValueError(f"VRP_COUNT_INVALID:{who}")
-    return value
+    return require_whole(value, f"VRP_COUNT_INVALID:{who}")
 
 
 @dataclass(frozen=True, slots=True)
@@ -388,9 +399,13 @@ def _validate(inst: Instance) -> tuple[tuple[int, ...], tuple[int, ...]]:
 def add_reload_stops(inst: Instance, type_id: str, max_trips: int, reload_time: float) -> Instance:
     """Copy of ``inst`` whose vehicle type ``type_id`` may run ``max_trips`` trips.
 
-    Appends ``count * (max_trips - 1)`` reload stops: copies of the type's
-    start depot (same place, same opening hours) whose service time is the
-    reload time. Every profile matrix gains the depot's rows and columns.
+    Appends ``count * (max_trips - 1)`` reload stops, at most one per order:
+    copies of the type's start depot (same place, same opening hours) whose
+    service time is the reload time. Every profile matrix gains the depot's
+    rows and columns. A plan never needs more reloads than orders (a trip
+    without an order is not worth its reload), so the cap changes no plan,
+    and a fleet of thousands with a high trip limit cannot make the matrices
+    grow with the square of the fleet.
     """
     from dataclasses import replace
 
@@ -400,7 +415,7 @@ def add_reload_stops(inst: Instance, type_id: str, max_trips: int, reload_time: 
         raise ValueError("VRP_TRIPS_INVALID")
     depot = vt.start_depot
     n = inst.n_nodes
-    extra = vt.count * (max_trips - 1)
+    extra = min(vt.count * (max_trips - 1), inst.n_requests)
     new_ids = tuple(range(n, n + extra))
     base = inst.nodes[depot]
     nodes = list(inst.nodes)

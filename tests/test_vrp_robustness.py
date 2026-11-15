@@ -408,7 +408,7 @@ def test_json_and_geo_refuse_a_fractional_fleet_count() -> None:
 
 
 def test_the_cli_fails_when_a_mandatory_order_is_left_out(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
     import mobiroute.vrp.alns as alns
     from mobiroute.cli import main
@@ -436,7 +436,73 @@ def test_the_cli_fails_when_a_mandatory_order_is_left_out(
             str(out),
         ]
     )
-    assert code == 2
+    # 3, not 2: the plan is legal and written; 2 is kept for refused input
+    # and broken plans, so a script can tell the two apart.
+    assert code == 3
     report = json.loads((out / "verdict.json").read_text(encoding="utf-8"))
     assert report["feasible"] is True and report["complete"] is False
     assert report["unassigned"]
+    printed = capsys.readouterr().out
+    assert "mandatory orders left out: T000, D001, D002, D003" in printed
+    assert "no vehicle type can carry" not in printed  # every order of the day fits a type
+
+
+@pytest.mark.parametrize(
+    ("path", "value", "code"),
+    [
+        (("vehicle_types", 0, "start_depot"), 0.5, "start_depot"),
+        (("vehicle_types", 0, "start_depot"), True, "start_depot"),
+        (("vehicle_types", 0, "end_depot"), "0", "end_depot"),
+        (("vehicle_types", 0, "max_trips"), 2.5, "VRP_TRIPS_INVALID"),
+        (("vehicle_types", 0, "max_trips"), 0, "VRP_TRIPS_INVALID"),
+        (("vehicle_types", 0, "reload_nodes"), [1.5], "reload_nodes"),
+        (("vehicle_types", 0, "reload_nodes"), "12", "reload_nodes"),
+        (("requests", 0, "delivery"), 2.0, "delivery"),
+        (("nodes", 1, "id"), 1.0, "nodes.id"),
+    ],
+)
+def test_json_whole_numbers_are_not_rounded(path: tuple[Any, ...], value: Any, code: str) -> None:
+    """Every whole-number field follows the fleet count: ``int()`` would change the file."""
+    data = json.loads(json.dumps(instance_to_dict(cargo_day(1, n_orders=2))))
+    node: Any = data
+    for key in path[:-1]:
+        node = node[key]
+    node[path[-1]] = value
+    with pytest.raises(ValueError, match=code):
+        instance_from_dict(data)
+
+
+@pytest.mark.parametrize("value", [2.5, True, "2", 0])
+def test_geo_trip_limit_is_a_whole_number(value: Any) -> None:
+    example = Path(__file__).resolve().parents[1] / "examples" / "chelny-day.geo.json"
+    raw = json.loads(example.read_text(encoding="utf-8"))
+    raw["vehicle_types"][0]["trips"] = {"max": value, "reload_min": 30}
+    with pytest.raises(ValueError, match="VRP_TRIPS_INVALID"):
+        geo.build(raw)
+
+
+def test_a_huge_fleet_does_not_grow_the_instance() -> None:
+    """Reload stops, OR-Tools vehicles and live units stop at the number of orders.
+
+    Before the cap a geo file with 20,000 vans and three trips asked for
+    40,000 reload stops and matrices of 1.6e9 cells per profile, and the
+    live dispatcher built a billion units. OR-Tools already capped its own.
+    """
+    from mobiroute.vrp.ortools_baseline import solve_ortools
+    from mobiroute.vrp.realtime import Dispatcher
+
+    example = Path(__file__).resolve().parents[1] / "examples" / "chelny-day.geo.json"
+    raw = json.loads(example.read_text(encoding="utf-8"))
+    raw["vehicle_types"][0]["count"] = 20_000
+    raw["vehicle_types"][0]["trips"] = {"max": 3, "reload_min": 30}
+    built = geo.build(raw)
+    inst = built.instance
+    van = next(vt for vt in inst.vehicle_types if vt.reload_nodes)
+    assert len(van.reload_nodes) == inst.n_requests
+    assert inst.n_nodes <= 3 * inst.n_requests + 10
+
+    day = cargo_day(1, n_orders=6)
+    huge = replace(day, vehicle_types=tuple(replace(vt, count=10**9) for vt in day.vehicle_types))
+    run = solve_ortools(huge, time_limit=1.0)
+    assert run.verdict.feasible
+    assert len(Dispatcher(huge).units) == 6 * len(huge.vehicle_types)
