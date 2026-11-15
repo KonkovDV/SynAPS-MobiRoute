@@ -122,6 +122,35 @@ fn pick_min(a: f64, b: f64) -> f64 {
 
 type Candidate = (f64, usize, usize);
 
+/// Bellman-Ford over flat arc lists, `dist` holding 0 at the source and
+/// infinity elsewhere: `true` iff the graph has no negative cycle.
+///
+/// Arcs are relaxed head to tail in list order, as in the Python reference.
+/// The loop lives in its own frame over borrowed slices: nothing there needs
+/// dropping when an index check panics, so unwinding (the release profile's
+/// choice) adds no landing pads to the hot loop.
+#[inline(never)]
+fn no_negative_cycle(tails: &[usize], heads: &[usize], weights: &[f64], dist: &mut [f64]) -> bool {
+    for _ in 0..dist.len().saturating_sub(1) {
+        let mut changed = false;
+        for ((&tail, &head), &weight) in tails.iter().zip(heads).zip(weights) {
+            let cand = dist[head] + weight;
+            if cand < dist[tail] - 1e-12 {
+                dist[tail] = cand;
+                changed = true;
+            }
+        }
+        if !changed {
+            return true;
+        }
+    }
+    tails
+        .iter()
+        .zip(heads)
+        .zip(weights)
+        .all(|((&tail, &head), &weight)| dist[head] + weight >= dist[tail] - TIME_EPS)
+}
+
 #[inline(always)]
 /// The `k` smallest values of `row` in ascending order (all of them if fewer),
 /// written to `out`. Equal values are interchangeable, so every prefix sum the
@@ -660,23 +689,9 @@ impl VrpKernel {
             heads.push(last);
             weights.push(self.max_dur[t]);
         }
-        let n_vertices = m + 1;
-        let mut dist = vec![f64::INFINITY; n_vertices];
+        let mut dist = vec![f64::INFINITY; m + 1];
         dist[z] = 0.0;
-        for _ in 0..n_vertices - 1 {
-            let mut changed = false;
-            for x in 0..tails.len() {
-                let cand = dist[heads[x]] + weights[x];
-                if cand < dist[tails[x]] - 1e-12 {
-                    dist[tails[x]] = cand;
-                    changed = true;
-                }
-            }
-            if !changed {
-                return true;
-            }
-        }
-        (0..tails.len()).all(|x| dist[heads[x]] + weights[x] >= dist[tails[x]] - TIME_EPS)
+        no_negative_cycle(&tails, &heads, &weights, &mut dist)
     }
 
     /// Feasibility of a fixed sequence under time-dependent travel (Python
