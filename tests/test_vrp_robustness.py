@@ -385,3 +385,58 @@ def test_ortools_refuses_an_order_that_costs_more_than_its_penalty() -> None:
     assert run.verdict.feasible
     assert run.solution.unassigned == {1}
     assert run.verdict.cost.total + 50.0 < 800.0
+
+
+def test_json_and_geo_refuse_a_fractional_fleet_count() -> None:
+    data = json.loads(json.dumps(instance_to_dict(cargo_day(1, n_orders=2))))
+    data["vehicle_types"][0]["count"] = 2.7
+    with pytest.raises(ValueError, match="VRP_COUNT_INVALID"):
+        instance_from_dict(data)
+    data["vehicle_types"][0]["count"] = True
+    with pytest.raises(ValueError, match="VRP_COUNT_INVALID"):
+        instance_from_dict(data)
+
+    example = Path(__file__).resolve().parents[1] / "examples" / "chelny-day.geo.json"
+    raw = json.loads(example.read_text(encoding="utf-8"))
+    raw["vehicle_types"][0]["count"] = 1.5
+    with pytest.raises(ValueError, match="VRP_COUNT_INVALID"):
+        geo.build(raw)
+    raw["vehicle_types"][0]["count"] = 4
+    raw["traffic"] = {"starts": ["00:00", "08:00"], "factors": [1.0, 0.6]}
+    with pytest.raises(ValueError, match="VRP_TRAFFIC_WITH_RIDE_LIMITS_OR_RESTS"):
+        geo.build(raw)
+
+
+def test_the_cli_fails_when_a_mandatory_order_is_left_out(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import mobiroute.vrp.alns as alns
+    from mobiroute.cli import main
+    from mobiroute.vrp.alns import SolveResult
+
+    def fake(inst: Instance, config: object = None, initial: object = None) -> SolveResult:
+        sol = Solution([], set(range(inst.n_requests)))
+        verdict = verify(inst, sol)
+        assert verdict.feasible and not verdict.complete
+        assert "INCOMPLETE" in verdict.summary()
+        return SolveResult(inst.name, sol, verdict, 0.0, 1, 0.0, "python", 1)
+
+    monkeypatch.setattr(alns, "solve", fake)
+    out = tmp_path / "out"
+    code = main(
+        [
+            "vrp-solve",
+            "--generate",
+            "cargo",
+            "--orders",
+            "4",
+            "--iterations",
+            "1",
+            "--out-dir",
+            str(out),
+        ]
+    )
+    assert code == 2
+    report = json.loads((out / "verdict.json").read_text(encoding="utf-8"))
+    assert report["feasible"] is True and report["complete"] is False
+    assert report["unassigned"]

@@ -25,6 +25,7 @@ from mobiroute.vrp.model import (
     SpeedProfile,
     VehicleType,
     euclidean_matrix,
+    require_count,
     single_profile,
 )
 
@@ -533,7 +534,7 @@ def _instance_from_dict(data: Mapping[str, Any]) -> Instance:
             VehicleType(
                 id=str(vt["id"]),
                 capacity=tuple(float(c) for c in vt["capacity"]),
-                count=int(vt["count"]),
+                count=require_count(vt["count"], str(vt.get("id", "?"))),
                 start_depot=int(vt["start_depot"]),
                 end_depot=int(vt["end_depot"]),
                 shift_start=float(vt["shift_start"]),

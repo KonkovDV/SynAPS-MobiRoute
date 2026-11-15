@@ -604,7 +604,10 @@ def _vrp_solve(args: argparse.Namespace) -> int:
                 + f"; on duty {kpi.duty / 60:.1f} h, waiting {kpi.waiting / 60:.1f} h"
             )
         )
-    return 0 if verdict.feasible else 2
+    # A feasible plan can still leave a mandatory order out. That is not a
+    # successful solve: ``complete`` is true only when every missing order
+    # was allowed to be refused.
+    return 0 if verdict.feasible and verdict.complete else 2
 
 
 def _vrp_dispatch(args: argparse.Namespace) -> int:

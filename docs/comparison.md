@@ -128,7 +128,11 @@ OR-Tools получает матрицы времени и стоимости н
 
 * Запрет въезда грузовиков по времени суток (окна по типу машины).
 * Многодневные рейсы: суточный и недельный отдых, недельные лимиты вождения.
-* Разделённый перерыв и пробки в ядре Rust (сейчас — эталон на Python).
+* Назначение типа машины и склейка маршрутов в ядре на Rust. На дне с восемью
+  типами это уже главный остаток времени в Python. Разделённый перерыв и
+  скорости по часам суток ядро считает с версии 0.6, план тот же.
+* Перерывы, несколько рейсов и пробки в живом диспетчере. Такой день он
+  отклоняет с кодом ошибки: ядро эти правила умеет, диспетчер — пока нет.
 
 ## Источники
 
@@ -189,4 +193,6 @@ for speed and routing-engine integration, OR-Tools for a broad ecosystem,
 Timefold for Java planning, Yandex Routing as a finished service. Tables:
 `docs/benchmarks/ortools-vs-alns.md`, `docs/benchmarks/solvers.md`.
 Next: time-of-day truck bans, multi-day trips with daily and weekly rest,
-split breaks and traffic in the Rust kernel.
+vehicle-type assignment and route merges in the Rust kernel, and the same
+rules in the live dispatcher. Split breaks and rush hours have run in the
+kernel since 0.6, with the same plans as the Python reference.

@@ -4,14 +4,15 @@ Two hot paths are compiled with PyO3 (`native/mobiroute_native`):
 
 | Kernel | Used by | Python reference | Parity tests |
 | --- | --- | --- | --- |
-| `VrpKernel` (`src/vrp.rs`) | `mobiroute.vrp`: regret repair, insertion tests, exact route timing (rests, reload stops), guided ejection | `vrp/insertion.py`, `Alns._eject_insert` | `tests/test_vrp_native.py` — identical plans, identical ALNS trajectories, with and without rests and reloads |
+| `VrpKernel` (`src/vrp.rs`) | `mobiroute.vrp`: regret repair, insertion tests, exact route timing (rests, split breaks, reload stops, time-dependent travel), guided ejection | `vrp/insertion.py`, `Alns._eject_insert` | `tests/test_vrp_native.py` — identical plans and ALNS trajectories, including rests, reloads, split breaks and rush hours |
 | `InsertionEngine` (`src/lib.rs`) | paratransit kernel: greedy, beam, ALNS, online insertion | `solvers/insertion_kernel.py` (structure-of-arrays oracle) | `tests/test_insertion_kernel.py`, `test_native_*` |
 
 Without the extension the rich-VRP engine falls back to Python and gives the
 same plans, only slower. `MOBIROUTE_DISABLE_NATIVE=1` forces the fallback;
 an extension whose version does not match the bridge (`KERNEL_ABI`) is
-ignored rather than trusted. Instances with time-dependent travel always run
-on the Python reference. The paratransit solvers require the extension.
+ignored rather than trusted. Rests, split breaks, reload stops and
+time-dependent travel take the same path: the kernel when it is present, the
+Python reference otherwise. The paratransit solvers require the extension.
 
 ```bash
 python -m pip install maturin

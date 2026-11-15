@@ -202,7 +202,7 @@ def render(
         "",
         "Time costs are charged on free-flow minutes in both plans, so the cost column shows "
         "what the routing change costs, not the extra hours spent in traffic. The time-aware "
-        "search runs on the Python reference (the Rust kernel covers static travel times).",
+        "search runs on the Rust kernel and returns the same plan as the Python reference.",
         "",
     ]
     return "\n".join(lines)

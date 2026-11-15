@@ -92,6 +92,13 @@ class BreakRule:
     split: tuple[float, float] | None = None
 
 
+def require_count(value: object, who: str) -> int:
+    """A fleet size: a whole number. ``True`` and ``2.7`` are refused, not rounded."""
+    if isinstance(value, bool) or not isinstance(value, int) or value < 0:
+        raise ValueError(f"VRP_COUNT_INVALID:{who}")
+    return value
+
+
 @dataclass(frozen=True, slots=True)
 class VehicleType:
     """A class of identical vehicles.

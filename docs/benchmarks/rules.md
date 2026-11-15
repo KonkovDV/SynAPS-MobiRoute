@@ -52,4 +52,4 @@ The freight days with 55% of free-flow speed 07:30-10:00 and 60% 17:00-19:30 (Ic
 | cargo-day-4-120 | 190307 | 12 | 10 | 112.5 | 206155 | 17 / 20 | +8.33% | yes |
 | cargo-day-5-120 | 183851 | 13 | 16 | 318.0 | 204087 | 18 / 20 | +11.01% | yes |
 
-Time costs are charged on free-flow minutes in both plans, so the cost column shows what the routing change costs, not the extra hours spent in traffic. The time-aware search runs on the Python reference (the Rust kernel covers static travel times).
+Time costs are charged on free-flow minutes in both plans, so the cost column shows what the routing change costs, not the extra hours spent in traffic. The time-aware search runs on the Rust kernel and returns the same plan as the Python reference.

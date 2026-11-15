@@ -31,9 +31,7 @@ durations are minutes, distances kilometres::
                                    "split_min": [15, 30]},
                          "trips": {"max": 2, "reload_min": 30}}],
       "profiles": {"van": {"speed_kmh": 32, "detour": 1.3},
-                   "truck": {"speed_kmh": 26, "detour": 1.3, "osrm_time_factor": 1.25}},
-      "traffic": {"starts": ["00:00", "07:30", "10:00", "17:00", "19:30"],
-                  "factors": [1.0, 0.55, 1.0, 0.6, 1.0]}
+                   "truck": {"speed_kmh": 26, "detour": 1.3, "osrm_time_factor": 1.25}}
     }
 
 A ``zone`` is a polygon or a circle (``center``, ``radius_km``) with road-sign
@@ -47,7 +45,12 @@ matrices from a Valhalla server (``vrp-solve --valhalla URL``).
 
 An order without ``pickup`` is loaded at the depot; without ``delivery`` it
 is a collection. ``rests``, ``trips``, ``traffic`` and ``currency`` (a label
-for route sheets) are optional.
+for route sheets) are optional. ``traffic`` is one speed profile for the
+whole network (``starts`` as ``"HH:MM"``, ``factors`` as shares of free-flow
+speed). A file that sets ``traffic`` and also ``rests`` or ``max_ride_min``
+is refused (``VRP_TRAFFIC_WITH_RIDE_LIMITS_OR_RESTS_UNSUPPORTED``): each rule
+is solved, the two are not solved on the same day. ``count`` is a whole
+number; ``2.7`` is an error, not two vehicles.
 
 Road matrices come from one of two sources:
 
@@ -83,6 +86,7 @@ from mobiroute.vrp.model import (
     SpeedProfile,
     VehicleType,
     add_reload_stops,
+    require_count,
 )
 
 EARTH_KM = 6371.0088
@@ -510,7 +514,7 @@ def _build(data: Mapping[str, Any], source: MatrixSource) -> GeoInstance:
             VehicleType(
                 id=vid,
                 capacity=tuple(float(q) for q in vt["capacity"]),
-                count=int(vt.get("count", 1)),
+                count=require_count(vt.get("count", 1), vid),
                 start_depot=start,
                 end_depot=end,
                 shift_start=minutes(shift[0]),
