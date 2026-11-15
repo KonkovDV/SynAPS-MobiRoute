@@ -351,7 +351,7 @@ one more van saves 641 and with one more truck 2,160. Details are in the
   single-purpose classes: `Alns`, `LocalSearch`, `RouteMerger`,
   `TypeAssigner`, `Dispatcher`. A result is a plan (`Solution`) and the
   verifier's `Verdict`, which does not depend on the solver.
-- 728 tests, 13 of them Hypothesis properties that check hundreds of random
+- 733 tests, 16 of them Hypothesis properties that check hundreds of random
   routes against the verifier. A separate set tries to break the engine: NaN
   and infinity in the input, a plan with a vehicle type or node that does
   not exist, arbitrary plans from another system, an input file with one
@@ -397,10 +397,12 @@ one more van saves 641 and with one more truck 2,160. Details are in the
   no carrier's data and no pilot.
 - Offline matrices are straight-line distances times a detour factor; real
   roads need an OSRM or Valhalla server.
-- The live dispatcher plans drivers' breaks with the insertion policy only,
-  not with re-optimisation. It refuses a day with rush hours or several trips
-  with an error code, and a ride limit has to be written as a delivery
-  deadline.
+- The live dispatcher plans drivers' breaks from the driving already done,
+  both when it inserts an order and when it keeps a re-optimised plan: the
+  new order of stops stays only if the break still has a legal place, and a
+  break already begun is not moved. OR-Tools does not run that day. A day
+  with rush hours or several trips is refused with an error code, and a ride
+  limit has to be written as a delivery deadline.
 - There are no time-of-day truck bans and no multi-day trips with daily rest.
 
 The full list and the plans are in [docs/limitations.md](docs/limitations.md).

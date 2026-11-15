@@ -175,7 +175,8 @@ def main(argv: list[str] | None = None) -> int:
         "--rests",
         action="store_true",
         help="drivers' break rule: 45 min after 4.5 h of driving, or 15 + 30 "
-        "(Ministry of Transport Order No. 160, point 11); insertion policy only",
+        "(Ministry of Transport Order No. 160, point 11). Re-optimisation keeps "
+        "a new plan only when the break still fits; OR-Tools refuses the day",
     )
     rt.add_argument("--out-dir", type=Path, required=True)
 

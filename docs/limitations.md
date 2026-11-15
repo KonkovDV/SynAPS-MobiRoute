@@ -78,10 +78,11 @@ next.
   and service, and a result for another objective would be mislabelled.
 * The live dispatcher plans the break rule when it answers an order: the
   break goes into the part of the route not yet driven, counting the driving
-  already done, and a break once begun is never moved. It does so with the
-  insertion policy only: the ALNS pass and the OR-Tools re-solve plan from a
-  vehicle's current position and would count driving from there, so a day
-  with rests and either of them is refused. Multi-trip days and
+  already done, and a break once begun is never moved (Lemma 1c). ALNS
+  re-optimisation sees only the open stops and would count that driving as
+  zero, so a proposal is kept only when every new suffix still satisfies the
+  lemma, the verifier accepts the day and the verified cost falls. OR-Tools
+  has no break variable and that policy refuses the day. Multi-trip days and
   time-dependent travel are refused too. Ride limits have to be written as
   delivery deadlines, and vehicles idle where they finish instead of
   repositioning.

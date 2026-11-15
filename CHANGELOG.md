@@ -15,9 +15,11 @@
   reason says so. `dispatch.json` lists every break, and the report counts
   them. On the seed-5 plant day the dispatcher plans 3 breaks and accepts 119
   orders against 120 without the rule; every route passes the verifier. The
-  ALNS pass and the OR-Tools re-solve plan from a vehicle's current position
-  and would count driving from there, so a day with rests runs on the
-  insertion policy only (`REALTIME_RESTS_NEED_THE_INSERTION_POLICY`).
+  ALNS pass sees only the open stops and would count that driving as zero, so
+  a proposal is kept only when every new suffix still has a legal break
+  (Lemma 1c), the verifier accepts the day and the verified cost falls. A
+  break already begun is not an open gap. OR-Tools has no break variable
+  (`REALTIME_ORTOLS_HAS_NO_BREAK_RULE`).
 - The dispatcher's report counts the orders no vehicle type can carry
   (`uncarriable`) and gives acceptance against the rest
   (`acceptance_of_carriable`); `vrp-dispatch` prints both. On the seed-5

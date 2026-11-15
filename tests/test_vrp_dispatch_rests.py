@@ -127,11 +127,26 @@ def test_a_split_break_is_used_when_a_whole_one_does_not_fit() -> None:
     assert [d.accepted for d in simulate(whole).decisions] == [True, True, False]
 
 
-def test_rest_days_run_on_the_insertion_policy_only() -> None:
+def test_reoptimisation_with_breaks_obeys_the_stints() -> None:
+    """A full day, not a hand-built suffix: every kept proposal stays inside D."""
+    inst = _with_rule(plant_day(1, n_moves=16, area_km=8.0))
+    dispatcher = Dispatcher(inst, policy="insertion+alns", alns_iterations=40)
+    report = dispatcher.run()
+    assert report.verified, report.violations
+    for before, after in _driving_around_breaks(dispatcher):
+        assert before <= 270.0 + 1e-6 and after <= 270.0 + 1e-6
+    plain = Dispatcher(
+        plant_day(1, n_moves=16, area_km=8.0), policy="insertion+alns", alns_iterations=40
+    )
+    assert plain.run().verified
+
+
+def test_ortools_has_no_break_rule() -> None:
+    """ALNS re-optimisation is gated by Lemma 1c; OR-Tools has no break variable."""
     inst = _with_rule(plant_day(5, n_moves=20))
-    for policy in ("insertion+alns", "ortools-resolve"):
-        with pytest.raises(ValueError, match="REALTIME_RESTS_NEED_THE_INSERTION_POLICY"):
-            Dispatcher(inst, policy=policy)  # type: ignore[arg-type]
+    Dispatcher(inst, policy="insertion+alns")
+    with pytest.raises(ValueError, match="REALTIME_ORTOLS_HAS_NO_BREAK_RULE"):
+        Dispatcher(inst, policy="ortools-resolve")
 
 
 def test_the_service_at_the_current_stop_counts_once() -> None:
@@ -168,7 +183,10 @@ def test_cli_dispatch_with_breaks(tmp_path: Path, capsys: pytest.CaptureFixture[
     data = json.loads((out / "dispatch.json").read_text(encoding="utf-8"))
     assert data["verified"] and "breaks" in data["kpi"] and isinstance(data["rests"], list)
     assert "breaks" in capsys.readouterr().out
-    code = main(["vrp-dispatch", "--day", "plant", "--orders", "20", "--rests",
+    code = main(["vrp-dispatch", "--day", "plant", "--orders", "8", "--rests",
                  "--policy", "insertion+alns", "--out-dir", str(out)])  # fmt: skip
+    assert code == 0
+    code = main(["vrp-dispatch", "--day", "plant", "--orders", "8", "--rests",
+                 "--policy", "ortools-resolve", "--out-dir", str(out)])  # fmt: skip
     assert code == 2
-    assert "REALTIME_RESTS_NEED_THE_INSERTION_POLICY" in capsys.readouterr().err
+    assert "REALTIME_ORTOLS_HAS_NO_BREAK_RULE" in capsys.readouterr().err

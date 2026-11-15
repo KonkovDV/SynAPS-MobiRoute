@@ -79,6 +79,14 @@ $$
 \text{duration}_{\min} = \max\big(G_0,\ A - \min_k(l_k - H_k)\big).
 $$
 
+Leaving at $t$ reaches the end at $\max(t + G_0,\ A)$, so the duration is
+$\max(G_0,\ A - t)$, which falls as $t$ grows. On a feasible route the latest
+feasible departure is $t^\star = \min_k(l_k - H_k)$, and the minimum is the
+value at $t^\star$. Depot windows are tightened to the shift, as in section 4.
+The identity uses only windows and constant travel times.
+A ride limit, a rest or a speed that depends on the hour adds a constraint
+this argument does not see; those routes are timed by section 4.
+
 After an insertion, $G$ and $H$ shift by known constants on three segments
 (before the pickup, between pickup and delivery, after the delivery), so
 prefix and suffix extrema of $e_k + G_k$ and $l_k - H_k$ give the new duration
@@ -218,8 +226,12 @@ $\sum_{q \in \rho} u_q + v_k = c_\rho$. Dual feasibility for the column
 $\rho \setminus r$ gives $\sum_{q \in \rho,\, q \ne r} u_q + v_k \le
 c_{\rho \setminus r}$. Subtracting, $u_r \ge c_\rho - c_{\rho \setminus
 r}$. If $r$ is alone on $\rho$ the saving is $c_\rho$ and
-$u_r = c_\rho - v_k \ge c_\rho$. A reload-class dual $w \le 0$ enters both
-rows with multiplicities $m \ge m'$, and $m w \le m' w$ keeps the inequality.
+$u_r = c_\rho - v_k \ge c_\rho$. A reload-class dual $w \le 0$ is the same
+subtraction with multiplicities. Deleting the stops of $r$ cannot add a
+reload visit, so $\rho \setminus r$ uses $m' \le m$ copies of the class.
+Complementary slackness and dual feasibility give
+$u_r + (m - m')w \ge c_\rho - c_{\rho \setminus r}$. The term
+$(m - m')w$ is at most zero, so $u_r$ is at least the saving.
 $\square$
 
 The module puts these columns into the pool (and the plan's routes on every
@@ -293,12 +305,15 @@ $P_g \in [\Delta - D, D]$ or $P_{g+1} \in [\Delta - D, D]$ for which the
 system of section 4, with the travel arc of gap $g$ lengthened by $b$, has no
 negative cycle.
 
-*Proof.* One rest splits the driving into a part before and a part after it;
-both must be at most $D$, which with a single rest per route forces
-$\Delta \le 2D$. A rest taken between the end of service at $v_g$ and the start
-at $v_{g+1}$ is either before leg $g$ (at $v_g$; driving before it is $P_g$) or
-after it (at $v_{g+1}$; $P_{g+1}$), and in both cases the only timing
-consequence is $B_{g+1} \ge B_g + s_g + \tau_g + b$: the rest is one
+*Proof.* One rest splits the driving into a part $P$ before it and
+$\Delta - P$ after it. Both are at most $D$, so $P \in [\Delta - D,\ D]$, and
+a single rest forces $\Delta \le 2D$ (otherwise the interval is empty). A rest
+cannot fall inside a leg, so the only candidates for $P$ are the partial sums:
+$P_g$, the rest taken at $v_g$ before leg $g$, and $P_{g+1}$, the rest taken
+on arrival at $v_{g+1}$. If some leg is longer than $D$ it lies wholly on one
+side of every such cut, and that side exceeds $D$, so no cut is admissible;
+the certificate then names the longest leg. In either admissible case the only
+timing consequence is $B_{g+1} \ge B_g + s_g + \tau_g + b$: the rest is one
 contiguous block of $b$ minutes inside the gap, and slack the gap has anyway
 (a window ahead) can hold it, so a rest costs time only where the gap is
 short of $b$. For a fixed $g$ the system is again of difference constraints
@@ -366,6 +381,61 @@ first feasible place, which on random routes overstated the shift by up to
 the whole 45 minutes when a later gap hid the rest in waiting time; duty-time
 prices and route sheets used that number. The regression test compares the
 reported shift with enumeration of all places.
+
+### A route that has already left the depot
+
+At time $\tau$ the vehicle has a frozen prefix $v_0,\ldots,v_f$: every stop
+whose service has started, and the stop it is already driving towards. Let
+$\Phi$ be the driving time of that prefix, and let $\Phi_\star$ be the driving
+from the shift start up to the last *final* break already behind the driver
+— a break whose start is at most $\tau$, the whole break or the second part
+of a split — or $0$ if there is none. The residual is $R = \Phi - \Phi_\star$.
+The open suffix is timed from the ready instant, the later of $\tau$ and the
+end of a break still in progress. Its legs are $\sigma_0,\ldots$, the first of
+them the drive from the current position, and $\Delta^+ = \sum \sigma$.
+
+**Lemma 1c.** Under the same rule as Lemmas 1 and 1a — one final break on the
+route, and a break already begun left where it is:
+
+* if a final break is behind the driver, the suffix is feasible if and only if
+  $R + \Delta^+ \le D$ and, with no new break, the suffix has no negative cycle
+  from the ready instant;
+* otherwise it is feasible if and only if $\Phi + \Delta^+ \le 2D$ and either
+  $\Phi + \Delta^+ \le D$ with that same timing, or some *open* gap is
+  admissible for the concatenated driving $\Phi + \Delta^+$ in the sense of
+  Lemma 1 — an endpoint of the gap lies in $[\Phi + \Delta^+ - D,\ D]$ — and
+  the system with the break in that gap has no negative cycle. A split break
+  puts its second part in such a gap and its first part in an earlier open
+  gap, or uses a first part already taken.
+
+*Proof.* The prefix is no longer a decision, and a break with start at most
+$\tau$ is fixed. In the first case the route's one final break has been used,
+so none remains to insert, and the counter restarted at $\Phi_\star$: the
+driving still to come is $R + \Delta^+$. In the second case the final break,
+if the total needs one, cannot sit on a prefix gap. Lemmas 1 and 1a applied
+to the concatenated driving give $\Phi + \Delta^+ \le 2D$ and an admissible
+gap; the open gaps are those whose partial sums are at least $\Phi$, which is
+where a scan of the suffix starts. For a fixed open gap the timing
+constraints are those of section 4 on the suffix, the prefix clocks being
+already realised. A leg of the whole route longer than $D$ is still
+inadmissible, by the argument in Lemma 1. $\square$
+
+The first part of a split may also be booked into a wait the suffix already
+has, at no extra cost. That does not change the statement: it is one of the
+placements Lemma 1a already allows.
+
+**Corollary.** Re-optimisation rebuilds only the open stops, as a static route
+that starts at the current position, so it counts the residual driving as
+zero. Its proposal continues the day feasibly if and only if every vehicle's
+new suffix satisfies Lemma 1c. The dispatcher keeps such a proposal only when
+the independent verifier accepts the whole day and the verified cost of
+section 1 strictly falls. A break with start at most $\tau$ is not an open
+gap, so it stays. OR-Tools Routing has no break variable, and the
+re-solve-per-order policy therefore refuses a day with a rest rule.
+
+`Dispatcher._place` is the test in the lemma; `Dispatcher._apply_if_breaks_hold`
+is the corollary. Both are held to the driving condition on random leg lengths
+and on a hand-built continuation.
 
 ## 4b. Multi-trip days
 
@@ -454,11 +524,14 @@ $(B_{\text{start}}, B_{\text{end}})$ whose bounds are shortest-path
 distances: $L_0 \le B_{\text{start}} \le U_0$,
 $L_e \le B_{\text{end}} \le U_e$ and
 $c \le B_{\text{end}} - B_{\text{start}} \le C$, so
-$E = \max(L_e, L_0 + c)$. The point $(E - c, E)$ satisfies all of them:
-$E - c \ge L_0$ by the formula for $E$; $E - c \le U_0$ because the path
-$\text{end} \to z \to \text{start}$ gives $c \ge L_e - U_0$ and
-$L_0 \le U_0$; $E \le U_e$ because the earliest schedule attains $E$; the
-duration is $c \le C$. So a full schedule with these two values exists, and
+$E = \max(L_e, L_0 + c)$. The point $(E - c, E)$ satisfies all of them.
+$E - c \ge L_0$ because $E \ge L_0 + c$. For the upper bound, one path from
+the end to the start is $\text{end} \to z \to \text{start}$, so
+$\delta(\text{end}, \text{start}) \le -L_e + U_0$, that is
+$c \ge L_e - U_0$. If $E = L_e$ then $E - c \le U_0$; if
+$E = L_0 + c$ then $E - c = L_0 \le U_0$. $E \le U_e$ because the earliest
+schedule attains $E$ and is feasible. The duration of the point is $c$, and
+$c \le C$. So a full schedule with these two values exists, and
 the system with $B_{\text{start}} \ge E - c$ is feasible. Its earliest
 schedule $B^*$ is pointwise below that schedule, so $B^*_{\text{end}} \le E$,
 and $B^*_{\text{end}} \ge E$ by the definition of $E$. Then

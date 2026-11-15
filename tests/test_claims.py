@@ -229,6 +229,7 @@ def test_the_docs_do_not_leave_traffic_and_split_breaks_on_python() -> None:
     assert "эталоне Python" not in cargo
     assert "эталон на Python" not in comparison
     assert "split breaks and traffic in the Rust kernel" not in comparison
+    assert "диспетчер — пока нет" not in comparison
 
 
 def test_the_plant_note_names_the_orders_no_vehicle_can_carry() -> None:

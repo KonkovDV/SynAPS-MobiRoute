@@ -22,7 +22,8 @@ ordinary static instance and improved by ALNS:
 
 The current plan seeds the search, so the result is never worse. The same
 snapshot can be handed to OR-Tools, which is how the re-solve-per-order
-policy is measured.
+policy is measured. OR-Tools has no driving-time break, so that policy
+refuses a day with a rest rule.
 
 Driver rests
 ------------
@@ -32,8 +33,11 @@ route already driven fixes how long the driver has been at the wheel and
 whether the break, or its first part, is behind them; an order is inserted
 only where the rest of the route still has a legal place for the break, and
 the plan carries the break with its start. A break once started is never
-moved. With rests only the ``insertion`` policy runs: the static
-re-optimisation would start every driver's day afresh.
+moved. ALNS re-optimisation sees only the stops not yet driven, from the
+vehicle's current position, so it does not know the driving already done.
+A proposal is kept only when every new suffix still has a legal break under
+that count, a break already begun stays where it is, the independent
+verifier accepts the whole day and the verified cost falls.
 
 KPIs: acceptance, time from call to pickup (vehicle arrival lead time), ride
 time, distance and the part of it driven empty, vehicles used, decision
@@ -153,11 +157,10 @@ class Dispatcher:
             raise ValueError("REALTIME_MULTI_TRIP_UNSUPPORTED")
         if inst.has_traffic:
             raise ValueError("REALTIME_TIME_DEPENDENT_TRAVEL_UNSUPPORTED")
-        if inst.has_rest_rules and policy != "insertion":
-            # Re-optimisation writes the live state as a static day, where
-            # every driver starts with a full allowance; that would undo the
-            # breaks already taken.
-            raise ValueError("REALTIME_RESTS_NEED_THE_INSERTION_POLICY")
+        if inst.has_rest_rules and policy == "ortools-resolve":
+            # OR-Tools Routing has no driving-time break. Applying its routes
+            # would drop the breaks already planned.
+            raise ValueError("REALTIME_ORTOLS_HAS_NO_BREAK_RULE")
         self.inst = inst
         self.c = Compiled(inst)
         self.policy = policy
@@ -642,6 +645,88 @@ class Dispatcher:
                 if u.left is None:
                     u.left = ready
 
+    def _suffixes(self, plan: Solution, owners: list[tuple[int, int]]) -> dict[int, list[int]]:
+        """Open stops per unit in a snapshot plan. Idle units are taken in order."""
+        idle_pool: dict[int, list[int]] = {}
+        for k, u in enumerate(self.units):
+            if not u.used:
+                idle_pool.setdefault(u.t, []).append(k)
+        new_suffix: dict[int, list[int]] = {ref: [] for kind, ref in owners if kind == 0}
+        for route in plan.routes:
+            kind, ref = owners[route.vehicle_type]
+            if kind == 0:
+                new_suffix[ref] = list(route.nodes)
+            else:
+                new_suffix[idle_pool[ref].pop(0)] = list(route.nodes)
+        return new_suffix
+
+    def _live_cost(self) -> float | None:
+        """Verified money cost of the current routes, or ``None`` if one breaks a rule."""
+        routes = [Route(u.t, list(u.plan)) for u in self.units if u.plan]
+        served = {self.inst.request_of(n) for route in routes for n in route.nodes}
+        verdict = verify(self.inst, Solution(routes, set(range(self.inst.n_requests)) - served))
+        if not verdict.feasible:
+            return None
+        return verdict.cost.total
+
+    def _remember(self) -> list[tuple[list[int], list[float], list[Rest], bool, float | None]]:
+        return [(u.plan.copy(), u.starts.copy(), list(u.rests), u.used, u.left) for u in self.units]
+
+    def _recall(
+        self, saved: list[tuple[list[int], list[float], list[Rest], bool, float | None]]
+    ) -> None:
+        for u, (plan, starts, rests, used, left) in zip(self.units, saved, strict=True):
+            u.plan, u.starts, u.rests, u.used, u.left = plan, starts, rests, used, left
+
+    def _apply_if_breaks_hold(
+        self, tau: float, plan: Solution, owners: list[tuple[int, int]]
+    ) -> bool:
+        """Keep ``plan`` only when Lemma 1c holds and the verified cost falls.
+
+        ALNS timed the open stops from the current position and counted the
+        residual driving as zero. ``_place`` is the test in the lemma: the
+        driving already done, a break already begun left where it is. The
+        verifier prices the whole day; a rejected proposal is not applied.
+        """
+        before = self._live_cost()
+        if before is None:
+            return False
+        new_suffix = self._suffixes(plan, owners)
+        prepared: list[tuple[int, int, list[int], _Placement | None, float]] = []
+        for k, suffix in new_suffix.items():
+            u = self.units[k]
+            f, origin, ready = self._state(u, tau)
+            if self._resting(u.t):
+                placed = self._place(u, f, tau, origin, ready, suffix, self._end_by(u, ready))
+                if placed is None:
+                    return False
+            else:
+                placed = None
+            prepared.append((k, f, suffix, placed, ready))
+        saved = self._remember()
+        for k, f, suffix, placed, ready in prepared:
+            u = self.units[k]
+            u.plan = u.plan[:f] + suffix
+            if placed is None:
+                origin, _ = self._origin(u, f, tau)
+                u.starts = u.starts[:f] + self._times(u.t, origin, ready, suffix)
+            else:
+                u.starts = u.starts[:f] + list(placed.starts)
+                u.rests = self._behind(u, f, tau) + [
+                    Rest(f + arc, start, minutes, driven, final)
+                    for arc, start, minutes, driven, final in placed.rests
+                ]
+            if suffix:
+                u.used = True
+                if u.left is None:
+                    u.left = ready
+        after = self._live_cost()
+        if after is None or after > before - 1e-6:
+            self._recall(saved)
+            return False
+        self.reopt_gain += before - after
+        return True
+
     def _reoptimize(self, tau: float) -> None:
         began = time.perf_counter()
         snap, plan, owners = self.snapshot(tau)
@@ -654,8 +739,14 @@ class Dispatcher:
             initial=plan,
         )
         if res.verdict.feasible and not res.solution.unassigned and res.objective < before - 1e-9:
-            self._apply_snapshot(tau, snap, res.solution, owners)
-            self.reopt_gain += before - res.objective
+            if self.inst.has_rest_rules:
+                # The snapshot priced a driver who starts fresh at the current
+                # position. Keep the new order of stops only when the driving
+                # already done still leaves every break a legal place.
+                self._apply_if_breaks_hold(tau, res.solution, owners)
+            else:
+                self._apply_snapshot(tau, snap, res.solution, owners)
+                self.reopt_gain += before - res.objective
         self.reopt_runs += 1
         self.reopt_seconds += time.perf_counter() - began
 

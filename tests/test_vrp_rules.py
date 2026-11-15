@@ -207,11 +207,12 @@ def test_lanes_without_rules_say_so() -> None:
         solve_ortools(rested, time_limit=1.0)
     with pytest.raises(ValueError, match="EXACT_MULTI_TRIP_UNSUPPORTED"):
         solve_exact(_two_wave_day(2), time_limit=1.0)
-    # The live dispatcher plans breaks with the insertion policy; the policies
-    # that re-solve the live state as a static day refuse them.
+    # OR-Tools has no break variable. ALNS may propose a new suffix; Lemma 1c
+    # decides whether the driving already done still allows it.
     Dispatcher(rested)
-    with pytest.raises(ValueError, match="REALTIME_RESTS_NEED_THE_INSERTION_POLICY"):
-        Dispatcher(rested, policy="insertion+alns")
+    Dispatcher(rested, policy="insertion+alns")
+    with pytest.raises(ValueError, match="REALTIME_ORTOLS_HAS_NO_BREAK_RULE"):
+        Dispatcher(rested, policy="ortools-resolve")
     with pytest.raises(ValueError, match="REALTIME_MULTI_TRIP_UNSUPPORTED"):
         Dispatcher(_two_wave_day(2))
 
