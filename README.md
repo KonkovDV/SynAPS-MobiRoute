@@ -361,8 +361,8 @@ LP-оценка по пулу из 1482 маршрутов: 26 843,80 RUB — п
   нет.
 - `mypy --strict`, `ruff`, `cargo clippy -D warnings` и `cargo fmt` в CI.
   Каждый запрос на слияние проходит ещё CodeQL (Python, JavaScript, Rust),
-  `pip-audit` и `cargo audit`, поиск секретов gitleaks по всей истории и
-  проверку новых зависимостей: копилефт-лицензии GPL и AGPL не пропускаются.
+  `pip-audit` и `cargo audit` и поиск секретов gitleaks по всей истории, а
+  тест читает лицензии всего дерева зависимостей и не пропускает GPL и AGPL.
   Сторонние GitHub Actions закреплены по SHA, Dependabot раз в неделю
   предлагает обновления, OpenSSF Scorecard оценивает цепочку поставки.
 - Ядро на Rust повторяет эталон на Python операция в операцию. Тесты требуют

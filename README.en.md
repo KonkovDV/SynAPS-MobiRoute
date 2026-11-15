@@ -361,10 +361,10 @@ one more van saves 641 and with one more truck 2,160. Details are in the
   kernels, with no difference found.
 - `mypy --strict`, `ruff`, `cargo clippy -D warnings` and `cargo fmt` in CI.
   Every pull request also gets CodeQL (Python, JavaScript, Rust), `pip-audit`
-  and `cargo audit`, a gitleaks scan of the whole history and a review of new
-  dependencies that refuses GPL and AGPL licences. Third-party GitHub Actions
-  are pinned by SHA, Dependabot proposes updates weekly, and OpenSSF
-  Scorecard rates the supply chain.
+  and `cargo audit` and a gitleaks scan of the whole history, and a test
+  reads the licences of the whole dependency tree and refuses GPL and AGPL.
+  Third-party GitHub Actions are pinned by SHA, Dependabot proposes updates
+  weekly, and OpenSSF Scorecard rates the supply chain.
 - The Rust kernel follows the Python reference operation by operation. Tests
   require identical plans, down to whole ALNS trajectories, so the fast path
   cannot drift from the slow one.

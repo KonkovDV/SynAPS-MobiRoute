@@ -11,9 +11,12 @@ from __future__ import annotations
 
 import ast
 import re
+from importlib.metadata import Distribution, PackageNotFoundError, distribution
 from pathlib import Path
 
 import pytest
+from packaging.requirements import Requirement
+from packaging.utils import canonicalize_name
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -115,3 +118,48 @@ def test_the_verifier_shares_no_code_with_the_search() -> None:
         "mobiroute.vrp.solution",
         "mobiroute.vrp.traffic",
     }
+
+
+#: Strong copyleft (GPL, AGPL, any version); LGPL and MPL are not matched.
+COPYLEFT = re.compile(r"(?<![\w-])A?GPL(?:v?\d|-\d|\b)|GNU (?:Affero )?General Public License")
+
+
+def _dependencies(root: str, extras: tuple[str, ...]) -> dict[str, Distribution]:
+    """Installed distributions ``root[extras]`` pulls in, transitively."""
+    found: dict[str, Distribution] = {}
+    todo = [(root, extras)]
+    while todo:
+        name, wanted = todo.pop()
+        key = canonicalize_name(name)
+        if key in found:
+            continue
+        try:
+            found[key] = distribution(name)
+        except PackageNotFoundError:
+            continue
+        for raw in found[key].requires or []:
+            req = Requirement(raw)
+            envs = [{"extra": extra} for extra in wanted] or [{"extra": ""}]
+            if req.marker is None or any(req.marker.evaluate(env) for env in envs):
+                todo.append((req.name, tuple(req.extras)))
+    return found
+
+
+def test_no_dependency_is_under_gpl_or_agpl() -> None:
+    """Users of this MIT package inherit no copyleft duty from a dependency.
+
+    Runtime and development dependencies, transitively, by their licence
+    expression, licence field and licence classifiers. LGPL and MPL pass:
+    their terms do not reach code that only imports the library.
+    """
+    tree = _dependencies("synaps-mobiroute", ("dev",))
+    assert "ortools" in tree and "pytest" in tree
+    copyleft = {}
+    for key, dist in tree.items():
+        meta = dist.metadata
+        texts = [meta.get("License-Expression") or "", (meta.get("License") or "")[:200]]
+        texts += [c for c in meta.get_all("Classifier") or [] if c.startswith("License ::")]
+        hits = [t for t in texts if COPYLEFT.search(t)]
+        if hits:
+            copyleft[key] = hits
+    assert not copyleft

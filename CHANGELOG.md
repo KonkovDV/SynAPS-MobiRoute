@@ -24,14 +24,14 @@
   legal rules described as model constraints and not legal advice; the site
   sets no cookies and loads no third-party services.
 - Supply-chain checks, as in the other SynAPS repositories: CodeQL for
-  Python, JavaScript and Rust, OpenSSF Scorecard, review of new dependencies
-  (high-severity advisories and GPL or AGPL licences fail it), Dependabot for
-  pip, Cargo and Actions, a gitleaks scan of the whole history, and every
-  third-party action pinned by SHA.
+  Python, JavaScript and Rust, OpenSSF Scorecard, Dependabot for pip, Cargo
+  and Actions, a gitleaks scan of the whole history, and every third-party
+  action pinned by SHA.
 - `tests/test_claims.py`: published texts may not promise more than the
   evidence shows, the instance count on the site is recounted from the
-  vendored files, and the verifier may import nothing from the search
-  (checked on the import graph).
+  vendored files, the verifier may import nothing from the search (checked
+  on the import graph), and no package in the dependency tree, runtime or
+  development, is under GPL or AGPL.
 
 ### Fixed
 - A JSON instance file with a missing or malformed field raised `KeyError`,
