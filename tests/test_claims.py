@@ -233,7 +233,7 @@ def test_the_docs_do_not_leave_traffic_and_split_breaks_on_python() -> None:
 
 
 def test_the_plant_note_names_the_orders_no_vehicle_can_carry() -> None:
-    """docs/industrial-transport.md explains the two orders the plant day leaves out."""
+    """The plant day and the five-minute reading name the same two impossible orders."""
     from mobiroute.vrp.generators import plant_day
 
     inst = plant_day(11, n_moves=140)
@@ -247,5 +247,16 @@ def test_the_plant_note_names_the_orders_no_vehicle_can_carry() -> None:
         )
     }
     assert nobody == {"M020", "M120"}
-    text = (ROOT / "docs" / "industrial-transport.md").read_text(encoding="utf-8")
-    assert all(order in text for order in nobody)
+    note = (ROOT / "docs" / "industrial-transport.md").read_text(encoding="utf-8")
+    guide = (ROOT / "docs" / "reading.md").read_text(encoding="utf-8")
+    assert all(order in note and order in guide for order in nobody)
+    assert "134 из 140" in guide and "138 из 140" in guide
+    assert "не связан" in guide and "Данных заказчика" in guide
+    assert "h.careers/job/503d66ce-ad54-4227-b7a9-ba2e5900c847" in guide
+    assert "Оценки кандидата здесь нет" in guide
+    readme = (ROOT / "README.md").read_text(encoding="utf-8")
+    english = (ROOT / "README.en.md").read_text(encoding="utf-8")
+    site = (ROOT / "site" / "index.html").read_text(encoding="utf-8")
+    assert "docs/reading.md" in readme and "docs/reading.md" in english
+    assert 'id="sense"' in site and "docs/reading.md" in site
+    assert "134 из 140" in site and "611,3" in site

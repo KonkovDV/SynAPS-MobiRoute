@@ -4,14 +4,14 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>SynAPS-MobiRoute — маршрутизация смешанного парка</title>
-<meta name="description" content="Движок маршрутизации для смешанного парка: VRPTW, PDPTW и DARP, вес, объём и паллеты, свои и наёмные машины, режим труда и отдыха, несколько рейсов, заявки в реальном времени. ALNS на ядре Rust, точные модели CP-SAT и MIP, сравнение с OR-Tools, координаты и OSRM на входе, маршрутные листы на выходе и независимая проверка каждого плана.">
+<meta name="description" content="Программа решает, какая машина заберёт заказ и к какому времени, и отдельно проверяет, что рейс выполним. VRPTW, PDPTW и DARP, смешанный парк, перерывы водителей, заявки в течение дня. ALNS на ядре Rust, CP-SAT и MIP. Открытые эталоны и синтетические дни.">
 <meta name="keywords" content="VRP, VRPTW, PDPTW, DARP, vehicle routing, pickup and delivery, time windows, heterogeneous fleet, multi-trip, driver rest rules, route sheets, OSRM, MIP, CP-SAT, OR-Tools, SCIP, HiGHS, ALNS, metaheuristics, Python, Rust">
 <meta name="author" content="Dmitrij Konkov">
 <meta property="og:type" content="website">
 <meta property="og:title" content="SynAPS-MobiRoute — маршрутизация смешанного парка">
 <meta property="og:locale" content="ru_RU">
 <meta property="og:locale:alternate" content="en_US">
-<meta property="og:description" content="Маршрутизация смешанного парка (VRPTW, PDPTW, DARP): ALNS на ядре Rust, точные модели CP-SAT и MIP, сравнение с OR-Tools, заявки в реальном времени, маршрутные листы и независимая проверка каждого плана.">
+<meta property="og:description" content="Какая машина заберёт заказ и к какому времени, и отдельная проверка, что рейс выполним. Смешанный парк, перерывы водителей, заявки в течение дня. ALNS, CP-SAT и MIP. Открытые эталоны и синтетические дни.">
 <meta property="og:image" content="https://konkovdv.github.io/SynAPS-MobiRoute/assets/og.png">
 <meta property="og:image:width" content="1200">
 <meta property="og:image:height" content="630">
@@ -28,7 +28,7 @@
 <link rel="modulepreload" href="assets/verifier.mjs">
 <link rel="preload" href="data/a2-16.json" as="fetch" type="application/json" crossorigin>
 <script type="application/ld+json">
-{"@context":"https://schema.org","@type":"SoftwareSourceCode","name":"SynAPS-MobiRoute","codeRepository":"https://github.com/KonkovDV/SynAPS-MobiRoute","programmingLanguage":["Python","Rust"],"license":"https://opensource.org/licenses/MIT","author":{"@type":"Person","name":"Dmitrij Konkov"},"description":"Routing engine for mixed fleets: VRPTW, PDPTW and DARP with capacity vectors, vehicle requirements, own and hired vehicles, driver rests and multi-trip days. ALNS on a Rust kernel, exact CP-SAT and MIP models, OSRM matrices, route sheets and an independent verifier."}
+{"@context":"https://schema.org","@type":"SoftwareSourceCode","name":"SynAPS-MobiRoute","codeRepository":"https://github.com/KonkovDV/SynAPS-MobiRoute","programmingLanguage":["Python","Rust"],"license":"https://opensource.org/licenses/MIT","author":{"@type":"Person","name":"Dmitrij Konkov"},"description":"Decides which vehicle takes which order and when, then checks the plan apart from the search. VRPTW, PDPTW and DARP with mixed own and hired fleets, driver rests and orders during the day. ALNS on a Rust kernel, exact CP-SAT and MIP. Public benchmarks and synthetic days."}
 </script>
 </head>
 <body>
@@ -60,9 +60,10 @@
     <div class="hero-copy">
       <p class="eyebrow"><span>VRPTW</span><span>PDPTW</span><span>DARP</span><span lang="ru">смешанный парк</span><span lang="en">mixed fleet</span><span>Python + Rust</span></p>
       <h1><span lang="ru">Маршруты для <em>смешанного</em> парка</span><span lang="en">Routes for a <em>mixed</em> fleet</span></h1>
-      <p class="lead"><span lang="ru">VRPTW, PDPTW и DARP в одной модели: свои и наёмные машины, вес, объём и паллеты, окна, забор и доставка, перерывы водителей, несколько рейсов за смену, пробки по часам суток, заявки в течение дня. Поиск — ALNS на ядре Rust, малые задачи решаются точно в CP-SAT и MIP. Каждый план пересчитывает отдельный верификатор и, если рейс невозможен, говорит, сколько минут не хватает.</span><span lang="en">VRPTW, PDPTW and DARP in one model: own and hired vehicles, weight, volume and pallets, time windows, pickup and delivery, drivers' breaks, several trips per shift, rush-hour traffic, orders arriving during the day. The search is ALNS on a Rust kernel; small instances are solved exactly with CP-SAT and MIP. A separate verifier recomputes every plan and, when a trip is impossible, says how many minutes are missing.</span></p>
+      <p class="lead"><span lang="ru">Программа решает, какая машина заберёт заказ, в каком порядке и к какому времени, и отдельно проверяет, что такой рейс можно выполнить. Если нельзя — называет, какие условия друг другу мешают и сколько минут не хватает. Модель одна для развоза, забора с доставкой и перевозки людей: свои и наёмные машины, вес, объём и паллеты, окна, перерывы водителей, несколько рейсов, пробки, заявки в течение дня. Поиск — ALNS на ядре Rust; малую задачу можно доказать в CP-SAT и MIP.</span><span lang="en">The program decides which vehicle takes an order, in what order and when, and checks apart from the search that the trip can be driven. When it cannot, the check names the conflicting rules and the minutes missing. One model covers delivery, pickup-and-delivery and passenger trips: own and hired vehicles, weight, volume and pallets, time windows, drivers' breaks, several trips, rush hours, orders during the day. The search is ALNS on a Rust kernel; a small instance can be proved with CP-SAT and MIP.</span></p>
       <div class="cta">
-        <a class="btn primary" href="#fleet"><span lang="ru">Пример со смешанным парком</span><span lang="en">A mixed-fleet example</span></a>
+        <a class="btn primary" href="#sense"><span lang="ru">За пять минут</span><span lang="en">Five minutes</span></a>
+        <a class="btn ghost" href="#fleet"><span lang="ru">Пример со смешанным парком</span><span lang="en">A mixed-fleet example</span></a>
         <a class="btn ghost" href="#lab"><span lang="ru">Проверить маршрут в браузере</span><span lang="en">Check a route in the browser</span></a>
       </div>
     </div>
@@ -86,6 +87,30 @@
     </dl>
   </div>
 </header>
+
+<section id="sense" class="sec alt">
+  <div class="wrap">
+    <p class="kicker reveal"><span lang="ru">С чего начать</span><span lang="en">Start here</span></p>
+    <h2 class="reveal"><span lang="ru">Три вещи, которые стоит понять до формул</span><span lang="en">Three things to take in before the formulas</span></h2>
+    <p class="sub reveal"><span lang="ru">Дальше на странице — примеры, которые можно покрутить. Здесь — смысл, без аббревиатур.</span><span lang="en">The rest of the page is examples you can turn. This is the sense of them, without the abbreviations.</span></p>
+    <div class="grid3">
+      <article class="card reveal">
+        <h3><span lang="ru">Какое решение</span><span lang="en">The decision</span></h3>
+        <p><span lang="ru">Какая машина, какой заказ, в каком порядке и к какому времени. Рядом отдельная программа пересчитывает план. Она подтверждает его или называет, какие условия друг другу мешают и сколько минут не хватает. Поиск и проверка не делят код.</span><span lang="en">Which vehicle, which order, in what order and at what time. A separate program recomputes the plan. It confirms the plan or names the conflicting rules and the minutes missing. The search and the check share no code.</span></p>
+      </article>
+      <article class="card reveal">
+        <h3><span lang="ru">Какой метод когда</span><span lang="en">Which method when</span></h3>
+        <p><span lang="ru">Заявка пришла сейчас — вставка за доли миллисекунды, уже обещанное время не сдвигается. Есть полчаса — план хвостов перекладывает ALNS, и новый порядок берётся, только если перерыв водителя остаётся законным. Малая задача — CP-SAT доказывает оптимум: на 40 задачах по 8 заказов ALNS с ним совпал.</span><span lang="en">An order just arrived: insertion in a fraction of a millisecond, and a time already promised does not move. Half an hour is free: ALNS reorders the tails, and the new order is kept only when the driver's break stays legal. A small instance: CP-SAT proves the optimum, and on 40 instances of 8 orders ALNS matched it.</span></p>
+      </article>
+      <article class="card reveal">
+        <h3><span lang="ru">Чего здесь нет</span><span lang="en">What is absent</span></h3>
+        <p><span lang="ru">Данных перевозчика и пилота нет, поэтому обещаний экономии нет. С компаниями, которые названы в текстах, автор не связан. Дни в примерах собраны генератором. Один перерыв за смену; пробки и несколько рейсов живой диспетчер пока не считает.</span><span lang="en">There is no carrier's data and no pilot, so there is no savings claim. The author is not affiliated with the companies named in the texts. The example days are generated. One rest per shift; the live dispatcher does not yet count rush hours or several trips.</span></p>
+      </article>
+    </div>
+    <p class="fine reveal"><span lang="ru">Синтетическая заводская смена, seed 11, 140 заявок. Заявки по ходу дня, вставка: 134 из 140, 611,3 км, из них порожних 210,0. Все заявки с утра, ALNS: 138 из 140, 444,6 км, порожних 95,4. Две заявки не берёт ни один тип машины.<br>Пересчёт: <code>mobiroute vrp-dispatch --day plant --seed 11 --orders 140</code></span><span lang="en">A synthetic plant shift, seed 11, 140 orders. Orders during the day, insertion: 134 of 140, 611.3 km, of which 210.0 are empty. Every order known in the morning, ALNS: 138 of 140, 444.6 km, 95.4 empty. Two orders fit no vehicle type.<br>Recompute: <code>mobiroute vrp-dispatch --day plant --seed 11 --orders 140</code></span></p>
+    <a class="link reveal" href="https://github.com/KonkovDV/SynAPS-MobiRoute/blob/main/docs/reading.md"><span lang="ru">Текст на пять минут: решение, методы, границы</span><span lang="en">The five-minute text: the decision, the methods, the limits</span> →</a>
+  </div>
+</section>
 
 <section id="pain" class="sec">
   <div class="wrap">
@@ -471,7 +496,7 @@ dropoff 1 cannot start before 402; dropoff 1 → dropoff 12 takes 3 + 15.68 min.
     <p class="kicker reveal"><span lang="ru">Воспроизводимость</span><span lang="en">Reproducibility</span></p>
     <h2 class="reveal"><span lang="ru">Как проверить цифры</span><span lang="en">How to check the numbers</span></h2>
     <div class="grid3 eng">
-      <article class="card reveal"><h3><span lang="ru">734 теста</span><span lang="en">734 tests</span></h3><p><span lang="ru">Верификатор, сверка Rust с эталоном на Python, 17 свойств Hypothesis, планы с подделанными часами, перегрузом и спрятанным ожиданием, NaN во входе, испорченные входные файлы и произвольные планы из чужой системы. Покрытие 92%; 12 из 12 намеренно внесённых ошибок тесты ловят.</span><span lang="en">The verifier, Rust against its Python reference, 17 Hypothesis properties, plans with forged clocks, overloads and hidden waiting, NaN in the input, broken input files and arbitrary plans from another system. 92% coverage; the tests catch 12 of 12 deliberately planted bugs.</span></p></article>
+      <article class="card reveal"><h3><span lang="ru">735 тестов</span><span lang="en">735 tests</span></h3><p><span lang="ru">Верификатор, сверка Rust с эталоном на Python, 17 свойств Hypothesis, планы с подделанными часами, перегрузом и спрятанным ожиданием, NaN во входе, испорченные входные файлы и произвольные планы из чужой системы. Покрытие 92%; 12 из 12 намеренно внесённых ошибок тесты ловят.</span><span lang="en">The verifier, Rust against its Python reference, 17 Hypothesis properties, plans with forged clocks, overloads and hidden waiting, NaN in the input, broken input files and arbitrary plans from another system. 92% coverage; the tests catch 12 of 12 deliberately planted bugs.</span></p></article>
       <article class="card reveal"><h3>mypy --strict · ruff · clippy · CodeQL</h3><p><span lang="ru">Строгая типизация Python, предупреждения Rust считаются ошибками. На каждый запрос на слияние — CodeQL, аудит зависимостей, поиск секретов по всей истории и запрет копилефт-лицензий; действия CI закреплены по SHA.</span><span lang="en">Strict Python typing, Rust warnings are errors. Every pull request gets CodeQL, a dependency audit, a secret scan of the whole history and a ban on copyleft licences; CI actions are pinned by SHA.</span></p></article>
       <article class="card reveal"><h3>SHA-256</h3><p><span lang="ru">Сравнение с литературой публикуется только для побайтно того же файла эталона и только после проверки плана.</span><span lang="en">A literature comparison is published only for the byte-identical instance and only after the plan is verified.</span></p></article>
     </div>
@@ -501,7 +526,7 @@ mobiroute vrp-dispatch --day plant --rests --out-dir out-rests</code></pre></div
 
 <footer class="foot"><div class="wrap">
   <p>SynAPS-MobiRoute · MIT · <a href="https://github.com/KonkovDV">Dmitrij Konkov</a></p>
-  <p><span lang="ru">Источники чисел: </span><span lang="en">Sources: </span><a href="https://github.com/KonkovDV/SynAPS-MobiRoute/blob/main/docs/benchmarks/vrp-public-benchmarks.md"><span lang="ru">эталоны</span><span lang="en">benchmarks</span></a> · <a href="https://github.com/KonkovDV/SynAPS-MobiRoute/blob/main/docs/benchmarks/exact-vs-alns.md">CP-SAT vs ALNS</a> · <a href="https://github.com/KonkovDV/SynAPS-MobiRoute/blob/main/docs/benchmarks/ortools-vs-alns.md">OR-Tools vs ALNS</a> · <a href="https://github.com/KonkovDV/SynAPS-MobiRoute/blob/main/docs/benchmarks/realtime-dispatch.md"><span lang="ru">диспетчеризация</span><span lang="en">dispatch</span></a> · <a href="https://github.com/KonkovDV/SynAPS-MobiRoute/blob/main/docs/benchmarks/solver-lab-a2-16.md">solver lab</a> · <a href="https://github.com/KonkovDV/SynAPS-MobiRoute/blob/main/docs/native-acceleration.md"><span lang="ru">скорость</span><span lang="en">speed</span></a> · <a href="https://github.com/KonkovDV/SynAPS-MobiRoute/blob/main/CHANGELOG.md">changelog</a></p>
+  <p><span lang="ru">Источники чисел: </span><span lang="en">Sources: </span><a href="https://github.com/KonkovDV/SynAPS-MobiRoute/blob/main/docs/reading.md"><span lang="ru">за пять минут</span><span lang="en">five minutes</span></a> · <a href="https://github.com/KonkovDV/SynAPS-MobiRoute/blob/main/docs/benchmarks/vrp-public-benchmarks.md"><span lang="ru">эталоны</span><span lang="en">benchmarks</span></a> · <a href="https://github.com/KonkovDV/SynAPS-MobiRoute/blob/main/docs/benchmarks/exact-vs-alns.md">CP-SAT vs ALNS</a> · <a href="https://github.com/KonkovDV/SynAPS-MobiRoute/blob/main/docs/benchmarks/ortools-vs-alns.md">OR-Tools vs ALNS</a> · <a href="https://github.com/KonkovDV/SynAPS-MobiRoute/blob/main/docs/benchmarks/realtime-dispatch.md"><span lang="ru">диспетчеризация</span><span lang="en">dispatch</span></a> · <a href="https://github.com/KonkovDV/SynAPS-MobiRoute/blob/main/docs/industrial-transport.md"><span lang="ru">заводская смена</span><span lang="en">plant shift</span></a> · <a href="https://github.com/KonkovDV/SynAPS-MobiRoute/blob/main/docs/benchmarks/solver-lab-a2-16.md">solver lab</a> · <a href="https://github.com/KonkovDV/SynAPS-MobiRoute/blob/main/docs/native-acceleration.md"><span lang="ru">скорость</span><span lang="en">speed</span></a> · <a href="https://github.com/KonkovDV/SynAPS-MobiRoute/blob/main/CHANGELOG.md">changelog</a></p>
   <p class="legal"><span lang="ru">Независимый проект по открытым источникам; не связан с упомянутыми компаниями и проектами. Нормы права описаны как ограничения модели, это не юридическая консультация. Эталонные задачи принадлежат их авторам, условия — в <a href="https://github.com/KonkovDV/SynAPS-MobiRoute/blob/main/benchmark/instances/NOTICE.md">NOTICE</a>. Сайт не ставит cookies и не подключает счётчики и сторонние сервисы; язык и тема хранятся только в вашем браузере. Хостинг — GitHub Pages.</span><span lang="en">An independent project built from public sources, not affiliated with the companies and projects it mentions. Legal rules are described as model constraints, not legal advice. Benchmark instances belong to their authors, terms in the <a href="https://github.com/KonkovDV/SynAPS-MobiRoute/blob/main/benchmark/instances/NOTICE.md">NOTICE</a>. The site sets no cookies and loads no analytics or third-party services; language and theme stay in your browser. Hosted on GitHub Pages.</span></p>
 </div></footer>
 

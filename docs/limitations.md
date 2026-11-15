@@ -2,7 +2,8 @@
 
 What the engine covers, what it leaves to adjacent systems (the accounting
 system, the operator's router), how to read its numbers, and what comes
-next.
+next. A short reading for someone outside the field is
+[docs/reading.md](reading.md).
 
 ## Data
 

@@ -121,6 +121,7 @@ h2 { font-size: clamp(32px, 5vw, 60px); line-height: 1.06; letter-spacing: -.03e
 h3 { font-size: 21px; line-height: 1.25; letter-spacing: -.01em; }
 .h3 { font-size: clamp(24px, 2.6vw, 32px); letter-spacing: -.02em; line-height: 1.15; }
 .fine { font-size: 13.5px; color: var(--muted); }
+#sense .fine { margin-top: 22px; max-width: 68em; }
 .link { display: inline-block; margin-top: 18px; font-weight: 600; text-decoration: none; }
 .link:hover { text-decoration: underline; }
 .grid3 { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; margin-top: 16px; }
