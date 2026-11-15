@@ -8,7 +8,7 @@ const PALETTE = ["#2a78d6", "#eb6834", "#1baf7a", "#c98500", "#e87ba4", "#008300
 const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
 
 export function initPrices(ctx) {
-  ctx.load("data/prices.json").then((d) => prices(ctx, d)).catch((e) => console.error(e));
+  ctx.near(ctx.$("prices"), () => ctx.load("data/prices.json").then((d) => prices(ctx, d)).catch((e) => console.error(e)));
 }
 
 function prices({ $, tr, lang, svgEl, rerender }, data) {

@@ -98,6 +98,10 @@ h1 em { font-style: normal; background: linear-gradient(92deg, #6aa9f4 10%, #f08
 
 /* sections */
 .sec { padding: clamp(72px, 10vw, 136px) 0; background: var(--bg); }
+/* Sections off screen skip style and layout until they come near; the size
+   placeholder keeps the scroll bar steady, then the browser remembers the real one. */
+.sec { content-visibility: auto; contain-intrinsic-size: auto 1100px; }
+@media print { .sec { content-visibility: visible; } }
 .sec.alt { background: var(--alt); }
 .kicker { font: 700 13px var(--font); letter-spacing: .12em; text-transform: uppercase; color: var(--accent); margin-bottom: 14px; }
 h2 { font-size: clamp(32px, 5vw, 60px); line-height: 1.06; letter-spacing: -.03em; font-weight: 700; max-width: 18em; text-wrap: balance; }
