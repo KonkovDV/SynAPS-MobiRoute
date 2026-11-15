@@ -16,6 +16,7 @@ table to `docs/benchmarks/`. Rules: [docs/benchmark-protocol.md](../docs/benchma
 | `fuzz_differential.py` | Rust kernel vs Python reference, shortest shift vs enumeration, verifier vs arbitrary plans, ALNS on both kernels; exits 1 on any difference | standard output |
 | `mutation_smoke.py` | plants one bug at a time in the verifier, insertion, schedule, sheets and indicators and checks that the tests catch each | standard output |
 | `solver_lab.py` | Cordeau a2-16 through CP-SAT, MIP (SCIP, HiGHS, CBC), LP bound, ALNS and OR-Tools | `docs/benchmarks/solver-lab-a2-16.md` |
+| `warm_start_study.py` | CP-SAT started cold and from the ALNS plan, deterministic runs, 14-order instances | `docs/benchmarks/warm-start.md` |
 | `rules_study.py` | driver rests, multi-trip days and rush hours on synthetic days | `docs/benchmarks/rules.md` |
 | `seed_study.py` | five seeds on Solomon R2/RC2, with and without local search, Wilcoxon test | `docs/benchmarks/seed-study.md` |
 | `setpart_study.py` | set partitioning over ALNS route pools: CP-SAT, SCIP, HiGHS, CBC, LP bound | `docs/benchmarks/setpart-solvers.md` |
@@ -37,6 +38,7 @@ python benchmark/mutation_smoke.py
 python benchmark/solvers_study.py   # pip install pyvrp==0.14.1 pyvroom==1.15.2; jsprit: see the script
 python benchmark/solver_lab.py
 python benchmark/rules_study.py
+python benchmark/warm_start_study.py
 python benchmark/seed_study.py
 python benchmark/setpart_study.py
 python benchmark/export_vrp_site_data.py

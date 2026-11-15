@@ -437,8 +437,53 @@ def _inf(value: float | None) -> float:
 
 
 def instance_from_dict(data: Mapping[str, Any]) -> Instance:
-    if data.get("format") != "mobiroute.vrp.v1":
+    """Instance from its ``mobiroute.vrp.v1`` JSON form.
+
+    Every malformed document ends in a ``ValueError`` with a code, as in
+    :func:`mobiroute.vrp.geo.build`: a missing field is
+    ``VRP_JSON_FIELD_MISSING:<name>``, a field of the wrong shape or type
+    ``VRP_JSON_FIELD_INVALID:<detail>``; the model's own checks follow.
+    """
+    if not isinstance(data, Mapping) or data.get("format") != "mobiroute.vrp.v1":
         raise ValueError("VRP_JSON_FORMAT")
+    try:
+        return _instance_from_dict(data)
+    except KeyError as exc:
+        raise ValueError(f"VRP_JSON_FIELD_MISSING:{exc.args[0]}") from exc
+    except (TypeError, IndexError, AttributeError, OverflowError) as exc:
+        raise ValueError(f"VRP_JSON_FIELD_INVALID:{exc}") from exc
+
+
+def _node_index(value: Any) -> int | None:
+    """A node reference: ``None`` or a whole number (no bools, no ``2.5``)."""
+    if value is None:
+        return None
+    if (
+        isinstance(value, bool)
+        or not isinstance(value, int | float)
+        or not math.isfinite(value)
+        or value != int(value)
+    ):
+        raise TypeError(f"node index {value!r}")
+    return int(value)
+
+
+def _optional_number(value: Any) -> float | None:
+    if value is None:
+        return None
+    if isinstance(value, bool) or not isinstance(value, int | float):
+        raise TypeError(f"number {value!r}")
+    return float(value)
+
+
+def _names(values: Any) -> frozenset[str]:
+    """Skills: a list of strings (a bare string would split into letters)."""
+    if isinstance(values, str | bytes) or not isinstance(values, list | tuple):
+        raise TypeError(f"skills {values!r}")
+    return frozenset(str(v) for v in values)
+
+
+def _instance_from_dict(data: Mapping[str, Any]) -> Instance:
     profiles = {
         name: Profile(
             name,
@@ -456,7 +501,7 @@ def instance_from_dict(data: Mapping[str, Any]) -> Instance:
     return Instance(
         name=str(data["name"]),
         source=str(data.get("source", "")),
-        dimensions=tuple(data["dimensions"]),
+        dimensions=tuple(str(d) for d in data["dimensions"]),
         vehicle_penalty=float(data.get("vehicle_penalty", 0.0)),
         time_cost=str(data.get("time_cost", "operating")),
         nodes=tuple(
@@ -474,12 +519,12 @@ def instance_from_dict(data: Mapping[str, Any]) -> Instance:
         requests=tuple(
             Request(
                 str(r["id"]),
-                r["pickup"],
-                r["delivery"],
+                _node_index(r["pickup"]),
+                _node_index(r["delivery"]),
                 tuple(float(q) for q in r["demand"]),
-                frozenset(r.get("skills", ())),
-                r.get("max_ride"),
-                r.get("penalty"),
+                _names(r.get("skills", ())),
+                _optional_number(r.get("max_ride")),
+                _optional_number(r.get("penalty")),
                 float(r.get("release", 0.0)),
             )
             for r in data["requests"]
@@ -496,8 +541,8 @@ def instance_from_dict(data: Mapping[str, Any]) -> Instance:
                 fixed_cost=float(vt["fixed_cost"]),
                 cost_per_distance=float(vt["cost_per_distance"]),
                 cost_per_time=float(vt["cost_per_time"]),
-                max_duration=vt.get("max_duration"),
-                skills=frozenset(vt.get("skills", ())),
+                max_duration=_optional_number(vt.get("max_duration")),
+                skills=_names(vt.get("skills", ())),
                 profile=str(vt.get("profile", "default")),
                 hired=bool(vt.get("hired", False)),
                 breaks=None

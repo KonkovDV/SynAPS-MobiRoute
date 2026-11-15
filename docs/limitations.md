@@ -31,9 +31,10 @@ next.
 * Driver rules. Implemented: a break of at least $b$ minutes after at most
   $D$ minutes of driving and at most $2D$ minutes of driving a day; with
   $D$ = 4.5 h and $b$ = 45 min this is the rule of EU Regulation 561/2006
-  (art. 6-7) and of Russian Ministry of Transport Order No. 424 of
-  16.10.2020, including the split into 15 + 30 min (`BreakRule.split`, in the
-  Python reference and the Rust kernel). The shift cap counts from departure to return,
+  (art. 6-7) and of Russian Ministry of Transport Order No. 160 of 14.04.2026
+  (points 8 and 11; in force from 1 September 2026, replacing Order No. 424 of
+  16.10.2020 with the same limits), including the split into 15 + 30 min
+  (`BreakRule.split`, in the Python reference and the Rust kernel). The shift cap counts from departure to return,
   waiting included, as working time does. Not modelled: daily driving
   extended to 10 h twice a week (art. 6 of the EU regulation); weekly and fortnightly driving limits; the meal break of the
   Labour Code (art. 108), which is not working time; daily and weekly rest
@@ -92,6 +93,17 @@ next.
 * The exact CP-SAT model proves optima on small instances (about ten orders).
   `OPTIMAL` refers to its integer model with travel rounded up to 0.01 min;
   the verifier re-prices the plan in real numbers.
+* ALNS can stall where serving one more order needs two moves at once (a new
+  pair in, a stop already on the route moved): on 20 instances of 14 orders
+  with refusals it reaches the best plan on 16, worst gap 16%
+  ([benchmarks/warm-start.md](benchmarks/warm-start.md)). For instances that
+  small, `vrp-solve --solver exact` closes the gap; for large days the gap
+  is unknown, as no proof is available there.
+* Deterministic CP-SAT runs (the default of `--solver exact`) fix the batch
+  size of the interleaved search and prove fewer optima in a given time than
+  the same search with the batch size left to OR-Tools: 1 of 20 against 5 of
+  20 on the study above. That variant does not repeat itself (2 of 8
+  identical runs differed), so reproducibility wins.
 * The OR-Tools baseline is the common configuration (PCI + GLS, integer time grid,
   disjunctions), not a tuned setup; the comparison says how far the default
   gets in the same time, not what OR-Tools can do with tuning. Its matrices

@@ -1,5 +1,56 @@
 # Changelog
 
+## 0.6.1 — 2026-11-15
+
+### Added
+- Warm start and deterministic runs for the exact CP-SAT model, taken from
+  the SynAPS scheduling core. `solve_exact(..., hint=plan)` starts the
+  search from a known plan; `deterministic=True` stops on CP-SAT's
+  deterministic time instead of the wall clock and runs the workers as one
+  interleaved search, so the same input gives the same plan on any machine
+  and under any load. The batch size of that search is set explicitly: with
+  the default, OR-Tools 9.15 returned another plan on 2 of 8 identical runs.
+- `vrp-solve --solver exact` starts CP-SAT from an ALNS plan, adds a cold
+  run when the warm one proves nothing, and keeps the cheapest verified plan.
+  `docs/benchmarks/warm-start.md` measures it on 20 instances of 14 orders,
+  where ALNS alone stops short of the best plan on 4 (by up to 16%): the warm
+  run is never worse than ALNS, and the two runs together reach the best
+  plan on all 20, every run repeatable.
+- `benchmark/instances/NOTICE.md`: authors, source and licence of every
+  vendored benchmark set (MIT, Apache-2.0 with its full text, CC BY 4.0),
+  which the MIT licence of this repository does not cover. Legal notes in
+  both READMEs and in the site footer: an independent project built from
+  public sources, no affiliation with the companies the documents mention,
+  legal rules described as model constraints and not legal advice; the site
+  sets no cookies and loads no third-party services.
+- Supply-chain checks, as in the other SynAPS repositories: CodeQL for
+  Python, JavaScript and Rust, OpenSSF Scorecard, Dependabot for pip, Cargo
+  and Actions, a gitleaks scan of the whole history, and every third-party
+  action pinned by SHA.
+- `tests/test_claims.py`: published texts may not promise more than the
+  evidence shows, the instance count on the site is recounted from the
+  vendored files, the verifier may import nothing from the search (checked
+  on the import graph), and no package in the dependency tree, runtime or
+  development, is under GPL or AGPL.
+
+### Fixed
+- A JSON instance file with a missing or malformed field raised `KeyError`,
+  `TypeError` or `OverflowError` from inside the loader; one mutated field in
+  three escaped that way. Both loaders (`mobiroute.vrp.io` and the geo
+  format) now end every broken file in a `ValueError` with a code
+  (`VRP_JSON_FIELD_MISSING:<name>`, `VRP_JSON_FIELD_INVALID:<detail>`), and
+  node references, optional numbers and skill lists are type-checked: a bare
+  string is no longer split into one-letter skills.
+
+### Changed
+- Drivers' working time is cited by Order of the Ministry of Transport of
+  Russia No. 160 of 14.04.2026, in force from 1 September 2026 in place of
+  Order No. 424 (the limits the engine plans with are the same).
+  `docs/trucking-ru.md` is rewritten for a lawyer, a labour-law specialist
+  and a logistician: working time and rest point by point, trip documents
+  (waybill, electronic transport documents, medical and technical checks),
+  road rules and the warehouse side, each with its status in the model.
+
 ## 0.6.0 — 2026-11-15
 
 ### Fixed

@@ -10,17 +10,24 @@ do not model, and OR-Tools serving orders that are cheaper to refuse.
 
 from __future__ import annotations
 
+import contextlib
+import copy
+import json
 import math
 import random
+from collections.abc import Callable, Iterator
 from dataclasses import replace
 from itertools import pairwise
+from pathlib import Path
 from typing import Any
 
 import pytest
 from hypothesis import given, settings
 from hypothesis import strategies as st
 
-from mobiroute.vrp.generators import random_instance
+from mobiroute.vrp import geo
+from mobiroute.vrp.generators import cargo_day, random_instance
+from mobiroute.vrp.io import instance_from_dict, instance_to_dict
 from mobiroute.vrp.model import (
     BreakRule,
     Instance,
@@ -176,6 +183,56 @@ def test_verifier_never_raises_on_arbitrary_plans(
     verdict = verify(inst, plan)
     assert isinstance(verdict.feasible, bool)
     assert math.isfinite(verdict.cost.total)
+
+
+# -- input files: one broken field at a time ---------------------------------------
+
+ROOT = Path(__file__).resolve().parents[1]
+JUNK: tuple[Any, ...] = (None, "x", -1, 0, 1e308, NAN, INF, [], {}, [1, 2], "25:00", True)
+
+
+def _paths(obj: Any, prefix: tuple[Any, ...] = ()) -> Iterator[tuple[Any, ...]]:
+    if isinstance(obj, dict):
+        for key, value in obj.items():
+            yield (*prefix, key)
+            yield from _paths(value, (*prefix, key))
+    elif isinstance(obj, list):
+        for i, value in enumerate(obj[:3]):
+            yield (*prefix, i)
+            yield from _paths(value, (*prefix, i))
+
+
+def _broken(doc: dict[str, Any], rng: random.Random) -> dict[str, Any]:
+    """The document with one field replaced by junk or removed."""
+    doc = copy.deepcopy(doc)
+    path = rng.choice(list(_paths(doc)))
+    parent: Any = doc
+    for key in path[:-1]:
+        parent = parent[key]
+    if isinstance(parent, dict) and rng.random() < 0.3:
+        del parent[path[-1]]
+    else:
+        parent[path[-1]] = rng.choice(JUNK)
+    return doc
+
+
+@pytest.mark.parametrize("loader", ["geo", "json"])
+def test_a_broken_input_file_ends_in_a_value_error(loader: str) -> None:
+    """Whatever field is wrong, the loader answers with ``ValueError``.
+
+    Before the fix one mutation in three escaped as ``TypeError``,
+    ``KeyError`` or ``OverflowError`` from deep inside the loader.
+    """
+    if loader == "geo":
+        base = json.loads((ROOT / "examples" / "chelny-day.geo.json").read_text(encoding="utf-8"))
+        load: Callable[[dict[str, Any]], object] = geo.build
+    else:
+        base = instance_to_dict(cargo_day(3, n_orders=8))
+        load = instance_from_dict
+    rng = random.Random(1)
+    for _ in range(600):
+        with contextlib.suppress(ValueError):
+            load(_broken(base, rng))
 
 
 # -- the shortest shift over all places of the driver's rest ------------------------

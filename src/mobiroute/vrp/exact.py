@@ -13,6 +13,17 @@ Times are scaled to integers and travel is rounded *up*, so every model
 solution is feasible in real numbers; ``OPTIMAL`` means optimal for that
 conservative integer model. The plan's real cost always comes from
 :func:`mobiroute.vrp.verify.verify`.
+
+Two settings come from the SynAPS scheduling core. ``hint`` warm-starts the
+search with a known plan (usually the ALNS one): its routes are given to the
+first units of their type, and CP-SAT starts from that assignment instead of
+from nothing, so the incumbent is there at once and the search works on the
+bound. ``deterministic`` makes a run reproducible: with a wall-clock limit
+the result depends on the machine and its load, so the binding stop becomes
+CP-SAT's deterministic time (half of ``time_limit``), the wall clock is only
+a safety at twice the limit, and several workers share one interleaved,
+deterministic search. ``ExactRun.reproducible`` says whether the
+deterministic stop, not the safety, ended the run.
 """
 
 from __future__ import annotations
@@ -20,11 +31,17 @@ from __future__ import annotations
 import math
 import time
 from dataclasses import dataclass
+from itertools import pairwise
 from typing import Any
 
 from mobiroute.vrp.model import Instance
 from mobiroute.vrp.solution import MUST_SERVE_PENALTY, Route, Solution
 from mobiroute.vrp.verify import Verdict, verify
+
+#: Share of ``time_limit`` given as deterministic time in a deterministic run.
+DETERMINISTIC_FRACTION = 0.5
+#: Wall-clock safety of a deterministic run, as a multiple of ``time_limit``.
+WALL_SAFETY = 2.0
 
 
 @dataclass(frozen=True, slots=True)
@@ -37,6 +54,12 @@ class ExactRun:
     seconds: float
     units: int
     arcs: int
+    #: Boolean literals set from ``hint`` (0: no warm start).
+    hinted: int = 0
+    #: ``True`` if a deterministic run ended by the deterministic stop or a
+    #: proof; ``False`` if the wall-clock safety cut it, or the run was not
+    #: deterministic.
+    reproducible: bool = False
 
 
 def solve_exact(
@@ -46,6 +69,8 @@ def solve_exact(
     workers: int = 8,
     scale: int = 100,
     max_units_per_type: int | None = None,
+    hint: Solution | None = None,
+    deterministic: bool = False,
 ) -> ExactRun:
     from ortools.sat.python import cp_model
 
@@ -203,13 +228,26 @@ def solve_exact(
             model.add(served + miss == 1)
             objective_terms.append(round(min(req.penalty, MUST_SERVE_PENALTY) * scale) * miss)
     model.minimize(sum(objective_terms))
+    hinted = 0 if hint is None else _add_hint(model, inst, hint, units, used, visit, succ)
     solver: Any = cp_model.CpSolver()
     solver.parameters.max_time_in_seconds = float(time_limit)
     solver.parameters.num_workers = int(workers)
     solver.parameters.random_seed = 0
+    if deterministic:
+        solver.parameters.max_deterministic_time = float(time_limit) * DETERMINISTIC_FRACTION
+        solver.parameters.max_time_in_seconds = float(time_limit) * WALL_SAFETY
+        if workers > 1:
+            # One interleaved search shared by the workers. The batch size must
+            # be set: with the default, OR-Tools 9.15 gave another plan on 2 of
+            # 8 identical runs; with an explicit size, 19 of 19 runs agreed,
+            # four processes at a time included.
+            solver.parameters.interleave_search = True
+            solver.parameters.interleave_batch_size = int(workers)
     began = time.perf_counter()
     status = solver.solve(model)
     elapsed = time.perf_counter() - began
+    proved = status in (cp_model.OPTIMAL, cp_model.INFEASIBLE)
+    reproducible = deterministic and (proved or elapsed < float(time_limit) * WALL_SAFETY * 0.95)
     routes: list[Route] = []
     objective = bound = None
     if status in (cp_model.OPTIMAL, cp_model.FEASIBLE):
@@ -240,4 +278,55 @@ def solve_exact(
         seconds=round(elapsed, 3),
         units=len(units),
         arcs=arcs_total,
+        hinted=hinted,
+        reproducible=reproducible,
     )
+
+
+def _add_hint(
+    model: Any,
+    inst: Instance,
+    hint: Solution,
+    units: list[int],
+    used: list[Any],
+    visit: dict[tuple[int, int], Any],
+    succ: dict[int, dict[tuple[int, int], Any]],
+) -> int:
+    """Hint the unit, visit and arc literals of ``hint``; return how many.
+
+    Routes go to the first free units of their type, which agrees with the
+    symmetry cut (identical units are used in order). A route the model
+    cannot hold (no unit left, a node the unit may not visit) is left out:
+    a partial hint still guides the first descent, and CP-SAT completes it.
+    """
+    free: dict[int, list[int]] = {}
+    for k, t in enumerate(units):
+        free.setdefault(t, []).append(k)
+    route_of: dict[int, list[int]] = {}
+    for route in hint.routes:
+        if not route.nodes or not free.get(route.vehicle_type):
+            continue
+        k = free[route.vehicle_type][0]
+        if all((k, n) in visit for n in route.nodes):
+            free[route.vehicle_type].pop(0)
+            route_of[k] = list(route.nodes)
+    # Unit k's circuit numbers its nodes 1, 2, ... in the order they were
+    # added to ``visit``; 0 is the depot.
+    local: dict[int, dict[int, int]] = {}
+    for kk, node in visit:
+        positions = local.setdefault(kk, {})
+        positions[node] = len(positions) + 1
+    count = 0
+    for k in range(len(units)):
+        nodes = route_of.get(k, [])
+        model.add_hint(used[k], 1 if nodes else 0)
+        count += 1
+        for node in local.get(k, {}):
+            model.add_hint(visit[(k, node)], 1 if node in nodes else 0)
+            count += 1
+        path = [0, *(local[k][n] for n in nodes), 0] if nodes else []
+        chosen = set(pairwise(path))
+        for arc, lit in succ[k].items():
+            model.add_hint(lit, 1 if arc in chosen else 0)
+            count += 1
+    return count

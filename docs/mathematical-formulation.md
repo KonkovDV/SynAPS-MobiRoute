@@ -280,9 +280,10 @@ $-\sum_{C} w$ is the number of minutes missing. Example from a cargo day:
 
 A type may carry a rest rule $(D, b)$: at most $D$ minutes of driving between
 rests of at least $b$ minutes, at most $2D$ minutes of driving per route (the
-4.5 h / 45 min norm with the 9 h daily limit: EU Regulation 561/2006, art. 7;
-the same limits are set for Russian drivers by order No. 424 of the Ministry
-of Transport, 16.10.2020). Let $\tau_0, \dots, \tau_m$ be the driving times of
+4.5 h / 45 min norm with the 9 h daily limit: EU Regulation 561/2006, arts. 6
+and 7; the same limits are set for Russian drivers by Order No. 160 of the
+Ministry of Transport of 14.04.2026, points 8 and 11, in force from
+1 September 2026 and replacing Order No. 424 of 16.10.2020). Let $\tau_0, \dots, \tau_m$ be the driving times of
 the legs of route $v_0, \dots, v_{m+1}$, $P_g = \sum_{a<g} \tau_a$ and
 $\Delta = \sum_a \tau_a$.
 
@@ -317,7 +318,7 @@ The verifier implements the lemma separately and returns, for an infeasible
 route, the certificate of the gap that misses by the fewest minutes (labels
 `TRAVEL+REST`) or a `DRIVING` certificate with the excess minutes.
 
-**Split break.** Art. 7 of the EU regulation and Order No. 424 let the break
+**Split break.** Art. 7 of the EU regulation and point 11 of Order No. 160 let the break
 be taken as $b_1 \ge 15$ and then $b_2 \ge 30$ minutes; only the second part
 resets the driving counter.
 

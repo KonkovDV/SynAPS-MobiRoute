@@ -8,11 +8,12 @@ change over the day.
 
 The main method is ALNS. Its hot path (inserting orders and checking
 schedules, rush hours and split breaks included) is written in Rust and
-returns exactly the same plans as the reference implementation in Python. Small instances are solved exactly with
-CP-SAT and MIP models (SCIP, HiGHS, CBC), and OR-Tools Routing runs on the same
-model for comparison. Every plan, wherever it comes from, is recomputed by a
-separate verifier. When a trip cannot be scheduled, the verifier says which
-constraints conflict and how many minutes are missing.
+returns exactly the same plans as the reference implementation in Python.
+Small instances are solved exactly with CP-SAT and MIP models (SCIP, HiGHS,
+CBC), and OR-Tools Routing runs on the same model for comparison. Every plan,
+wherever it comes from, is recomputed by a separate verifier. When a trip
+cannot be scheduled, the verifier says which constraints conflict and how many
+minutes are missing.
 
 [Русская версия](README.md) · [Site with interactive examples](https://konkovdv.github.io/SynAPS-MobiRoute/)
 
@@ -20,6 +21,7 @@ constraints conflict and how many minutes are missing.
 [![Python 3.12+](https://img.shields.io/badge/python-3.12%2B-blue.svg)](https://www.python.org/)
 [![Rust](https://img.shields.io/badge/kernel-Rust%20%2B%20PyO3-orange.svg)](native/mobiroute_native)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
+[![OpenSSF Scorecard](https://api.scorecard.dev/projects/github.com/KonkovDV/SynAPS-MobiRoute/badge)](https://scorecard.dev/viewer/?uri=github.com/KonkovDV/SynAPS-MobiRoute)
 
 ![Verified optimal plan for the Cordeau a2-16 instance](docs/img/a2-16-routes.svg)
 
@@ -73,7 +75,9 @@ solving:
 
 - a 45-minute break after at most 4.5 hours of driving and at most 9 hours of
   driving per shift, including the break split into 15 and 30 minutes (EU
-  Regulation 561/2006, Russian Ministry of Transport Order No. 424);
+  Regulation 561/2006; Russian Ministry of Transport Order No. 160 of
+  14.04.2026, points 8 and 11, which replaced Order No. 424 from
+  1 September 2026);
 - several trips per shift with a reload at the depot;
 - speeds by time of day (the Ichoua, Gendreau and Potvin model, FIFO);
 - zones closed to vehicles by gross weight, axle load, height or type;
@@ -96,6 +100,7 @@ with an English summary).
 | Set partitioning over the route pool (CP-SAT, SCIP, HiGHS, CBC) | recombining routes found so far | over the pool only |
 | The dual of its LP relaxation (GLOP) | prices of orders, rents of vehicle types | for the LP |
 | CP-SAT, one circuit per vehicle | small instances with any constraint of the model | yes |
+| CP-SAT warm-started from the ALNS plan plus a cold run, both deterministic (a pattern from the SynAPS core) | `vrp-solve --solver exact`: a plan never worse than the heuristic one, the same on any machine | when time allows |
 | Compact MIP of Furtado, Munari and Morabito (2017) on SCIP, HiGHS, CBC | lower bounds, comparing solvers | yes |
 | OR-Tools Routing (PARALLEL_CHEAPEST_INSERTION + GUIDED_LOCAL_SEARCH) | a baseline for comparison | no |
 | Insertion into the part of a plan not yet driven | orders arriving during the day | no |
@@ -111,6 +116,7 @@ with an error code instead of returning a plan that silently breaks the rule.
 | Cordeau a2-16, exact models | CP-SAT proves the published optimum 294.25 in under a second, SCIP in about 26 s, HiGHS in 40 s. CBC is still 20% off after 60 s. The LP relaxation of the compact model gives only 85.27: the big-M is weak. ALNS reaches the same optimum in about 3 s | [solver-lab-a2-16](docs/benchmarks/solver-lab-a2-16.md) |
 | 130 public instances | every plan passed the verifier. Solomon: the best-known vehicle count on all 56 instances, median distance gap 0.50%, worst 7.0%. Cordeau: the published optimum on 19 of 48, mean gap 0.50% | [vrp-public-benchmarks](docs/benchmarks/vrp-public-benchmarks.md) |
 | ALNS against proven optima | 40 random instances of the full model (2–3 vehicle types, capacity vector, skills, ride limits, shifts) with optima proven by CP-SAT: ALNS finds the optimum on all 40. Where leaving an order out pays, on 87 of 90 | [exact-vs-alns](docs/benchmarks/exact-vs-alns.md) |
+| ALNS at 14 orders | 20 instances where some orders have to be refused: ALNS reaches the best plan on 16 of 20, worst gap 16%. CP-SAT started from the ALNS plan is never worse than it, and with a cold run beside it finds the best plan on all 20; every run repeats bit for bit | [warm-start](docs/benchmarks/warm-start.md) |
 | OR-Tools at equal time | 18 instances, 10 s each, both plans checked by the same verifier: ALNS is better on 12, equal on 6, worse on none. Mixed-fleet freight days come out 14–17% cheaper with one to three vehicles fewer | [ortools-vs-alns](docs/benchmarks/ortools-vs-alns.md) |
 | PyVRP, VROOM, jsprit | Solomon, vehicles first: the best-known vehicle count on 56 of 56 instances, against 50 for PyVRP, 32 for VROOM and 30 for jsprit. On 1000 customers ranked by distance alone PyVRP is ahead: +1.2% to the best known against +2.9% for this engine | [solvers](docs/benchmarks/solvers.md) |
 | Rust kernel | faster than the Python reference with bit-identical plans: 10× on VRPTW, 14× on PDPTW, 42× on DARP with ride limits. On a freight day with eight vehicle types it is 5.4×, with rush hours 6.5×, on a day with split breaks 5.5×: the operators still written in Python become the bottleneck there | [vrp-speed](docs/benchmarks/vrp-speed.md) |
@@ -335,10 +341,17 @@ one more van saves 641 and with one more truck 2,160. Details are in the
   single-purpose classes: `Alns`, `LocalSearch`, `RouteMerger`,
   `TypeAssigner`, `Dispatcher`. A result is a plan (`Solution`) and the
   verifier's `Verdict`, which does not depend on the solver.
-- 658 tests, 13 of them Hypothesis properties that check hundreds of random
+- 695 tests, 13 of them Hypothesis properties that check hundreds of random
   routes against the verifier. A separate set tries to break the engine: NaN
   and infinity in the input, a plan with a vehicle type or node that does
-  not exist, arbitrary plans from another system. Coverage is 92%.
+  not exist, arbitrary plans from another system, an input file with one
+  broken field (every such file ends in an error code, not a traceback).
+  Coverage is 92%.
+- One test keeps the verifier from importing anything of the search: it may
+  use the model, the schedule, the cost and travel times only. Another keeps
+  claims stronger than the evidence (an optimum without a proof, savings
+  without a carrier's data) out of the READMEs, the docs and the site, and
+  recounts the benchmark instances the site names.
 - The tests catch all 12 deliberately planted bugs (the verifier forgetting
   capacity, insertion allowing a minute of lateness, a rest missing from a
   route sheet, ...): `python benchmark/mutation_smoke.py`. A differential run,
@@ -347,6 +360,11 @@ one more van saves 641 and with one more truck 2,160. Details are in the
   arbitrary plans and solves 400 random instances with every rule on both
   kernels, with no difference found.
 - `mypy --strict`, `ruff`, `cargo clippy -D warnings` and `cargo fmt` in CI.
+  Every pull request also gets CodeQL (Python, JavaScript, Rust), `pip-audit`
+  and `cargo audit` and a gitleaks scan of the whole history, and a test
+  reads the licences of the whole dependency tree and refuses GPL and AGPL.
+  Third-party GitHub Actions are pinned by SHA, Dependabot proposes updates
+  weekly, and OpenSSF Scorecard rates the supply chain.
 - The Rust kernel follows the Python reference operation by operation. Tests
   require identical plans, down to whole ALNS trajectories, so the fast path
   cannot drift from the slow one.
@@ -387,8 +405,26 @@ The full list and the plans are in [docs/limitations.md](docs/limitations.md).
 | [benchmark/instances/README.md](benchmark/instances/README.md) | where the benchmark instances come from |
 | [CHANGELOG.md](CHANGELOG.md) | what changed in each version |
 
-## License
+## License and legal notes
 
-MIT, see [LICENSE](LICENSE). Written by Dmitrij Konkov
-([GitHub](https://github.com/KonkovDV)). How to cite:
+The code is under the MIT licence, see [LICENSE](LICENSE). Written by Dmitrij
+Konkov ([GitHub](https://github.com/KonkovDV)). How to cite:
 [CITATION.cff](CITATION.cff).
+
+- The benchmark instances in `benchmark/instances/` belong to their authors
+  and are kept unchanged, so that every published result can be checked on
+  the same files. The MIT licence does not cover them: the terms of each set
+  and the licence texts of its source are in
+  [benchmark/instances/NOTICE.md](benchmark/instances/NOTICE.md).
+- OR-Tools, the MIP solvers and other dependencies are installed from their
+  own sources under their own licences.
+- Examples and generated days are synthetic: random points, made-up names.
+  The repository holds no personal data and no data of any organisation.
+- This is an independent project built from public sources. It is not
+  affiliated with or endorsed by the organisations its documents mention
+  (PJSC KAMAZ and PJSC NefAZ among them); company and product names belong
+  to their owners and appear only as references to publications.
+- The legal rules in [docs/trucking-ru.md](docs/trucking-ru.md) are described
+  as model constraints as of November 2026, not as legal advice. The engine
+  helps plan a trip; keeping to the drivers' working-time rules and releasing
+  a vehicle onto the road remain the carrier's duty.

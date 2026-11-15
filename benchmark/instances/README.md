@@ -3,7 +3,10 @@
 Public academic instances, kept byte for byte (`.gitattributes` marks the
 folder `-text`, so line endings are never rewritten). Every folder has a
 `SHA256SUMS.txt`; readers and benchmark scripts hash the bytes they solve, and
-a published reference applies only to those exact bytes.
+a published reference applies only to those exact bytes. The files belong to
+their authors and are not covered by the MIT licence of this repository: the
+terms of each set and the licence texts of its source are in
+[NOTICE.md](NOTICE.md).
 
 | Folder | Problem | Files | Source of the files | Reference values |
 | --- | --- | ---: | --- | --- |
