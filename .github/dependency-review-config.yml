@@ -1,0 +1,10 @@
+# New dependencies with known high-severity advisories, or under a licence
+# that would oblige MIT users to release their own code, fail the review.
+fail-on-severity: high
+deny-licenses:
+  - AGPL-3.0-only
+  - AGPL-3.0-or-later
+  - GPL-3.0-only
+  - GPL-3.0-or-later
+retry-on-snapshot-warnings: true
+retry-on-snapshot-warnings-timeout: 180
