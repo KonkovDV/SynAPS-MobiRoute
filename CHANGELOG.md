@@ -1,5 +1,16 @@
 # Changelog
 
+## Unreleased
+
+### Added
+- `docs/reading.md`: a five-minute reading of the decision, the method chosen
+  by size and answer time, the synthetic plant shift (seed 11) and the limits.
+  The public job description of KAMAZ Digital's algorithmic programmer role is
+  mapped onto files, including the parts that description asks for and this
+  repository does not have. The site opens on the same three points. No
+  library change. The fast suite is 735, because the claim check reads the
+  new guide.
+
 ## 0.7.1 — 2026-11-15
 
 ### Changed

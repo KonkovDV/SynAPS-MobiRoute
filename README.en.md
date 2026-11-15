@@ -1,16 +1,23 @@
 # SynAPS-MobiRoute
 
-A vehicle routing engine for mixed fleets. VRPTW, PDPTW and DARP share one
-model: time windows at pickup and delivery, pickup-and-delivery pairs, loads
-with weight, volume and pallets, own and hired vehicles of several types,
-drivers' driving-time rules, several trips per shift and travel speeds that
-change over the day.
+The program decides which vehicle takes which order, in what order and when,
+and checks apart from the search that the trip can be driven. When it cannot,
+the check names the conflicting rules and the minutes missing.
 
-It builds the plan for a day of transport — which vehicle carries each order,
-in what order and when — and checks, apart from the search, that the plan
-can be driven. The examples are a city freight day with own and hired
-vehicles, workshops' requests for in-plant transport, and an employee
-shuttle. The data are synthetic; the solvers are tested on public benchmarks.
+Five minutes: the decision, which method fits the size and the time allowed
+for an answer, and what this repository does not contain — in
+[docs/reading.md](docs/reading.md) (Russian, with an English close). The same
+page gives a synthetic plant shift, seed 11: 134 of 140 orders when they
+arrive during the day, 138 of 140 when all of them are known in the morning.
+There is no carrier's data and no pilot, and the author is not affiliated
+with the companies named in the docs.
+
+The same model in the usual names: VRPTW, PDPTW and DARP, time windows at
+pickup and delivery, pickup-and-delivery pairs, loads with weight, volume and
+pallets, own and hired vehicles of several types, drivers' driving-time
+rules, several trips per shift and travel speeds that change over the day.
+The examples are a city freight day, workshops' requests and an employee
+shuttle. The solvers are tested on public benchmarks.
 
 The main method is ALNS. Its hot path (inserting orders and checking
 schedules, rush hours and split breaks included) is written in Rust and
@@ -351,7 +358,7 @@ one more van saves 641 and with one more truck 2,160. Details are in the
   single-purpose classes: `Alns`, `LocalSearch`, `RouteMerger`,
   `TypeAssigner`, `Dispatcher`. A result is a plan (`Solution`) and the
   verifier's `Verdict`, which does not depend on the solver.
-- 734 tests, 17 of them Hypothesis properties that check hundreds of random
+- 735 tests, 17 of them Hypothesis properties that check hundreds of random
   routes against the verifier. A separate set tries to break the engine: NaN
   and infinity in the input, a plan with a vehicle type or node that does
   not exist, arbitrary plans from another system, an input file with one
@@ -411,6 +418,7 @@ The full list and the plans are in [docs/limitations.md](docs/limitations.md).
 
 | Document | About |
 | --- | --- |
+| [docs/reading.md](docs/reading.md) | five minutes: the decision, which method when, the synthetic plant shift, what the repository does not contain (Russian, English close) |
 | [docs/cargo-vrp.md](docs/cargo-vrp.md) | freight VRP: model, algorithms, input in coordinates, route sheets, scenarios (Russian, English summary) |
 | [docs/trucking-ru.md](docs/trucking-ru.md) | Russian freight practice and how each rule maps onto the model (Russian, English summary) |
 | [docs/industrial-transport.md](docs/industrial-transport.md) | in-plant transport: moves between workshops on request, staff shuttles, line feeding; what the model covers (Russian) |
