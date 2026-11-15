@@ -248,6 +248,8 @@ td.num { color: var(--ink); }
 .foot { padding: 44px 0 64px; border-top: 1px solid var(--line); color: var(--muted); font-size: 14px; background: var(--bg); }
 .foot p + p { margin-top: 2px; }
 .foot a { display: inline-block; padding: 6px 0; }
+.foot .legal { margin-top: 14px; max-width: 72ch; font-size: 13px; line-height: 1.55; }
+.foot .legal a { padding: 0; }
 
 /* motion */
 .anim .reveal { opacity: 0; transform: translateY(26px); transition: opacity .8s cubic-bezier(.2, .7, .2, 1), transform .8s cubic-bezier(.2, .7, .2, 1); }
