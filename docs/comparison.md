@@ -193,6 +193,7 @@ for speed and routing-engine integration, OR-Tools for a broad ecosystem,
 Timefold for Java planning, Yandex Routing as a finished service. Tables:
 `docs/benchmarks/ortools-vs-alns.md`, `docs/benchmarks/solvers.md`.
 Next: time-of-day truck bans, multi-day trips with daily and weekly rest,
-vehicle-type assignment and route merges in the Rust kernel, and the same
-rules in the live dispatcher. Split breaks and rush hours have run in the
-kernel since 0.6, with the same plans as the Python reference.
+vehicle-type assignment and route merges in the Rust kernel, and rush hours
+and reloads in the live dispatcher, which plans drivers' breaks since 0.7.
+Split breaks and rush hours have run in the kernel since 0.6, with the same
+plans as the Python reference.

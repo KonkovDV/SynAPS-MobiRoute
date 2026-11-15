@@ -248,6 +248,7 @@ mobiroute vrp-solve --generate cargo --orders 120 --out-dir out-cargo --svg
 mobiroute vrp-solve --instance benchmark/instances/sartori-buriol/n100/bar-n100-1.txt --time-limit 10 --out-dir out-sb --svg
 mobiroute vrp-solve --generate cargo --orders 60 --solver ortools --time-limit 10 --out-dir out-ortools
 mobiroute vrp-dispatch --day plant --policy insertion+alns --out-dir out-plant
+mobiroute vrp-dispatch --day plant --rests --out-dir out-plant-rests
 mobiroute vrp-solve --geo examples/chelny-day.geo.json --sheets --out-dir out-chelny
 mobiroute vrp-solve --geo examples/chelny-day.geo.json --prices --out-dir out-prices
 mobiroute vrp-solve --geo examples/chelny-day.geo.json --osrm http://localhost:5000 --sheets --out-dir out-osrm
@@ -280,7 +281,7 @@ print(sheets_markdown(sheets, city.instance.dimensions, currency=city.currency))
 | Перемещение свободных машин к ожидаемому спросу | шаттл и заводская логистика |
 | Тёплый старт OR-Tools из текущего плана | сравнение политик пересчёта на равных |
 | Генерация столбцов: подзадача ценообразования по двойственным ценам | цены и нижняя граница для задачи в целом, а не только для пула маршрутов |
-| Перерывы, рейсы и пробки в живой диспетчеризации | ядро их считает; диспетчер такой день отклоняет с кодом ошибки |
+| Рейсы и пробки в живой диспетчеризации, перерывы при её переоптимизации | перерывы диспетчер уже ставит при вставке заявки; день с рейсами или пробками он отклоняет с кодом ошибки |
 
 ---
 

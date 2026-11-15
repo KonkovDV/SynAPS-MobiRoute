@@ -56,7 +56,8 @@ function countUp(el) {
   const dec = Number(el.dataset.dec || 0);
   const suf = () => (lang() === "en" && el.dataset.sufEn !== undefined ? el.dataset.sufEn : el.dataset.suf || "");
   const paint = (k) => {
-    el.textContent = (el.dataset.pre || "") + (Number(el.dataset.count) * k).toFixed(dec) + suf();
+    const value = (Number(el.dataset.count) * k).toFixed(dec);
+    el.textContent = (el.dataset.pre || "") + (lang() === "ru" ? value.replace(".", ",") : value) + suf();
   };
   el._final = () => paint(1);
   if (reduce.matches) return paint(1);
@@ -103,6 +104,19 @@ addEventListener("scroll", () => {
     ticking = false;
   });
 }, { passive: true });
+
+/* ---------- the menu marks the section being read ---------- */
+const navLinks = [...document.querySelectorAll(".links a[href^='#']")];
+const spy = new IntersectionObserver((entries) => {
+  for (const e of entries) {
+    if (!e.isIntersecting) continue;
+    for (const a of navLinks) {
+      if (a.getAttribute("href") === `#${e.target.id}`) a.setAttribute("aria-current", "true");
+      else a.removeAttribute("aria-current");
+    }
+  }
+}, { rootMargin: "-40% 0px -55% 0px" });
+document.querySelectorAll("main > section[id], main > header[id]").forEach((sec) => spy.observe(sec));
 
 document.querySelectorAll(".card, .ba, .insight").forEach((card) => {
   card.addEventListener("pointermove", (e) => {

@@ -4,6 +4,8 @@
   sizes (the first n orders of the same day), with routes by vehicle class;
 * ``site/data/dispatch.json`` - a plant day replayed through the live
   dispatcher: every decision and every vehicle's executed plan;
+* ``site/data/dispatch-rests.json`` - the same day under the drivers' break
+  rule of Order No. 160 (insertion policy), with every planned break;
 * ``site/data/benchmarks.json`` and ``site/data/comparisons.json`` - copied
   from the result files of the benchmark scripts;
 * ``site/data/route-sheets.json`` - the synthetic Naberezhnye Chelny day
@@ -35,9 +37,9 @@ from mobiroute.vrp.alns import AlnsConfig, solve
 from mobiroute.vrp.generators import cargo_day, plant_day
 from mobiroute.vrp.geo import GeoInstance
 from mobiroute.vrp.kpi import plan_kpi
-from mobiroute.vrp.model import Instance
+from mobiroute.vrp.model import BreakRule, Instance
 from mobiroute.vrp.prices import Prices, solve_with_prices
-from mobiroute.vrp.realtime import simulate
+from mobiroute.vrp.realtime import Dispatcher, Policy
 from mobiroute.vrp.schedule import compact_schedule, route_timing
 from mobiroute.vrp.sheets import CURRENCY_SIGNS, route_sheets
 
@@ -104,11 +106,35 @@ def fleet_mix() -> dict[str, Any]:
     }
 
 
+#: Order No. 160, point 11: a 45 min break after 4.5 h of driving, or 15 + 30.
+ORDER_160 = BreakRule(270.0, 45.0, split=(15.0, 30.0))
+
+
 def dispatch() -> dict[str, Any]:
-    inst = plant_day(5)
-    rep = simulate(inst, "insertion+alns", reoptimize_every=30.0, alns_iterations=300)
+    return dispatch_day(plant_day(5), "insertion+alns")
+
+
+def dispatch_rests() -> dict[str, Any]:
+    day = plant_day(5)
+    ruled = replace(
+        day,
+        name=day.name + "-breaks",
+        vehicle_types=tuple(replace(vt, breaks=ORDER_160) for vt in day.vehicle_types),
+    )
+    return dispatch_day(ruled, "insertion")
+
+
+def dispatch_day(inst: Instance, policy: Policy) -> dict[str, Any]:
+    """Every decision of the replayed day and every vehicle's plan, breaks included."""
+    dispatcher = Dispatcher(inst, policy=policy, reoptimize_every=30.0, alns_iterations=300)
+    rep = dispatcher.run()
+    # Plans list the vehicles that drove, in unit order; breaks name the unit.
+    slot = {k: i for i, k in enumerate(k for k, u in enumerate(dispatcher.units) if u.plan)}
+    rests: list[list[list[Any]]] = [[] for _ in slot]
+    for unit, gap, start, minutes, final in rep.rests:
+        rests[slot[unit]].append([gap, start, minutes, final])
     types = [{"id": vt.id, "profile": vt.profile} for vt in inst.vehicle_types]
-    plans = []
+    plans: list[dict[str, Any]] = []
     for t, nodes, starts in rep.plans:
         vt = inst.vehicle_types[t]
         time = inst.profiles[vt.profile].time
@@ -125,10 +151,12 @@ def dispatch() -> dict[str, Any]:
                 "starts": list(starts),
                 "service": [inst.nodes[n].service for n in nodes],
                 "legs": legs,
+                "rests": rests[len(plans)],
             }
         )
     return {
         "name": inst.name,
+        "policy": policy,
         "kpi": rep.kpi,
         "verified": rep.verified,
         "types": types,
@@ -149,7 +177,10 @@ def dispatch() -> dict[str, Any]:
                 "id": d.request,
                 "t": d.released,
                 "ok": d.accepted,
-                "veh": d.vehicle,
+                # The plan that took the order at the time and its vehicle type;
+                # re-optimisation may move the order later.
+                "veh": None if d.vehicle is None else slot.get(d.vehicle),
+                "vt": None if d.vehicle is None else dispatcher.units[d.vehicle].t,
                 "pick": d.pickup_start,
                 "ms": d.latency_ms,
                 "why": d.reason,
@@ -361,6 +392,9 @@ def main() -> None:
     DATA.mkdir(parents=True, exist_ok=True)
     (DATA / "fleet-mix.json").write_text(json.dumps(fleet_mix(), separators=(",", ":")) + "\n")
     (DATA / "dispatch.json").write_text(json.dumps(dispatch(), separators=(",", ":")) + "\n")
+    (DATA / "dispatch-rests.json").write_text(
+        json.dumps(dispatch_rests(), separators=(",", ":")) + "\n"
+    )
     day, prices = sheets_day()
     for name, payload in (("route-sheets.json", day), ("prices.json", prices)):
         (DATA / name).write_text(

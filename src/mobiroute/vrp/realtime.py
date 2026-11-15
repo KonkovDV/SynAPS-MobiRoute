@@ -24,9 +24,20 @@ The current plan seeds the search, so the result is never worse. The same
 snapshot can be handed to OR-Tools, which is how the re-solve-per-order
 policy is measured.
 
+Driver rests
+------------
+A vehicle type with a rest rule (4.5 h of driving, then a 45-minute break or
+15 + 30 minutes) keeps its driver's state through the day. The part of a
+route already driven fixes how long the driver has been at the wheel and
+whether the break, or its first part, is behind them; an order is inserted
+only where the rest of the route still has a legal place for the break, and
+the plan carries the break with its start. A break once started is never
+moved. With rests only the ``insertion`` policy runs: the static
+re-optimisation would start every driver's day afresh.
+
 KPIs: acceptance, time from call to pickup (vehicle arrival lead time), ride
 time, distance and the part of it driven empty, vehicles used, decision
-latency.
+latency, orders no vehicle type can carry and breaks planned.
 """
 
 from __future__ import annotations
@@ -35,12 +46,14 @@ import itertools
 import math
 import statistics
 import time
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import Literal
 
 from mobiroute.vrp.alns import AlnsConfig, search_objective
 from mobiroute.vrp.alns import solve as alns_solve
 from mobiroute.vrp.insertion import (
+    EPS,
     Compiled,
     RouteState,
     apply_insertion,
@@ -66,6 +79,29 @@ class Decision:
     reason: str = ""
 
 
+@dataclass(frozen=True, slots=True)
+class Rest:
+    """A driver's break planned on a route."""
+
+    #: The break comes before ``plan[gap]`` (``gap == len(plan)``: before the return).
+    gap: int
+    start: float
+    minutes: float
+    #: Driving since the start of the shift when the break begins.
+    driven: float
+    #: ``True`` for the whole break or the last part of a split one: the
+    #: count of driving starts again after it.
+    final: bool
+
+
+@dataclass(frozen=True, slots=True)
+class _Placement:
+    """Service starts of a route suffix and the breaks that make it legal."""
+
+    starts: tuple[float, ...]
+    rests: tuple[tuple[int, float, float, float, bool], ...]  # arc, start, minutes, driven, final
+
+
 @dataclass(slots=True)
 class _Unit:
     t: int
@@ -74,6 +110,7 @@ class _Unit:
     used: bool = False
     #: When the vehicle left the depot; its shift cap runs from here.
     left: float | None = None
+    rests: list[Rest] = field(default_factory=list)
 
 
 @dataclass(frozen=True, slots=True)
@@ -85,6 +122,8 @@ class RealtimeReport:
     plans: tuple[tuple[int, tuple[int, ...], tuple[float, ...]], ...]
     verified: bool
     violations: tuple[str, ...]
+    #: Breaks on the routes: ``(unit, before plan[gap], start, minutes, final)``.
+    rests: tuple[tuple[int, int, float, float, bool], ...] = ()
 
 
 def _pct(values: list[float], q: float) -> float:
@@ -110,7 +149,15 @@ class Dispatcher:
     ) -> None:
         if any(r.max_ride is not None for r in inst.requests):
             raise ValueError("REALTIME_RIDE_LIMITS_AS_DEADLINES")
-        inst.require_core_model("REALTIME")
+        if inst.has_reloads:
+            raise ValueError("REALTIME_MULTI_TRIP_UNSUPPORTED")
+        if inst.has_traffic:
+            raise ValueError("REALTIME_TIME_DEPENDENT_TRAVEL_UNSUPPORTED")
+        if inst.has_rest_rules and policy != "insertion":
+            # Re-optimisation writes the live state as a static day, where
+            # every driver starts with a full allowance; that would undo the
+            # breaks already taken.
+            raise ValueError("REALTIME_RESTS_NEED_THE_INSERTION_POLICY")
         self.inst = inst
         self.c = Compiled(inst)
         self.policy = policy
@@ -163,28 +210,227 @@ class Dispatcher:
             at = node
         return out
 
+    # -- driver rests ----------------------------------------------------------
+    def _resting(self, t: int) -> bool:
+        return self.c.brk_drive[t] < math.inf
+
+    @staticmethod
+    def _behind(u: _Unit, f: int, tau: float) -> list[Rest]:
+        """Breaks the driver has taken or begun by ``tau``: never moved again."""
+        return [rest for rest in u.rests if rest.gap < f or rest.start <= tau]
+
+    def _state(self, u: _Unit, tau: float) -> tuple[int, int, float]:
+        """``(frozen stops, origin, ready)``; a break under way delays ``ready``."""
+        f = self._frozen(u, tau)
+        origin, ready = self._origin(u, f, tau)
+        for rest in self._behind(u, f, tau):
+            if rest.gap >= f:
+                ready = max(ready, rest.start + rest.minutes)
+        return f, origin, ready
+
+    def _driver(self, u: _Unit, f: int, tau: float) -> tuple[float, bool, bool]:
+        """``(driving, rested, first_part_taken)`` once ``plan[:f]`` is driven.
+
+        ``driving`` counts from the start of the shift, or from the end of the
+        break when the break (or its last part) is behind the driver.
+        """
+        time = self.c.time[u.t]
+        at = self.c.start[u.t]
+        driving = 0.0
+        for node in u.plan[:f]:
+            driving += time[at][node]
+            at = node
+        behind = self._behind(u, f, tau)
+        finals = [rest.driven for rest in behind if rest.final]
+        if finals:
+            return driving - max(finals), True, True
+        return driving, False, any(not rest.final for rest in behind)
+
+    def _run(
+        self,
+        t: int,
+        seq: list[int],
+        ready: float,
+        end_by: float | None,
+        breaks: dict[int, tuple[float, bool]],
+    ) -> tuple[list[float], dict[int, float]] | None:
+        """Earliest service starts along ``seq`` from ``ready``, with breaks on arcs.
+
+        ``breaks[k] = (minutes, before)`` puts a break on the arc from
+        ``seq[k]`` to ``seq[k + 1]``, before or after its drive. Service at
+        ``seq[0]`` is over at ``ready``. Returns the starts of ``seq[1:-1]``
+        and the start of each break, or ``None`` if a window or the shift
+        end is missed.
+        """
+        c = self.c
+        time = c.time[t]
+        e, lat, s = c.e, c.l, c.s
+        last = len(seq) - 1
+        clock = ready
+        starts: list[float] = []
+        rest_at: dict[int, float] = {}
+        for k in range(1, len(seq)):
+            a, b = seq[k - 1], seq[k]
+            minutes, before = breaks.get(k - 1, (0.0, False))
+            if minutes and before:
+                rest_at[k - 1] = clock
+                clock += minutes
+            clock += time[a][b]
+            if minutes and not before:
+                rest_at[k - 1] = clock
+                clock += minutes
+            begin = max(clock, e[b])
+            if k == last:
+                limit = c.end_lim[t] if end_by is None else min(c.end_lim[t], end_by)
+            else:
+                limit = lat[b]
+            if begin > limit + EPS:
+                return None
+            if k < last:
+                starts.append(begin)
+            clock = begin + s[b]
+        return starts, rest_at
+
+    def _place(
+        self,
+        u: _Unit,
+        f: int,
+        tau: float,
+        origin: int,
+        ready: float,
+        nodes: list[int],
+        end_by: float | None,
+    ) -> _Placement | None:
+        """Schedule of ``nodes`` after ``origin`` with a legal break, or ``None``.
+
+        The same rule as :func:`mobiroute.vrp.insertion.route_exact`, carried
+        over the part already driven: one break per shift, at most ``D``
+        minutes of driving on each side of it, the 4.5 h count restarting
+        only after the whole break or its last part. Among the admissible
+        gaps the earliest that keeps every window wins, as in the static
+        search; inside a gap the later side of the drive is preferred, since
+        it leaves more driving after the break.
+        """
+        c, t = self.c, u.t
+        seq = [origin, *nodes, c.end[t]]
+        limit = c.brk_drive[t]
+        driving, rested, first_taken = self._driver(u, f, tau)
+        time = c.time[t]
+        legs = [time[seq[k]][seq[k + 1]] for k in range(len(seq) - 1)]
+        total = driving + math.fsum(legs)
+        split = c.brk_split[t]
+        if rested or total <= limit + EPS:
+            if total > limit + EPS:
+                return None
+            run = self._run(t, seq, ready, end_by, {})
+            if run is None:
+                return None
+            ahead: tuple[tuple[int, float, float, float, bool], ...] = ()
+            if split is not None and not rested and not first_taken:
+                ahead = self._first_part_in_a_wait(t, seq, ready, run[0], driving, split[0])
+            return _Placement(tuple(run[0]), ahead)
+        if total > 2.0 * limit + EPS:
+            return None
+        low, high = total - limit - EPS, limit + EPS
+        places: list[tuple[int, float, bool]] = []  # arc, driving at the break, before the drive
+        done = driving
+        for k, leg in enumerate(legs):
+            after = done + leg
+            if low <= after <= high:
+                places.append((k, after, False))
+            elif low <= done <= high:
+                places.append((k, done, True))
+            done = after
+        last = split[1] if split is not None and first_taken else c.brk_len[t]
+        for k, at_break, before in places:
+            run = self._run(t, seq, ready, end_by, {k: (last, before)})
+            if run is not None:
+                return _Placement(tuple(run[0]), ((k, run[1][k], last, at_break, True),))
+        if split is None or first_taken:
+            return None
+        for k, at_break, before in places:
+            for j in range(k):
+                parts = {j: (split[0], False), k: (split[1], before)}
+                run = self._run(t, seq, ready, end_by, parts)
+                if run is not None:
+                    first_at = driving + math.fsum(legs[: j + 1])
+                    both = (
+                        (j, run[1][j], split[0], first_at, False),
+                        (k, run[1][k], split[1], at_break, True),
+                    )
+                    return _Placement(tuple(run[0]), both)
+        return None
+
+    def _first_part_in_a_wait(
+        self,
+        t: int,
+        seq: list[int],
+        ready: float,
+        starts: list[float],
+        driving: float,
+        minutes: float,
+    ) -> tuple[tuple[int, float, float, float, bool], ...]:
+        """The first part of a split break, in the first wait long enough for it.
+
+        A vehicle that stands for ``minutes`` anyway, waiting for a window,
+        gives its driver the first 15 minutes of the break at no cost; the
+        route sheet shows them as a break, set before the wait comes, never
+        counted after it. The day then needs only the last 30 minutes later.
+        """
+        c = self.c
+        time = c.time[t]
+        depart = ready
+        for k, begin in enumerate(starts):
+            arrive = depart + time[seq[k]][seq[k + 1]]
+            driving += time[seq[k]][seq[k + 1]]
+            if begin - arrive >= minutes - EPS:
+                return ((k, arrive, minutes, driving, False),)
+            depart = begin + c.s[seq[k + 1]]
+        return ()
+
+    def _rest_check(
+        self, u: _Unit, f: int, tau: float, origin: int, ready: float, end_by: float | None
+    ) -> Callable[[list[int]], bool]:
+        def check(nodes: list[int]) -> bool:
+            return self._place(u, f, tau, origin, ready, nodes, end_by) is not None
+
+        return check
+
     # -- one decision --------------------------------------------------------
     def _insert(self, r: int, tau: float) -> Decision:
         began = time.perf_counter()
         best: tuple[float, int, int, int] | None = None
-        context: dict[int, tuple[int, int, float, list[int]]] = {}
+        context: dict[int, tuple[int, int, float, list[int], float | None]] = {}
         for k, u in enumerate(self.units):
-            f = self._frozen(u, tau)
-            origin, ready = self._origin(u, f, tau)
+            f, origin, ready = self._state(u, tau)
             suffix = u.plan[f:]
+            end_by = self._end_by(u, ready)
+            # RouteState adds the service time of its first stop; ``ready`` is
+            # when that service is already over, so it gets the service start.
             st = RouteState(
                 self.c,
                 u.t,
                 suffix,
                 origin=origin,
-                ready=ready,
+                ready=ready - self.c.s[origin],
                 fresh=not u.used,
-                end_by=self._end_by(u, ready),
+                end_by=end_by,
             )
-            found = best_insertion(self.c, st, r)
+            if self._resting(u.t):
+                driving, rested, _ = self._driver(u, f, tau)
+                allowance = self.c.brk_drive[u.t] * (1.0 if rested else 2.0)
+                found = best_insertion(
+                    self.c,
+                    st,
+                    r,
+                    exact=self._rest_check(u, f, tau, origin, ready, end_by),
+                    drive_room=allowance - driving - st.drive,
+                )
+            else:
+                found = best_insertion(self.c, st, r)
             if found is None:
                 continue
-            context[k] = (f, origin, ready, suffix)
+            context[k] = (f, origin, ready, suffix, end_by)
             key = (found[0], k, found[1], found[2])
             if best is None or key < best:
                 best = key
@@ -196,10 +442,19 @@ class Dispatcher:
             )
         _, k, i, j = best
         u = self.units[k]
-        f, origin, ready, suffix = context[k]
+        f, origin, ready, suffix, end_by = context[k]
         new_suffix = apply_insertion(self.c, suffix, r, i, j)
         u.plan = u.plan[:f] + new_suffix
-        u.starts = u.starts[:f] + self._times(u.t, origin, ready, new_suffix)
+        if self._resting(u.t):
+            placed = self._place(u, f, tau, origin, ready, new_suffix, end_by)
+            assert placed is not None  # the exact check accepted this candidate
+            u.starts = u.starts[:f] + list(placed.starts)
+            u.rests = self._behind(u, f, tau) + [
+                Rest(f + arc, start, minutes, driven, final)
+                for arc, start, minutes, driven, final in placed.rests
+            ]
+        else:
+            u.starts = u.starts[:f] + self._times(u.t, origin, ready, new_suffix)
         if u.left is None:
             u.left = ready
         u.used = True
@@ -218,8 +473,7 @@ class Dispatcher:
         for u in self.units:
             if u.t not in self.c.allowed[r]:
                 continue
-            f = self._frozen(u, tau)
-            origin, ready = self._origin(u, f, tau)
+            _, origin, ready = self._state(u, tau)
             best_arrival = min(best_arrival, ready + self.c.time[u.t][origin][first])
         if not math.isfinite(best_arrival):
             return "no vehicle type can carry this order (skills or size)"
@@ -228,6 +482,11 @@ class Dispatcher:
             return (
                 f"the nearest free vehicle reaches the pickup {late:.1f} min "
                 "after its window closes"
+            )
+        if any(self._resting(u.t) for u in self.units if u.t in self.c.allowed[r]):
+            return (
+                "every vehicle that could reach it in time is full, would break a "
+                "promise already given or has no legal place left for the driver's break"
             )
         return (
             "every vehicle that could reach it in time is full "
@@ -462,6 +721,8 @@ class Dispatcher:
     def _report(self, decisions: list[Decision]) -> RealtimeReport:
         inst = self.inst
         accepted = [d for d in decisions if d.accepted]
+        fleet = {u.t for u in self.units}
+        uncarriable = sum(1 for r in range(inst.n_requests) if not set(self.c.allowed[r]) & fleet)
         response = [d.pickup_start - d.released for d in accepted if d.pickup_start is not None]
         rides: list[float] = []
         routes: list[Route] = []
@@ -510,6 +771,16 @@ class Dispatcher:
             "reoptimizations": float(self.reopt_runs),
             "reoptimize_seconds": round(self.reopt_seconds, 2),
             "reoptimize_gain": round(self.reopt_gain, 2),
+            # Orders no vehicle type of the fleet can take (skills or size):
+            # refused whatever the policy, so acceptance is also given
+            # against the orders the fleet could carry at all.
+            "uncarriable": float(uncarriable),
+            "acceptance_of_carriable": (
+                round(len(accepted) / (len(decisions) - uncarriable), 4)
+                if len(decisions) > uncarriable
+                else 0.0
+            ),
+            "breaks": float(sum(1 for u in self.units for rest in u.rests if rest.final)),
         }
         return RealtimeReport(
             policy=self.policy,
@@ -523,6 +794,11 @@ class Dispatcher:
             ),
             verified=verdict.feasible,
             violations=verdict.violations[:10],
+            rests=tuple(
+                (k, rest.gap, round(rest.start, 2), rest.minutes, rest.final)
+                for k, u in enumerate(self.units)
+                for rest in u.rests
+            ),
         )
 
 

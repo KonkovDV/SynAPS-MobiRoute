@@ -10,7 +10,10 @@ Ropke & Pisinger (2006) structure with one destroy operator from Christiaens
   with or without noise;
 * adaptive operator weights over segments of iterations;
 * simulated annealing acceptance with a temperature set so that a 5% worse
-  plan is accepted with probability 1/2 at the start.
+  plan is accepted with probability 1/2 at the start;
+* on every new best plan, left-out orders are tried in short routes by exact
+  re-sequencing (:mod:`mobiroute.vrp.reseat`): the two-moves-at-once case
+  that one destroy-and-repair step cannot reach.
 
 When the instance ranks vehicles first (``vehicle_penalty > 0``) a fleet
 reduction phase runs first: drop the smallest route, cap the fleet one below
@@ -47,6 +50,7 @@ from mobiroute.vrp.local_search import LocalSearch
 from mobiroute.vrp.local_search import applies as local_search_applies
 from mobiroute.vrp.merge import RouteMerger
 from mobiroute.vrp.model import Instance
+from mobiroute.vrp.reseat import Reseater
 from mobiroute.vrp.setpart import RoutePool, solve_set_partitioning
 from mobiroute.vrp.solution import MUST_SERVE_PENALTY, Route, RouteCosts, Solution, evaluate
 from mobiroute.vrp.verify import Verdict, verify
@@ -355,6 +359,7 @@ class Alns:
         self.repair, self.backend = make_repair(self.c, self.cfg.backend)
         self.kernel = _kernel_for(self.c) if self.backend == "native" else None
         self.assigner = TypeAssigner(self.c, self._route_ok)
+        self.reseat = Reseater(self.c)
         use_merge = (
             self.cfg.merge
             if self.cfg.merge is not None
@@ -501,7 +506,7 @@ class Alns:
             cur = Solution(routes, set(cur.unassigned) | dropped)
 
     def _polish(self, sol: Solution) -> Solution:
-        """Merge scan and local search on a plan about to become the best one."""
+        """Merge scan, local search and re-sequencing on a plan about to become the best one."""
         if self.merger is not None:
             sol = self.merger.improve(sol)
         if self.local is not None:
@@ -512,7 +517,7 @@ class Alns:
                 self._polished_routes = {tuple(r.nodes) for r in sol.routes}
             else:
                 sol = self.local.improve(sol)
-        return sol
+        return self.reseat.improve(sol)
 
     def _setpart(self, best: Solution) -> tuple[Solution, float] | None:
         """Best recombination of pool routes, if it beats ``best``."""

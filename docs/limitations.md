@@ -72,13 +72,19 @@ next.
   the one that gives the shortest shift (the earliest such gap), not a
   driver's preference.
 * Every vehicle returns to its end depot; open routes need a zero-cost return.
-* The OR-Tools baseline, the exact CP-SAT model and the live dispatcher do not
-  model rests, multi-trip days or time-dependent travel; they refuse such
-  instances with an explicit error. The OR-Tools baseline and the exact model
-  also refuse `time_cost = "duty"`: they price driving and service, and a
-  result for another objective would be mislabelled. In the dispatcher, ride limits have to be
-  written as delivery deadlines, and vehicles idle where they finish instead
-  of repositioning.
+* The OR-Tools baseline and the exact CP-SAT model do not model rests,
+  multi-trip days or time-dependent travel; they refuse such instances with an
+  explicit error. They also refuse `time_cost = "duty"`: they price driving
+  and service, and a result for another objective would be mislabelled.
+* The live dispatcher plans the break rule when it answers an order: the
+  break goes into the part of the route not yet driven, counting the driving
+  already done, and a break once begun is never moved. It does so with the
+  insertion policy only: the ALNS pass and the OR-Tools re-solve plan from a
+  vehicle's current position and would count driving from there, so a day
+  with rests and either of them is refused. Multi-trip days and
+  time-dependent travel are refused too. Ride limits have to be written as
+  delivery deadlines, and vehicles idle where they finish instead of
+  repositioning.
 
 ## Algorithms
 
@@ -94,15 +100,20 @@ next.
   `OPTIMAL` refers to its integer model with travel rounded up to 0.01 min;
   the verifier re-prices the plan in real numbers.
 * ALNS can stall where serving one more order needs two moves at once (a new
-  pair in, a stop already on the route moved): on 20 instances of 14 orders
-  with refusals it reaches the best plan on 16, worst gap 16%
-  ([benchmarks/warm-start.md](benchmarks/warm-start.md)). For instances that
-  small, `vrp-solve --solver exact` closes the gap; for large days the gap
-  is unknown, as no proof is available there.
+  pair in, a stop already on the route moved). Since 0.7 an exact
+  re-sequencing step covers that case for left-out orders on short routes (up
+  to 9 stops after the insertion, at most 20,000 search nodes per route): on
+  20 instances of 14 orders with refusals ALNS reaches the best plan on 17
+  instead of 16, worst gap 0.9% instead of 16%
+  ([benchmarks/warm-start.md](benchmarks/warm-start.md)). Longer routes keep
+  the weakness. For instances that small, `vrp-solve --solver exact` closes
+  the remaining gap; for large days the gap is unknown, as no proof is
+  available there.
 * Deterministic CP-SAT runs (the default of `--solver exact`) fix the batch
   size of the interleaved search and prove fewer optima in a given time than
-  the same search with the batch size left to OR-Tools: 1 of 20 against 5 of
-  20 on the study above. That variant does not repeat itself (2 of 8
+  the same search with the batch size left to OR-Tools: on the study above 1
+  cold and 2 warm runs of 20 end with a proof, against 5 of 20 in the 0.6.1
+  run without a fixed batch size. That variant does not repeat itself (2 of 8
   identical runs differed), so reproducibility wins.
 * The OR-Tools baseline is the common configuration (PCI + GLS, integer time grid,
   disjunctions), not a tuned setup; the comparison says how far the default

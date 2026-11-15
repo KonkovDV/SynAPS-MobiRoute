@@ -171,6 +171,12 @@ def main(argv: list[str] | None = None) -> int:
     rt.add_argument(
         "--policy", choices=["insertion", "insertion+alns", "ortools-resolve"], default="insertion"
     )
+    rt.add_argument(
+        "--rests",
+        action="store_true",
+        help="drivers' break rule: 45 min after 4.5 h of driving, or 15 + 30 "
+        "(Ministry of Transport Order No. 160, point 11); insertion policy only",
+    )
     rt.add_argument("--out-dir", type=Path, required=True)
 
     args = p.parse_args(argv)
@@ -662,6 +668,15 @@ def _vrp_dispatch(args: argparse.Namespace) -> int:
         inst = shuttle_day(args.seed, n_orders=args.orders or 160)
     else:
         inst = plant_day(args.seed, n_moves=args.orders or 140)
+    if args.rests:
+        from dataclasses import replace
+
+        from mobiroute.vrp.model import BreakRule
+
+        rule = BreakRule(270.0, 45.0, split=(15.0, 30.0))
+        inst = replace(
+            inst, vehicle_types=tuple(replace(vt, breaks=rule) for vt in inst.vehicle_types)
+        )
     report = simulate(inst, args.policy)
     args.out_dir.mkdir(parents=True, exist_ok=True)
     data = {
@@ -681,19 +696,25 @@ def _vrp_dispatch(args: argparse.Namespace) -> int:
             }
             for d in report.decisions
         ],
+        "rests": [
+            {"vehicle": v, "before_stop": gap, "start": at, "minutes": m, "final": final}
+            for v, gap, at, m, final in report.rests
+        ],
     }
     (args.out_dir / "dispatch.json").write_text(json.dumps(data, indent=2), encoding="utf-8")
     k = report.kpi
+    nobody = f" ({k['uncarriable']:.0f} no vehicle type can carry)" if k["uncarriable"] else ""
+    breaks = f", breaks {k['breaks']:.0f}" if args.rests else ""
     print(
         log_safe(
             f"{report.instance} [{report.policy}]: "
-            f"accepted {k['accepted']:.0f}/{k['orders']:.0f}, "
+            f"accepted {k['accepted']:.0f}/{k['orders']:.0f}{nobody}, "
             f"call-to-pickup {k['response_mean_min']:.1f} min, "
-            f"empty km {k['empty_km']:.1f} of {k['distance']:.1f}, "
+            f"empty km {k['empty_km']:.1f} of {k['distance']:.1f}{breaks}, "
             f"decision {k['decision_ms_mean']:.2f} ms, verified={report.verified}"
         )
     )
-    return 0 if report.verified else 2
+    return EXIT_OK if report.verified else EXIT_ERROR
 
 
 def _run_kernel_solver(problem: DayProblem, solver: str, *, time_limit_s: float) -> PlanningResult:

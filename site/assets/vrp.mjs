@@ -128,49 +128,101 @@ function fleet({ $, tr, svgEl, reduce, rerender }, data) {
 function reasonText(tr, why) {
   const late = /reaches the pickup ([\d.]+) min after/.exec(why);
   if (late) return tr(`ближайшая свободная машина опоздает на ${late[1]} мин`, `nearest free vehicle would be ${late[1]} min late`);
-  if (why.startsWith("no vehicle type")) return tr("нет подходящего типа машины", "no suitable vehicle type");
+  if (why.startsWith("no vehicle type")) return tr("ни один тип машины не берёт этот груз", "no vehicle type can carry it");
+  if (why.includes("driver's break")) return tr("кто успевает — заняты, связаны обещаниями или водителю негде сделать перерыв", "those in time are full, bound by promises or have no place left for a break");
   if (why.startsWith("every vehicle")) return tr("кто успевает — заняты или нарушили бы обещания", "those in time are full or bound by promises");
   return why;
 }
 
-function dispatch({ $, tr, svgEl, reduce, rerender }, data, comparisons) {
+// Vehicle track: depart just in time for the first stop, rest where the plan
+// says. A break in gap g comes before plan[g] (g = length: before the return):
+// at the previous stop when it starts as that service ends, else on arrival.
+function buildTrack(data, p) {
+  const n = p.nodes.length;
+  const stopAt = (g) => (g === 0 || g > n ? data.depot : p.nodes[g - 1]);
+  const goTo = (g) => (g >= n ? data.depot : p.nodes[g]);
+  const rests = (p.rests || []).map(([gap, start, minutes, final]) => ({ gap, from: start, to: start + minutes, minutes, final }));
+  const restIn = new Map(rests.map((r) => [r.gap, r]));
+  const events = [];
+  for (let g = 0; g <= n; g++) {
+    const from = stopAt(g);
+    const to = goTo(g);
+    const leg = p.legs[g];
+    const r = restIn.get(g);
+    let leave;
+    if (g === 0) leave = r ? r.from - leg : p.starts[0] - leg;
+    else {
+      leave = p.starts[g - 1] + p.service[g - 1];
+      if (r && Math.abs(r.from - leave) < 0.05) leave = r.to;
+    }
+    if (g === 0) events.push({ t: leave, from, to: from });
+    events.push({ t: leave, from, to, arrive: leave + leg });
+  }
+  return { events, rests };
+}
+
+function dispatch(ctx, plain, comparisons) {
+  const { $, tr, svgEl, reduce, rerender, load } = ctx;
   const svg = $("disp-map");
   const pad = 28;
-  const xs = data.nodes.map((n) => n.x);
-  const ys = data.nodes.map((n) => n.y);
-  const lo = Math.min(...xs, ...ys);
-  const span = Math.max(Math.max(...xs) - lo, Math.max(...ys) - lo) || 1;
-  const X = (n) => pad + ((data.nodes[n].x - lo) / span) * (600 - 2 * pad);
-  const Y = (n) => 600 - pad - ((data.nodes[n].y - lo) / span) * (600 - 2 * pad);
-  const sites = new Map();
-  data.nodes.forEach((nd, k) => {
-    if (k === data.depot) return;
-    const key = nd.name;
-    if (!sites.has(key)) sites.set(key, k);
-  });
   const ground = svgEl("g", {}, svg);
-  for (const [, k] of sites) svgEl("rect", { x: X(k) - 5, y: Y(k) - 5, width: 10, height: 10, rx: 2, fill: "none", stroke: "var(--grid)", "stroke-width": 1.5 }, ground);
-  svgEl("rect", { x: X(data.depot) - 8, y: Y(data.depot) - 8, width: 16, height: 16, rx: 4, fill: "var(--ink)" }, ground);
   const trails = svgEl("g", {}, svg);
   const marks = svgEl("g", {}, svg);
   const cars = svgEl("g", {}, svg);
+  const feed = $("disp-feed");
+  const restCell = $("disp-rest-cell");
+  const live = new Map(); // request id -> {pickup mark, delivery mark}
+  const scenarios = { plain };
+  let mode = "plain";
+  let data;
+  let X;
+  let Y;
+  let tracks = [];
+  let decisions = [];
+  let byId = new Map();
+  let plannedPickup = new Map();
+  let deliveredAt = new Map();
+  let events = [];
+  let t0 = 0;
+  let t1 = 0;
+  let shown = 0;
 
-  // Vehicle tracks: depart the depot just in time for the first stop.
-  const tracks = data.plans.map((p) => {
-    const events = [];
-    let at = data.depot;
-    let clock = p.starts[0] - p.legs[0];
-    events.push({ t: clock, from: at, to: at });
-    p.nodes.forEach((n, i) => {
-      events.push({ t: clock, from: at, to: n, arrive: clock + p.legs[i] });
-      clock = p.starts[i] + p.service[i];
-      at = n;
+  function setData(d) {
+    data = d;
+    const xs = d.nodes.map((nd) => nd.x);
+    const ys = d.nodes.map((nd) => nd.y);
+    const lo = Math.min(...xs, ...ys);
+    const span = Math.max(Math.max(...xs) - lo, Math.max(...ys) - lo) || 1;
+    X = (k) => pad + ((d.nodes[k].x - lo) / span) * (600 - 2 * pad);
+    Y = (k) => 600 - pad - ((d.nodes[k].y - lo) / span) * (600 - 2 * pad);
+    for (const layer of [ground, trails, marks, cars]) layer.textContent = "";
+    live.clear();
+    const sites = new Map();
+    d.nodes.forEach((nd, k) => { if (k !== d.depot && !sites.has(nd.name)) sites.set(nd.name, k); });
+    for (const [, k] of sites) svgEl("rect", { x: X(k) - 5, y: Y(k) - 5, width: 10, height: 10, rx: 2, fill: "none", stroke: "var(--grid)", "stroke-width": 1.5 }, ground);
+    svgEl("rect", { x: X(d.depot) - 8, y: Y(d.depot) - 8, width: 16, height: 16, rx: 4, fill: "var(--ink)" }, ground);
+    tracks = d.plans.map((p) => {
+      const color = `var(--c${[0, 2, 3][p.type] ?? 0})`;
+      const halo = svgEl("circle", { r: 13, fill: "none", stroke: "var(--rest)", "stroke-width": 3, opacity: 0 }, cars);
+      const dot = svgEl("circle", { r: 7, fill: color, stroke: "#000", "stroke-width": 2 }, cars);
+      return { p, color, dot, halo, ...buildTrack(d, p) };
     });
-    events.push({ t: clock, from: at, to: data.depot, arrive: clock + p.legs[p.legs.length - 1] });
-    const color = `var(--c${[0, 2, 3][p.type] ?? 0})`;
-    const dot = svgEl("circle", { r: 7, fill: color, stroke: "#000", "stroke-width": 2 }, cars);
-    return { p, events, color, dot };
-  });
+    byId = new Map(d.requests.map((r) => [r.id, r]));
+    decisions = [...d.decisions].sort((a, b) => a.t - b.t);
+    plannedPickup = new Map();
+    deliveredAt = new Map();
+    d.plans.forEach((p, v) => p.nodes.forEach((nd, i) => {
+      plannedPickup.set(nd, { t: p.starts[i], v });
+      deliveredAt.set(nd, p.starts[i] + p.service[i]);
+    }));
+    const restEvents = tracks.flatMap((tk) => tk.rests.map((r) => ({ t: r.from, rest: r, type: tk.p.type })));
+    events = [...decisions.map((x) => ({ t: x.t, d: x })), ...restEvents].sort((a, b) => a.t - b.t);
+    t0 = Math.min(...decisions.map((x) => x.t)) - 10;
+    t1 = Math.max(...d.plans.map((p) => p.starts[p.starts.length - 1])) + 20;
+    restCell.hidden = !tracks.some((tk) => tk.rests.length);
+    restCell.parentElement.classList.toggle("five", !restCell.hidden);
+  }
+
   const position = (track, t) => {
     let pos = [X(data.depot), Y(data.depot)];
     for (const ev of track.events) {
@@ -181,43 +233,48 @@ function dispatch({ $, tr, svgEl, reduce, rerender }, data, comparisons) {
     }
     return pos;
   };
-  const byId = new Map(data.requests.map((r) => [r.id, r]));
-  const decisions = [...data.decisions].sort((a, b) => a.t - b.t);
-  const plannedPickup = new Map();
-  const deliveredAt = new Map();
-  data.plans.forEach((p, v) => p.nodes.forEach((n, i) => {
-    plannedPickup.set(n, { t: p.starts[i], v });
-    deliveredAt.set(n, p.starts[i] + p.service[i]);
-  }));
-  const t0 = Math.min(...decisions.map((d) => d.t)) - 10;
-  const t1 = Math.max(...data.plans.map((p) => p.starts[p.starts.length - 1])) + 20;
 
-  const feed = $("disp-feed");
-  let shown = 0;
-  function pushFeed(d) {
+  function pushFeed(ev) {
     const li = document.createElement("li");
-    li.className = d.ok ? "" : "no";
-    const req = byId.get(d.id);
     let text;
-    if (d.ok) {
-      const type = data.plans[d.veh]?.type ?? 0;
-      const wait = Math.round(d.pick - d.t);
-      text = tr(`${d.id} · ${req.pallets} пал. → ${PLANT_NAME[type][0]} · подача через ${wait} мин`, `${d.id} · ${req.pallets} pal. → ${PLANT_NAME[type][1]} · pickup in ${wait} min`);
+    let right;
+    if (ev.rest) {
+      const r = ev.rest;
+      li.className = "rest";
+      const part = r.final ? (r.minutes < 45 ? tr(", вторая часть", ", second part") : "") : tr(", первая часть", ", first part");
+      text = tr(`${PLANT_NAME[ev.type][0]}: перерыв водителя${part}`, `${PLANT_NAME[ev.type][1]}: driver's break${part}`);
+      right = `${r.minutes} ${tr("мин", "min")}`;
     } else {
-      text = `${d.id} ✕ ${reasonText(tr, d.why)}`;
+      const d = ev.d;
+      li.className = d.ok ? "" : "no";
+      const req = byId.get(d.id);
+      if (d.ok) {
+        const type = d.vt ?? data.plans[d.veh]?.type ?? 0;
+        const wait = Math.round(d.pick - d.t);
+        text = tr(`${d.id} · ${req.pallets} пал. → ${PLANT_NAME[type][0]} · подача через ${wait} мин`, `${d.id} · ${req.pallets} pal. → ${PLANT_NAME[type][1]} · pickup in ${wait} min`);
+      } else {
+        text = `${d.id} ✕ ${reasonText(tr, d.why)}`;
+      }
+      right = `${d.ms.toFixed(2)} ${tr("мс", "ms")}`;
     }
-    li.innerHTML = `<time>${hhmm(d.t)}</time><span></span><span class="ms">${d.ms.toFixed(2)} ${tr("мс", "ms")}</span>`;
+    li.innerHTML = `<time>${hhmm(ev.t)}</time><span></span><span class="ms"></span>`;
     li.children[1].textContent = text;
+    li.children[2].textContent = right;
     feed.prepend(li);
     while (feed.children.length > 9) feed.lastElementChild.remove();
   }
 
-  const live = new Map(); // request id -> {pickup mark, delivery mark}
   function paint(t, animateFeed) {
-    for (const tr_ of tracks) {
-      const [x, y] = position(tr_, t);
-      tr_.dot.setAttribute("cx", x);
-      tr_.dot.setAttribute("cy", y);
+    let begun = 0;
+    for (const tk of tracks) {
+      const [x, y] = position(tk, t);
+      tk.dot.setAttribute("cx", x);
+      tk.dot.setAttribute("cy", y);
+      const now = tk.rests.some((r) => t >= r.from && t < r.to);
+      tk.halo.setAttribute("cx", x);
+      tk.halo.setAttribute("cy", y);
+      tk.halo.setAttribute("opacity", now ? 1 : 0);
+      begun += tk.rests.filter((r) => r.final && t >= r.from).length;
     }
     let acc = 0;
     let dec = 0;
@@ -230,7 +287,7 @@ function dispatch({ $, tr, svgEl, reduce, rerender }, data, comparisons) {
       if (d.ok) { acc++; resp += d.pick - d.t; }
     }
     if (animateFeed) {
-      while (shown < decisions.length && decisions[shown].t <= t) pushFeed(decisions[shown++]);
+      while (shown < events.length && events[shown].t <= t) pushFeed(events[shown++]);
     }
     for (const d of decisions) {
       const req = byId.get(d.id);
@@ -239,8 +296,8 @@ function dispatch({ $, tr, svgEl, reduce, rerender }, data, comparisons) {
       if (!visible) { if (m) { m.g.remove(); live.delete(d.id); } continue; }
       if (!m) {
         const g = svgEl("g", {}, marks);
-        const color = d.ok ? tracks[d.veh].color : "var(--bad)";
-        const p = svgEl("circle", { cx: X(req.p), cy: Y(req.p), r: 5, fill: color }, g);
+        const color = d.ok ? (tracks[d.veh]?.color ?? "var(--ink2)") : "var(--bad)";
+        const pk = svgEl("circle", { cx: X(req.p), cy: Y(req.p), r: 5, fill: color }, g);
         const line = svgEl("line", { x1: X(req.p), y1: Y(req.p), x2: X(req.d), y2: Y(req.d), stroke: color, "stroke-width": 1.2, "stroke-dasharray": "3 4", opacity: 0.55 }, g);
         const q = svgEl("circle", { cx: X(req.d), cy: Y(req.d), r: 4.5, fill: "none", stroke: color, "stroke-width": 2 }, g);
         if (!d.ok) { line.remove(); q.remove(); }
@@ -248,7 +305,7 @@ function dispatch({ $, tr, svgEl, reduce, rerender }, data, comparisons) {
           const ring = svgEl("circle", { cx: X(req.p), cy: Y(req.p), r: 6, fill: "none", stroke: color, "stroke-width": 2 }, trails);
           ring.animate([{ r: 6, opacity: 0.9 }, { r: 30, opacity: 0 }], { duration: 900, easing: "ease-out" }).onfinish = () => ring.remove();
         }
-        m = { g, p, line };
+        m = { g, p: pk, line };
         live.set(d.id, m);
       }
       if (d.ok) {
@@ -260,15 +317,17 @@ function dispatch({ $, tr, svgEl, reduce, rerender }, data, comparisons) {
     $("disp-acc").textContent = `${acc} / ${dec}`;
     $("disp-resp").textContent = acc ? `${(resp / acc).toFixed(1)} ${tr("мин", "min")}` : "—";
     $("disp-ms").textContent = dec ? `${(ms / dec).toFixed(2)} ${tr("мс", "ms")}` : "—";
+    $("disp-rest").textContent = String(begun);
   }
 
   let speed = 1;
   const DAY_MS = 60000;
   let playing = !reduce.matches;
   let visible = false;
-  let simT = t0;
+  let simT = 0;
   let lastNow = performance.now();
   const reset = () => { simT = t0; shown = 0; feed.textContent = ""; for (const m of live.values()) m.g.remove(); live.clear(); };
+  const still = () => { feed.textContent = ""; events.slice(-9).forEach(pushFeed); shown = events.length; paint(t1, false); };
   const frame = (now) => {
     const dt = now - lastNow;
     lastNow = now;
@@ -291,9 +350,6 @@ function dispatch({ $, tr, svgEl, reduce, rerender }, data, comparisons) {
     document.querySelectorAll("#dispatch .speeds button").forEach((x) => x.setAttribute("aria-pressed", String(x === b)));
   }));
   new IntersectionObserver(([e]) => { visible = e.isIntersecting; }, { threshold: 0.1 }).observe(svg);
-  sync();
-  if (playing) requestAnimationFrame(frame);
-  else { decisions.slice(-9).forEach(pushFeed); shown = decisions.length; paint(t1, false); }
 
   const table = document.querySelector("#disp-policies tbody");
   const names = {
@@ -303,28 +359,62 @@ function dispatch({ $, tr, svgEl, reduce, rerender }, data, comparisons) {
   };
   const fill = () => {
     table.textContent = "";
-    const rows = (comparisons?.realtime?.rows || []).filter((r) => r.day === data.name);
+    const ruled = `${plain.name}-breaks`;
+    const rows = (comparisons?.realtime?.rows || []).filter((r) => r.day === plain.name || r.day === ruled);
     for (const r of rows) {
       const tr_ = table.insertRow();
       tr_.innerHTML = "<th scope='row'></th><td></td><td></td><td></td>";
-      tr_.cells[0].textContent = tr(...(names[r.policy] || [r.policy, r.policy]));
+      const label = tr(...(names[r.policy] || [r.policy, r.policy]));
+      tr_.cells[0].textContent = r.day === ruled ? `${label}${tr(", приказ № 160", ", Order No. 160")}` : label;
       tr_.cells[1].textContent = `${(100 * r.acceptance_rate).toFixed(1)}%`;
       tr_.cells[2].textContent = `${r.response_mean_min.toFixed(1)} ${tr("мин", "min")}`;
       tr_.cells[3].textContent = r.decision_ms_mean >= 100 ? `${(r.decision_ms_mean / 1000).toFixed(1)} ${tr("с", "s")}` : `${r.decision_ms_mean.toFixed(2)} ${tr("мс", "ms")}`;
+      const current = r.day === data.name && r.policy === data.policy;
+      tr_.classList.toggle("on", current);
+      if (current) tr_.setAttribute("aria-current", "true");
     }
   };
-  fill();
-  rerender.push(fill);
 
-  const k = data.kpi || {};
   const empty = () => {
+    const k = data.kpi || {};
     if (k.empty_km == null || !k.distance) return;
     const beta = (100 * (1 - k.empty_km / k.distance)).toFixed(0);
+    const nobody = k.uncarriable ? tr(` ${k.uncarriable} заявок не берёт ни один тип машины: из остальных принято ${(100 * k.acceptance_of_carriable).toFixed(1)}%.`, ` No vehicle type can carry ${k.uncarriable} of the orders; of the rest ${(100 * k.acceptance_of_carriable).toFixed(1)}% are accepted.`) : "";
+    const breaks = k.breaks ? tr(` Перерывов водителей: ${k.breaks}, каждый маршрут проверен по правилу.`, ` Drivers' breaks: ${k.breaks}, every route checked against the rule.`) : "";
     $("disp-empty").textContent = tr(
       `За смену: ${Math.round(k.distance)} км, из них порожних ${Math.round(k.empty_km)} (коэффициент использования пробега ${beta}%).`,
       `The shift: ${Math.round(k.distance)} km, ${Math.round(k.empty_km)} of them empty (mileage utilisation ${beta}%).`,
-    );
+    ) + nobody + breaks;
   };
+
+  const show = (next) => {
+    mode = next;
+    setData(scenarios[next]);
+    document.querySelectorAll("#disp-mode button").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.mode === next)));
+    $("disp-legend-rest").hidden = next !== "rests";
+    reset();
+    if (playing) paint(simT, true);
+    else still();
+    fill();
+    empty();
+  };
+  document.querySelectorAll("#disp-mode button").forEach((b) => b.addEventListener("click", () => {
+    const next = b.dataset.mode;
+    if (next === mode) return;
+    if (scenarios[next]) { show(next); return; }
+    b.setAttribute("aria-busy", "true");
+    load("data/dispatch-rests.json").then((d) => { scenarios[next] = d; show(next); })
+      .catch((e) => console.error(e))
+      .finally(() => b.removeAttribute("aria-busy"));
+  }));
+
+  setData(plain);
+  simT = t0;
+  sync();
+  if (playing) requestAnimationFrame(frame);
+  else still();
+  fill();
+  rerender.push(fill);
   empty();
   rerender.push(empty);
 }

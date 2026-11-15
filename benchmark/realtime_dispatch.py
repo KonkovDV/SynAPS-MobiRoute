@@ -8,9 +8,11 @@
   Routing for every new order (``--ortools-limit`` seconds, 3 by default),
   the pattern of re-optimising per passenger.
 
-KPIs: acceptance, call-to-pickup time (vehicle arrival lead time), ride
-time, distance, cost, decision latency. Every final plan is re-checked by the
-verifier.
+KPIs: acceptance, also against the orders some vehicle type can carry,
+call-to-pickup time (vehicle arrival lead time), ride time, distance, cost,
+drivers' breaks, decision latency. One plant day runs a second time with the
+break rule of Ministry of Transport Order No. 160 (4.5 h of driving, then
+45 minutes or 15 + 30). Every final plan is re-checked by the verifier.
 
 Usage:
   python benchmark/realtime_dispatch.py [--with-ortools] [--ortools-limit 3]
@@ -21,10 +23,12 @@ from __future__ import annotations
 
 import argparse
 import json
+from dataclasses import replace
 from pathlib import Path
 from typing import Any
 
 from mobiroute.vrp.generators import plant_day, shuttle_day
+from mobiroute.vrp.model import BreakRule, Instance
 from mobiroute.vrp.realtime import Policy, simulate
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -59,13 +63,28 @@ def main() -> None:
     args.markdown.write_text(render(rows, limit))
 
 
+def with_breaks(inst: Instance) -> Instance:
+    """The day under Order No. 160, point 11: 45 min after 4.5 h, or 15 + 30."""
+    rule = BreakRule(270.0, 45.0, split=(15.0, 30.0))
+    return replace(
+        inst,
+        name=inst.name + "-breaks",
+        vehicle_types=tuple(replace(vt, breaks=rule) for vt in inst.vehicle_types),
+    )
+
+
 def run(args: argparse.Namespace) -> list[dict[str, Any]]:
-    days = [shuttle_day(11), plant_day(5), plant_day(9, n_moves=200)]
+    days = [shuttle_day(11), plant_day(5), with_breaks(plant_day(5)), plant_day(9, n_moves=200)]
     ortools_days = {d.strip() for d in args.ortools_days.split(",") if d.strip()}
+    # One untimed day first: the first run in a process pays for first-call
+    # setup, which a dispatcher in service has long paid.
+    simulate(days[0], "insertion")
     rows: list[dict[str, Any]] = []
     for inst in days:
         policies: list[Policy] = ["insertion", "insertion+alns"]
-        if args.with_ortools and inst.name in ortools_days:
+        if inst.has_rest_rules:
+            policies = ["insertion"]  # re-optimisation would restart every driver's day
+        elif args.with_ortools and inst.name in ortools_days:
             policies.append("ortools-resolve")
         for policy in policies:
             rep = simulate(
@@ -94,7 +113,25 @@ def reading(rows: list[dict[str, Any]]) -> list[str]:
             "maxima of a Python process include rare runtime pauses (garbage collection), so "
             "the p95 is the figure to plan with."
         )
+    for r in rows:
+        if r.get("uncarriable") and r["day"].startswith("plant"):
+            out.append(
+                f"* {r['day']}: {r['uncarriable']:.0f} of {r['orders']:.0f} moves need the "
+                "covered van but exceed its 4 pallets or 1500 kg, so no vehicle of the fleet can "
+                "take them under any policy; against the other moves "
+                f"{r['policy']} accepts {100 * r['acceptance_of_carriable']:.1f}%."
+            )
+            break
     for day in dict.fromkeys(r["day"] for r in rows):
+        ruled = by.get((day + "-breaks", "insertion"))
+        plain = by.get((day, "insertion"))
+        if ruled and plain:
+            out.append(
+                f"* {day} under Order No. 160: the dispatcher plans {ruled['breaks']:.0f} breaks "
+                f"and accepts {ruled['accepted']:.0f} orders against {plain['accepted']:.0f} "
+                "without the rule. No route has more than 4.5 h of driving before its break or "
+                "after it (or in all, when it needs none); the verifier checks every route."
+            )
         ins, alns = by.get((day, "insertion")), by.get((day, "insertion+alns"))
         if ins and alns and alns["reoptimize_gain"] > 0:
             out.append(
@@ -127,15 +164,19 @@ def render(rows: list[dict[str, Any]], limit: float) -> str:
         "160 calls, 10 eight-seat buses, pickup within 30 min of the call, arrival within 45.",
         "Plant: pallet moves between workshops, tow tractors, flatbeds with a crane and a",
         "covered van; pickup within 40 min of release, delivery within 90, 12-hour shifts.",
+        "*Of carriable* leaves out orders no vehicle type can take; *-breaks* is the same",
+        "day with the drivers' break rule of Order No. 160.",
         "",
-        "| Day | Policy | Accepted | Call to pickup, mean / p95 (min) | Ride, mean (min) | Distance | Cost | Vehicles | Decision, mean / p95 / max (ms) | Verified |",
-        "| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | :---: |",
+        "| Day | Policy | Accepted | Of carriable | Call to pickup, mean / p95 (min) | Ride, mean (min) | Distance | Cost | Vehicles | Breaks | Decision, mean / p95 / max (ms) | Verified |",
+        "| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | :---: |",
     ]
     for r in rows:
         lines.append(
             f"| {r['day']} | {r['policy']} | {100 * r['acceptance_rate']:.1f}% "
+            f"| {100 * r.get('acceptance_of_carriable', r['acceptance_rate']):.1f}% "
             f"| {r['response_mean_min']:.1f} / {r['response_p95_min']:.1f} | {r['ride_mean_min']:.1f} "
             f"| {r['distance']:.1f} | {r['cost']:.0f} | {r['vehicles_used']:.0f} "
+            f"| {r.get('breaks', 0.0):.0f} "
             f"| {r['decision_ms_mean']:.2f} / {r['decision_ms_p95']:.2f} / {r['decision_ms_max']:.2f} "
             f"| {'yes' if r['verified'] else 'NO'} |"
         )

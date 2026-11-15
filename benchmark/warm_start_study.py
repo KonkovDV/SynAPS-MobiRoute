@@ -155,22 +155,26 @@ def render(data: list[dict[str, Any]], s: dict[str, Any], args: argparse.Namespa
     ]
     lines += [
         "",
-        f"ALNS stops short of the best plan on seeds {', '.join(short) or 'none'}. On "
-        "seed 2004 the better plan serves one more order, and getting there takes two "
-        "changes at once: the new pair goes into a route and a stop already on it "
-        "moves. One destroy-and-repair step of ALNS makes one of them; CP-SAT makes "
-        "both. The hint has a price too: started from the ALNS plan, CP-SAT can stay "
-        f"near it, and the cold run ends lower on seeds {', '.join(cold_better) or 'none'}. "
-        "`mobiroute vrp-solve --solver exact` therefore runs both, each on half of "
-        "`--time-limit`, skips the cold run when the warm one proves the optimum, and "
-        "keeps the cheapest verified plan, ALNS's included.",
+        f"ALNS stops short of the best plan on seeds {', '.join(short) or 'none'}, by "
+        f"{s['alns_max_gap_pct']}% at most. Until 0.7 it also stopped 16% short on seed "
+        "2004: the better plan serves one more order, and getting there takes two "
+        "changes at once, the new pair into a route and a stop already on it moved. "
+        "One destroy-and-repair step makes one of them; the exact re-sequencing of "
+        "short routes (`vrp.reseat`) makes both, and ALNS now ends at the value CP-SAT "
+        "proves with a longer budget. The hint has a price too: started from the ALNS "
+        "plan, CP-SAT can stay near it, and the cold run ends lower on seeds "
+        f"{', '.join(cold_better) or 'none'}. `mobiroute vrp-solve --solver exact` "
+        "therefore runs both, each on half of `--time-limit`, skips the cold run when "
+        "the warm one proves the optimum, and keeps the cheapest verified plan, "
+        "ALNS's included.",
         "",
         "Reproducibility costs proofs. With the batch size of the interleaved search "
-        "left to OR-Tools 9.15, the same 20 instances got 5 optimality proofs, but "
-        "2 of 8 identical runs of one instance returned another plan; with the batch "
-        "size fixed (as `solve_exact` does) every run repeats and 1 proof remains "
-        "within the budget. A longer one proves more: with 60 s, seed 2004 is proven "
-        "optimal (the slow test in `tests/test_vrp_engine.py`).",
+        "left to OR-Tools 9.15, the 0.6.1 run of this study got 5 optimality proofs, "
+        "but 2 of 8 identical runs of one instance returned another plan; with the "
+        "batch size fixed (as `solve_exact` does) every run repeats, and "
+        f"{s['cold_optimal']} cold and {s['warm_optimal']} warm proofs fit in the "
+        "budget. A longer one proves more: with 60 s, seed 2004 is proven optimal "
+        "(the slow test in `tests/test_vrp_engine.py`).",
         "",
         "Reproduce: `python benchmark/warm_start_study.py`.",
         "",

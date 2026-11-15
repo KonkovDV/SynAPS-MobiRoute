@@ -275,21 +275,71 @@ def test_cli_exact_starts_from_alns_and_reports_the_proof(
     assert search_objective(inst, plan) <= search_objective(inst, heur.solution) + 1e-6
 
 
-@pytest.mark.slow
-def test_warm_start_reaches_an_optimum_the_heuristic_misses() -> None:
-    """Seed 2004: ALNS keeps five orders out, the optimum serves one more.
+def test_alns_serves_the_order_that_needs_two_moves_at_once() -> None:
+    """Seed 2004: serving request 10 means inserting it and moving a stop.
 
-    Serving request 10 needs it inserted and another stop moved in the same
-    step, which no single destroy-and-repair move of ALNS makes; CP-SAT,
-    started from the ALNS plan, proves the better one.
+    One destroy-and-repair step makes only one of the two changes; ALNS kept
+    five orders out (6211.58) until left-out orders were tried in short
+    routes by exact re-sequencing. The optimum, 5353.99, is proven by CP-SAT
+    in the slow test below.
     """
     inst = random_instance(2004, n_requests=14, n_types=2, ride_share=0.4, penalty=1000.0)
     heur = solve(inst, AlnsConfig(iterations=2000, seed=1))
-    assert len(heur.solution.unassigned) == 5
+    assert heur.verdict.feasible and len(heur.solution.unassigned) == 4
+    assert search_objective(inst, heur.solution) == pytest.approx(5353.99, abs=0.01)
+
+
+@pytest.mark.slow
+def test_warm_start_proves_the_optimum_alns_reaches() -> None:
+    inst = random_instance(2004, n_requests=14, n_types=2, ride_share=0.4, penalty=1000.0)
+    heur = solve(inst, AlnsConfig(iterations=2000, seed=1))
     warm = solve_exact(inst, time_limit=60, workers=8, hint=heur.solution, deterministic=True)
     assert warm.status == "OPTIMAL" and warm.verdict.feasible
     assert len(warm.solution.unassigned) == 4
     assert search_objective(inst, warm.solution) == pytest.approx(5353.99, abs=0.01)
+
+
+def test_reseating_finds_the_cheapest_order_of_a_short_route() -> None:
+    """The depth-first search agrees with trying every permutation."""
+    from itertools import permutations
+
+    from mobiroute.vrp.fleet import route_money
+    from mobiroute.vrp.insertion import Compiled, route_exact, route_loads
+    from mobiroute.vrp.reseat import Reseater
+
+    checked = 0
+    for seed in range(30):
+        inst = random_instance(seed, n_requests=4, n_types=2, ride_share=0.4, penalty=1000.0)
+        c = Compiled(inst)
+        reseat = Reseater(c)
+        plan = solve(inst, AlnsConfig(iterations=200, seed=1)).solution
+        for route in plan.routes:
+            if not 1 < len(route.nodes) <= 6:
+                continue
+            t = route.vehicle_type
+            best = None
+            for order in permutations(route.nodes):
+                nodes = list(order)
+                pos = {n: k for k, n in enumerate(nodes)}
+                if any(
+                    c.pick[r] >= 0 and c.deliv[r] >= 0 and pos[c.pick[r]] > pos[c.deliv[r]]
+                    for r in c.requests_of(nodes)
+                ):
+                    continue
+                # route_exact times the route; capacity is checked apart.
+                fits = all(
+                    q <= cap + 1e-9
+                    for row in route_loads(c, nodes)
+                    for q, cap in zip(row, c.cap[t], strict=True)
+                )
+                if fits and route_exact(c, t, nodes):
+                    money = route_money(c, t, nodes)
+                    best = money if best is None else min(best, money)
+            found = reseat.best_order(t, route.nodes)
+            assert best is not None and found is not None
+            assert found[0] == pytest.approx(best, abs=1e-6)
+            checked += 1
+    assert checked >= 20
 
 
 def test_ortools_baseline_returns_verified_plans() -> None:

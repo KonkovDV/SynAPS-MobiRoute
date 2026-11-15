@@ -1,5 +1,61 @@
 # Changelog
 
+## 0.7.0 — 2026-11-15
+
+### Added
+- Drivers' breaks in the live dispatcher. With a break rule on the vehicle
+  types (`vrp-dispatch --rests` sets the one of Ministry of Transport Order
+  No. 160: 45 minutes after 4.5 hours of driving, or 15 + 30), every answer
+  to an order also places the break in the part of the route not yet driven.
+  The count carries the driving already done and a first 15-minute part
+  already taken. A whole break goes where both stints stay within the limit;
+  a split one books its first part into a planned wait of at least 15
+  minutes, set in advance as on a route sheet. A break once begun is never
+  moved. An order that leaves the break no legal place is refused, and the
+  reason says so. `dispatch.json` lists every break, and the report counts
+  them. On the seed-5 plant day the dispatcher plans 3 breaks and accepts 119
+  orders against 120 without the rule; every route passes the verifier. The
+  ALNS pass and the OR-Tools re-solve plan from a vehicle's current position
+  and would count driving from there, so a day with rests runs on the
+  insertion policy only (`REALTIME_RESTS_NEED_THE_INSERTION_POLICY`).
+- The dispatcher's report counts the orders no vehicle type can carry
+  (`uncarriable`) and gives acceptance against the rest
+  (`acceptance_of_carriable`); `vrp-dispatch` prints both. On the seed-5
+  plant day 5 of 140 moves need the covered van but exceed its 4 pallets or
+  1500 kg, so 85.7% of all orders is 88.9% of those the fleet can carry.
+- Exact re-sequencing of short routes in ALNS (`vrp.reseat`). On every new
+  best plan each left-out order is tried in every route of an allowed type
+  with at most 9 stops after the insertion: a depth-first search over the
+  orders of the stops that keep each pickup before its delivery, pruned by
+  windows, capacity and the cost already spent, with every complete order
+  checked by `route_exact` (ride limits, shift cap, breaks). It reaches what
+  one destroy-and-repair step cannot: the new pair goes in and a stop already
+  on the route moves. On the 20 instances of the warm-start study ALNS now
+  reaches the best plan on 17 instead of 16, worst gap 0.9% instead of
+  16.02%; seed 2004 ends at the value CP-SAT proves. The step never acts on
+  the 130 public instances with the published budgets (checked run by run),
+  so their tables stand.
+- Site: the dispatch replay switches to the same day under Order No. 160. A
+  yellow ring marks a driver on a break, breaks appear in the feed, and the
+  policy table has the row with the rule.
+
+### Fixed
+- The dispatcher counted the service time at a vehicle's current stop twice
+  when it worked out when the vehicle could leave, and refused orders it
+  could serve. The seed-5 plant day now accepts 120 orders instead of 118,
+  seed 11 134 instead of 131. More orders go to vehicles that still have
+  stops ahead (62 instead of 53 on seed 5), so the mean time to pickup rises
+  from 16.2 to 20.2 minutes, inside the 40-minute window. A test pins the
+  case.
+
+### Changed
+- The dispatch table has columns for acceptance of carriable orders and for
+  breaks, and the plant day under Order No. 160. One untimed day runs before
+  the timed ones: the first run in a fresh process paid for first-call setup.
+- Recomputed: the dispatch table, the warm-start study and the exact-vs-ALNS
+  study (the same values, new timings) and the site data. The rules study
+  came out identical.
+
 ## 0.6.2 — 2026-11-15
 
 ### Fixed

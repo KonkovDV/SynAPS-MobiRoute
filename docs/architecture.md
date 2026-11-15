@@ -59,7 +59,7 @@ flowchart LR
 
 | Package | Role |
 | --- | --- |
-| `vrp` | rich VRP engine: model (rests, reload stops, speed profiles), readers, input in coordinates with offline or OSRM matrices, constant-time insertion tests, ALNS, merge operator, VRPTW local search, set partitioning and its LP duals (order prices, vehicle rents), exact CP-SAT, OR-Tools baseline, lateness, live dispatch, verifier, route sheets, fleet indicators, SVG |
+| `vrp` | rich VRP engine: model (rests, reload stops, speed profiles), readers, input in coordinates with offline or OSRM matrices, constant-time insertion tests, ALNS, merge operator, VRPTW local search, exact re-sequencing of short routes, set partitioning and its LP duals (order prices, vehicle rents), exact CP-SAT, OR-Tools baseline, lateness, live dispatch with drivers' breaks, verifier, route sheets, fleet indicators, SVG |
 | `benchmarks` | Cordeau (2006) as published: exact CP-SAT and MIP on SCIP/HiGHS/CBC, LP bound, Bellman-Ford verifier; a check that keeps non-comparable gaps out of reports |
 | `domain`, `solvers`, `dispatch`, `validation` | paratransit DARP kernel ([darp-kernel.md](darp-kernel.md)) |
 | `adapters` | synthetic paratransit days, Cordeau adapter, fingerprints |
@@ -99,9 +99,10 @@ live state without special cases.
 
 **Rules are data; a solver says what it does not model.** Rests, reload stops
 and speed profiles live in the instance. The heuristics, the Rust kernel and
-the verifier implement them; the OR-Tools baseline, the exact model and the
-dispatcher refuse such instances with an error code instead of silently
-ignoring a rule.
+the verifier implement them; the OR-Tools baseline and the exact model refuse
+such instances with an error code instead of silently ignoring a rule. The
+dispatcher plans rests (insertion policy) and refuses reload stops and speed
+profiles the same way.
 
 **Input at the edge, one model inside.** Coordinates, road matrices and
 place names are resolved once by `vrp.geo` into an ordinary `Instance` plus a
@@ -163,5 +164,9 @@ properties, with Hypothesis feeding the verifier arbitrary plans.
 * `mobiroute vrp-dispatch --day plant --policy insertion+alns` →
   `realtime.Dispatcher.run` → per order `_insert` (≈0.1 ms), every 30 min
   `snapshot` → `alns.solve(initial=current plan)` → apply if better.
+* `mobiroute vrp-dispatch --day plant --rests` → per order `_insert` with
+  the driving done so far (`_driver`) → `_place` puts the break into the
+  part not yet driven (whole, or 15 + 30 using a planned wait) → the
+  verifier checks the final routes with their breaks.
 * `mobiroute literature-benchmark --instance a2-16.txt` →
   `cordeau_exact.solve_exact_cpsat` → `verify_routes` → gated literature report.

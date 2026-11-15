@@ -54,7 +54,7 @@ operation for operation, and the parity tests hold both to identical output.
 from __future__ import annotations
 
 import math
-from collections.abc import Iterable, Sequence
+from collections.abc import Callable, Iterable, Sequence
 
 from mobiroute.vrp import traffic
 from mobiroute.vrp.model import Instance
@@ -575,8 +575,22 @@ def _splice(nodes: list[int], i: int, j: int, p: int, d: int) -> list[int]:
 Candidate = tuple[float, int, int]
 
 
-def best_insertion(c: Compiled, st: RouteState, r: int) -> Candidate | None:
-    """Cheapest feasible ``(delta cost, i, j)`` of request ``r`` in this route."""
+def best_insertion(
+    c: Compiled,
+    st: RouteState,
+    r: int,
+    *,
+    exact: Callable[[list[int]], bool] | None = None,
+    drive_room: float | None = None,
+) -> Candidate | None:
+    """Cheapest feasible ``(delta cost, i, j)`` of request ``r`` in this route.
+
+    The live dispatcher passes ``exact`` and ``drive_room`` for a type with a
+    rest rule: the part of the route already driven fixes how much driving
+    is left before and after the break, which :func:`route_exact` (a route
+    from the depot) cannot know. ``exact(nodes)`` then decides the cheapest
+    candidates instead, and ``drive_room`` bounds the added driving.
+    """
     t = st.t
     if t not in c.allowed[r]:
         return None
@@ -602,16 +616,17 @@ def best_insertion(c: Compiled, st: RouteState, r: int) -> Candidate | None:
     if not lazy:
         return found[0] if found else None
     if rests:
-        room = 2.0 * c.brk_drive[t] - st.drive + EPS
+        room = 2.0 * c.brk_drive[t] - st.drive + EPS if drive_room is None else drive_room + EPS
         found = [cand for cand in found if _drive_delta(c, st, p, d, cand[1], cand[2]) <= room]
     found.sort()
+    check = exact if exact is not None else (lambda nodes: route_exact(c, t, nodes))
     for cand in found[:LAZY_CHECKS]:
         _, i, j = cand
         if d >= 0 and p >= 0:
             nodes = _splice(st.nodes, i, j, p, d)
         else:
             nodes = _splice(st.nodes, i, -1, p if p >= 0 else d, -1)
-        if route_exact(c, t, nodes):
+        if check(nodes):
             return cand
     return None
 

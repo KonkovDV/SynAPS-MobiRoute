@@ -106,13 +106,14 @@ with an English summary).
 | Vehicle types of finished routes as a transportation problem (min-cost flow) | mixed fleets | yes, for the given routes |
 | Merging two routes onto a vehicle of another type, chaining trips through the depot | mixed fleets, several trips | no |
 | Local search: relocate, swap, 2-opt*, 2-opt with time-window segments (Vidal et al. 2013) | every new best VRPTW plan | no |
+| Exact re-sequencing of a short route (up to 9 stops): all stop orders, pruned by windows, capacity and cost | an order that one insertion cannot place because a stop on the route has to move too | yes, for one route when the search stays within 20,000 nodes |
 | Set partitioning over the route pool (CP-SAT, SCIP, HiGHS, CBC) | recombining routes found so far | over the pool only |
 | The dual of its LP relaxation (GLOP) | prices of orders, rents of vehicle types | for the LP |
 | CP-SAT, one circuit per vehicle | small instances with any constraint of the model | yes |
 | CP-SAT warm-started from the ALNS plan plus a cold run, both deterministic (a pattern from the SynAPS core) | `vrp-solve --solver exact`: a plan never worse than the heuristic one, the same on any machine | when time allows |
 | Compact MIP of Furtado, Munari and Morabito (2017) on SCIP, HiGHS, CBC | lower bounds, comparing solvers | yes |
 | OR-Tools Routing (PARALLEL_CHEAPEST_INSERTION + GUIDED_LOCAL_SEARCH) | a baseline for comparison | no |
-| Insertion into the part of a plan not yet driven | orders arriving during the day | no |
+| Insertion into the part of a plan not yet driven, with the driver's break of Order No. 160 | orders arriving during the day | no |
 
 A solver that does not support a rule of the instance (OR-Tools and the exact
 model know nothing about breaks and trips, for example) refuses the instance
@@ -125,12 +126,12 @@ with an error code instead of returning a plan that silently breaks the rule.
 | Cordeau a2-16, exact models | CP-SAT proves the published optimum 294.25 in under a second, SCIP in about 26 s, HiGHS in 40 s. CBC is still 20% off after 60 s. The LP relaxation of the compact model gives only 85.27: the big-M is weak. ALNS reaches the same optimum in about 3 s | [solver-lab-a2-16](docs/benchmarks/solver-lab-a2-16.md) |
 | 130 public instances | every plan passed the verifier. Solomon: the best-known vehicle count on all 56 instances, median distance gap 0.50%, worst 7.0%. Cordeau: the published optimum on 19 of 48, mean gap 0.50% | [vrp-public-benchmarks](docs/benchmarks/vrp-public-benchmarks.md) |
 | ALNS against proven optima | 40 random instances of the full model (2–3 vehicle types, capacity vector, skills, ride limits, shifts) with optima proven by CP-SAT: ALNS finds the optimum on all 40. Where leaving an order out pays, on 87 of 90 | [exact-vs-alns](docs/benchmarks/exact-vs-alns.md) |
-| ALNS at 14 orders | 20 instances where some orders have to be refused: ALNS reaches the best plan on 16 of 20, worst gap 16%. CP-SAT started from the ALNS plan is never worse than it, and with a cold run beside it finds the best plan on all 20; every run repeats bit for bit | [warm-start](docs/benchmarks/warm-start.md) |
+| ALNS at 14 orders | 20 instances where some orders have to be refused: ALNS reaches the best plan on 17 of 20, worst gap 0.9% (16 of 20 and 16% before the exact re-sequencing of short routes). CP-SAT started from the ALNS plan is never worse than it, and with a cold run beside it finds the best plan on all 20; every run repeats bit for bit | [warm-start](docs/benchmarks/warm-start.md) |
 | OR-Tools at equal time | 18 instances, 10 s each, both plans checked by the same verifier: ALNS is better on 12, equal on 6, worse on none. Mixed-fleet freight days come out 14–17% cheaper with one to three vehicles fewer | [ortools-vs-alns](docs/benchmarks/ortools-vs-alns.md) |
 | PyVRP, VROOM, jsprit | Solomon, vehicles first: the best-known vehicle count on 56 of 56 instances, against 50 for PyVRP, 32 for VROOM and 30 for jsprit. On 1000 customers ranked by distance alone PyVRP is ahead: +1.2% to the best known against +2.9% for this engine | [solvers](docs/benchmarks/solvers.md) |
 | Rust kernel | faster than the Python reference with bit-identical plans: 10× on VRPTW, 14× on PDPTW, 42× on DARP with ride limits. On a freight day with eight vehicle types it is 5.4×, with rush hours 6.5×, on a day with split breaks 5.5×: the operators still written in Python become the bottleneck there | [vrp-speed](docs/benchmarks/vrp-speed.md) |
 | Profiling | on a 1000-customer instance, fixes guided by a `cProfile` table gave 2.9× more iterations a minute and cut the gap to the best known from 5.75% to 3.4% | [native-acceleration](docs/native-acceleration.md) |
-| Orders during the day | a new order is answered in 0.1 ms on average, 95% of answers within 0.18 ms | [realtime-dispatch](docs/benchmarks/realtime-dispatch.md) |
+| Orders during the day | 95% of new orders are answered within 0.3 ms. Under the 4.5 h / 45 min rule the dispatcher places the breaks itself: 3 breaks on the plant day, 119 orders accepted against 120 without the rule, every route verified | [realtime-dispatch](docs/benchmarks/realtime-dispatch.md) |
 | Operating rules | a plan made without the 4.5 h / 45 min rule leaves 4–6 routes a day with no room for a break. Two trips cover 60 of 60 stores, one trip only 52–55. A plan made on free-flow speeds runs late on 8–13 routes in rush hour | [rules](docs/benchmarks/rules.md) |
 | Spread over seeds | 19 Solomon R2 and RC2 instances, 5 seeds each; the effect of local search is significant by the Wilcoxon test, p = 0.006 | [seed-study](docs/benchmarks/seed-study.md) |
 
@@ -167,13 +168,13 @@ flowchart LR
 | The model: orders, vehicle types, rules | [vrp/model.py](src/mobiroute/vrp/model.py) |
 | Insertion with O(1) window, capacity and shift checks | [vrp/insertion.py](src/mobiroute/vrp/insertion.py), in Rust [vrp.rs](native/mobiroute_native/src/vrp.rs) |
 | ALNS and guided ejection | [vrp/alns.py](src/mobiroute/vrp/alns.py) |
-| Local search, route merges, vehicle types | [vrp/local_search.py](src/mobiroute/vrp/local_search.py), [vrp/merge.py](src/mobiroute/vrp/merge.py), [vrp/fleet.py](src/mobiroute/vrp/fleet.py) |
+| Local search, route merges, vehicle types, exact re-sequencing of short routes | [vrp/local_search.py](src/mobiroute/vrp/local_search.py), [vrp/merge.py](src/mobiroute/vrp/merge.py), [vrp/fleet.py](src/mobiroute/vrp/fleet.py), [vrp/reseat.py](src/mobiroute/vrp/reseat.py) |
 | Set partitioning and dual prices | [vrp/setpart.py](src/mobiroute/vrp/setpart.py), [vrp/prices.py](src/mobiroute/vrp/prices.py) |
 | Exact CP-SAT and MIP models | [vrp/exact.py](src/mobiroute/vrp/exact.py), [benchmarks/cordeau_exact.py](src/mobiroute/benchmarks/cordeau_exact.py) |
 | OR-Tools Routing on the same model | [vrp/ortools_baseline.py](src/mobiroute/vrp/ortools_baseline.py) |
 | Verifier and the driver's schedule | [vrp/verify.py](src/mobiroute/vrp/verify.py), [vrp/schedule.py](src/mobiroute/vrp/schedule.py) |
 | Breaks, trips, traffic | [vrp/schedule.py](src/mobiroute/vrp/schedule.py), [vrp/traffic.py](src/mobiroute/vrp/traffic.py) |
-| Orders during the day | [vrp/realtime.py](src/mobiroute/vrp/realtime.py) |
+| Orders during the day, with drivers' breaks | [vrp/realtime.py](src/mobiroute/vrp/realtime.py) |
 | Fleet indicators: empty kilometres, beta, gamma, time on duty | [vrp/kpi.py](src/mobiroute/vrp/kpi.py) |
 | Input in coordinates, route sheets | [vrp/geo.py](src/mobiroute/vrp/geo.py), [vrp/sheets.py](src/mobiroute/vrp/sheets.py) |
 | Benchmark scripts | [benchmark/](benchmark) |
@@ -350,7 +351,7 @@ one more van saves 641 and with one more truck 2,160. Details are in the
   single-purpose classes: `Alns`, `LocalSearch`, `RouteMerger`,
   `TypeAssigner`, `Dispatcher`. A result is a plan (`Solution`) and the
   verifier's `Verdict`, which does not depend on the solver.
-- 717 tests, 13 of them Hypothesis properties that check hundreds of random
+- 728 tests, 13 of them Hypothesis properties that check hundreds of random
   routes against the verifier. A separate set tries to break the engine: NaN
   and infinity in the input, a plan with a vehicle type or node that does
   not exist, arbitrary plans from another system, an input file with one
@@ -396,8 +397,10 @@ one more van saves 641 and with one more truck 2,160. Details are in the
   no carrier's data and no pilot.
 - Offline matrices are straight-line distances times a detour factor; real
   roads need an OSRM or Valhalla server.
-- The live dispatcher does not handle driver rests, rush hours or ride
-  limits yet: it refuses such a day with an error code.
+- The live dispatcher plans drivers' breaks with the insertion policy only,
+  not with re-optimisation. It refuses a day with rush hours or several trips
+  with an error code, and a ride limit has to be written as a delivery
+  deadline.
 - There are no time-of-day truck bans and no multi-day trips with daily rest.
 
 The full list and the plans are in [docs/limitations.md](docs/limitations.md).
