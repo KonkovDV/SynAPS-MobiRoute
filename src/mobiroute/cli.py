@@ -133,8 +133,15 @@ def main(argv: list[str] | None = None) -> int:
     v.add_argument("--seed", type=int, default=7)
     v.add_argument("--orders", type=int, default=None, help="size of a generated day")
     v.add_argument("--solver", choices=["alns", "ortools", "exact"], default="alns")
-    v.add_argument("--iterations", type=int, default=5000)
-    v.add_argument("--time-limit", type=float, default=None)
+    v.add_argument(
+        "--iterations",
+        type=int,
+        default=None,
+        help="ALNS iterations; default 5000, or no cap when --time-limit is given",
+    )
+    v.add_argument(
+        "--time-limit", type=float, default=None, help="seconds; the run stops at this budget"
+    )
     v.add_argument("--backend", choices=["auto", "python", "native"], default="auto")
     v.add_argument("--out-dir", type=Path, required=True)
     v.add_argument("--svg", action="store_true", help="also write routes.svg")
@@ -144,6 +151,7 @@ def main(argv: list[str] | None = None) -> int:
     )
     rt.add_argument("--day", choices=["shuttle", "plant"], default="shuttle")
     rt.add_argument("--seed", type=int, default=11)
+    rt.add_argument("--orders", type=int, default=None, help="size of the generated day")
     rt.add_argument(
         "--policy", choices=["insertion", "insertion+alns", "ortools-resolve"], default="insertion"
     )
@@ -455,8 +463,13 @@ def _vrp_solve(args: argparse.Namespace) -> int:
         ex = solve_exact(inst, time_limit=args.time_limit or 60.0)
         solution, verdict, label = ex.solution, ex.verdict, f"CP-SAT {ex.status}"
     else:
+        if args.iterations is not None:
+            iterations = args.iterations
+        else:
+            # A time budget alone means "use the budget": no iteration cap.
+            iterations = 5000 if args.time_limit is None else 10**9
         config = AlnsConfig(
-            iterations=args.iterations,
+            iterations=iterations,
             time_limit=args.time_limit,
             seed=args.seed,
             backend=args.backend,
@@ -475,7 +488,18 @@ def _vrp_solve(args: argparse.Namespace) -> int:
     elapsed = time.perf_counter() - started
     args.out_dir.mkdir(parents=True, exist_ok=True)
     (args.out_dir / "solution.json").write_text(solution.to_json(inst), encoding="utf-8")
-    report = {
+    from mobiroute.vrp.geo import GeoInstance
+
+    geo_in = built if isinstance(built, GeoInstance) else None
+    sheets = None
+    kpi = None
+    if verdict.feasible and verdict.routes:
+        from mobiroute.vrp.kpi import plan_kpi
+        from mobiroute.vrp.sheets import route_sheets
+
+        sheets = route_sheets(inst, solution, verdict, geo_in.places if geo_in else None)
+        kpi = plan_kpi(inst, solution, verdict, sheets)
+    report: dict[str, object] = {
         "instance": inst.name,
         "solver": label,
         "seconds": round(elapsed, 3),
@@ -498,6 +522,11 @@ def _vrp_solve(args: argparse.Namespace) -> int:
             for r in verdict.routes
         ],
     }
+    if kpi is not None:
+        from mobiroute.vrp.kpi import kpi_markdown
+
+        report["kpi"] = kpi.as_dict()
+        (args.out_dir / "kpi.md").write_text(kpi_markdown(kpi, lang=args.lang), encoding="utf-8")
     (args.out_dir / "verdict.json").write_text(json.dumps(report, indent=2), encoding="utf-8")
     if args.svg:
         from mobiroute.vrp.render import routes_svg
@@ -505,12 +534,9 @@ def _vrp_solve(args: argparse.Namespace) -> int:
         (args.out_dir / "routes.svg").write_text(
             routes_svg(inst, solution, title=f"{inst.name}: {label}"), encoding="utf-8"
         )
-    if args.sheets and verdict.feasible:
-        from mobiroute.vrp.geo import GeoInstance
-        from mobiroute.vrp.sheets import route_sheets, sheets_csv, sheets_markdown, sheets_svg
+    if args.sheets and sheets is not None:
+        from mobiroute.vrp.sheets import sheets_csv, sheets_markdown, sheets_svg
 
-        geo_in = built if isinstance(built, GeoInstance) else None
-        sheets = route_sheets(inst, solution, verdict, geo_in.places if geo_in else None)
         (args.out_dir / "route-sheets.csv").write_text(
             sheets_csv(sheets, inst.dimensions), encoding="utf-8"
         )
@@ -526,10 +552,9 @@ def _vrp_solve(args: argparse.Namespace) -> int:
         )
         (args.out_dir / "route-sheets.svg").write_text(gantt, encoding="utf-8")
     if prices is not None:
-        from mobiroute.vrp.geo import GeoInstance
         from mobiroute.vrp.prices import prices_dict, prices_markdown
 
-        currency = built.currency if isinstance(built, GeoInstance) else ""
+        currency = geo_in.currency if geo_in else ""
         (args.out_dir / "prices.json").write_text(
             json.dumps(prices_dict(prices), indent=2, ensure_ascii=False), encoding="utf-8"
         )
@@ -537,6 +562,15 @@ def _vrp_solve(args: argparse.Namespace) -> int:
             prices_markdown(prices, lang=args.lang, currency=currency), encoding="utf-8"
         )
     print(log_safe(f"{inst.name}: {verdict.summary()} [{label}, {elapsed:.1f} s]"))
+    if kpi is not None:
+        beta = kpi.mileage_utilisation
+        print(
+            log_safe(
+                f"empty km {kpi.empty_distance:.1f} of {kpi.distance:.1f}"
+                + ("" if beta is None else f" (mileage utilisation {100 * beta:.1f}%)")
+                + f"; on duty {kpi.duty / 60:.1f} h, waiting {kpi.waiting / 60:.1f} h"
+            )
+        )
     return 0 if verdict.feasible else 2
 
 
@@ -544,7 +578,10 @@ def _vrp_dispatch(args: argparse.Namespace) -> int:
     from mobiroute.vrp.generators import plant_day, shuttle_day
     from mobiroute.vrp.realtime import simulate
 
-    inst = shuttle_day(args.seed) if args.day == "shuttle" else plant_day(args.seed)
+    if args.day == "shuttle":
+        inst = shuttle_day(args.seed, n_orders=args.orders or 160)
+    else:
+        inst = plant_day(args.seed, n_moves=args.orders or 140)
     report = simulate(inst, args.policy)
     args.out_dir.mkdir(parents=True, exist_ok=True)
     data = {
@@ -572,6 +609,7 @@ def _vrp_dispatch(args: argparse.Namespace) -> int:
             f"{report.instance} [{report.policy}]: "
             f"accepted {k['accepted']:.0f}/{k['orders']:.0f}, "
             f"call-to-pickup {k['response_mean_min']:.1f} min, "
+            f"empty km {k['empty_km']:.1f} of {k['distance']:.1f}, "
             f"decision {k['decision_ms_mean']:.2f} ms, verified={report.verified}"
         )
     )

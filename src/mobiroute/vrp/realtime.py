@@ -25,11 +25,13 @@ snapshot can be handed to OR-Tools, which is how the re-solve-per-order
 policy is measured.
 
 KPIs: acceptance, time from call to pickup (vehicle arrival lead time), ride
-time, distance, vehicles used, decision latency.
+time, distance and the part of it driven empty, vehicles used, decision
+latency.
 """
 
 from __future__ import annotations
 
+import itertools
 import math
 import statistics
 import time
@@ -38,8 +40,15 @@ from typing import Literal
 
 from mobiroute.vrp.alns import AlnsConfig, search_objective
 from mobiroute.vrp.alns import solve as alns_solve
-from mobiroute.vrp.insertion import Compiled, RouteState, apply_insertion, best_insertion
+from mobiroute.vrp.insertion import (
+    Compiled,
+    RouteState,
+    apply_insertion,
+    best_insertion,
+    route_loads,
+)
 from mobiroute.vrp.model import Instance, Node, Profile, Request, VehicleType
+from mobiroute.vrp.sheets import LOADED_EPS
 from mobiroute.vrp.solution import Route, Solution
 from mobiroute.vrp.verify import verify
 
@@ -467,6 +476,19 @@ class Dispatcher:
         solution = Solution(routes, set(range(inst.n_requests)) - served)
         verdict = verify(inst, solution)
         latency = [d.latency_ms for d in decisions]
+        # Empty running: legs with nothing on board (from a drop to the next pickup).
+        empty_km = 0.0
+        for route in routes:
+            vt = inst.vehicle_types[route.vehicle_type]
+            dist = inst.profiles[vt.profile].distance
+            seq = [vt.start_depot, *route.nodes, vt.end_depot]
+            loads = route_loads(self.c, route.nodes)
+            empty_km += math.fsum(
+                dist[a][b]
+                for k, (a, b) in enumerate(itertools.pairwise(seq))
+                if not any(q > LOADED_EPS for q in loads[k])
+            )
+        total_km = verdict.cost.distance
         kpi = {
             "orders": float(len(decisions)),
             "accepted": float(len(accepted)),
@@ -475,7 +497,9 @@ class Dispatcher:
             "response_p95_min": round(_pct(response, 0.95), 2),
             "ride_mean_min": round(statistics.fmean(rides), 2) if rides else 0.0,
             "ride_p95_min": round(_pct(rides, 0.95), 2),
-            "distance": round(verdict.cost.distance, 2),
+            "distance": round(total_km, 2),
+            "empty_km": round(empty_km, 2),
+            "mileage_utilisation": round(1.0 - empty_km / total_km, 4) if total_km > 0 else 0.0,
             "cost": round(verdict.cost.total, 2),
             "vehicles_used": float(verdict.cost.vehicles),
             "decision_ms_mean": round(statistics.fmean(latency), 3) if latency else 0.0,

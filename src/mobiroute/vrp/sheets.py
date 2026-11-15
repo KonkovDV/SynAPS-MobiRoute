@@ -36,6 +36,10 @@ from mobiroute.vrp.verify import Verdict
 #: Signs for ISO 4217 codes; any other label is printed as given.
 CURRENCY_SIGNS = {"RUB": "₽", "EUR": "€", "USD": "$", "CNY": "¥"}
 
+#: A leg carries goods when some dimension holds more than this (kg, m3, ...);
+#: anything less is float dust left by sums of loads and drops.
+LOADED_EPS = 1e-6
+
 KINDS = {
     "depart": ("загрузка и выезд", "loading, departure"),
     "pickup": ("погрузка", "pickup"),
@@ -86,6 +90,8 @@ class RouteSheet:
     stint_limit: float | None = None
     driving_limit: float | None = None
     shift_limit: float | None = None
+    #: Kilometres driven with nothing on board (deadhead).
+    empty_distance: float = 0.0
 
     @property
     def shift(self) -> float:
@@ -229,6 +235,12 @@ def route_sheets(
         # Cost as the plan was priced (free-flow times, or the shift with
         # time_cost == "duty"), so sheets add up to the verdict.
         distance, _free_flow, _service = route_cost(inst, route.vehicle_type, route.nodes)
+        legs_km = inst.profiles[vt.profile].distance
+        empty = math.fsum(
+            legs_km[a][b]
+            for k, (a, b) in enumerate(pairwise(seq))
+            if not any(q > LOADED_EPS for q in loads[k])
+        )
         paid = charged_time(inst, route.vehicle_type, route.nodes)
         money = vt.fixed_cost + vt.cost_per_distance * distance + vt.cost_per_time * paid
         waiting = math.fsum(max(0.0, row.start - row.arrive) for row in rows)
@@ -267,6 +279,7 @@ def route_sheets(
                 stint_limit=None if rule is None else rule.max_driving,
                 driving_limit=None if rule is None else 2 * rule.max_driving,
                 shift_limit=vt.max_duration,
+                empty_distance=empty,
             )
         )
     if len(sheets) != len(verdict.routes):
@@ -424,7 +437,8 @@ def sheets_markdown(
             start = f"Начало {clock(sheet.depart)}, выезд" if leave > sheet.depart else "Выезд"
             summary = (
                 f"{start} {clock(leave)}, возврат {clock(sheet.back)}; "
-                f"{_dec(sheet.distance, ru)} км, за рулём {sheet.driving:.0f} мин, "
+                f"{_dec(sheet.distance, ru)} км, из них порожних "
+                f"{_dec(sheet.empty_distance, ru)}; за рулём {sheet.driving:.0f} мин, "
                 f"ожидание {sheet.waiting:.0f} мин; стоимость {cost}{unit}"
             )
             header = "| Рейс | Что | Заказ | Где | Окно | Прибытие | Начало | Конец | "
@@ -435,8 +449,9 @@ def sheets_markdown(
             )
             summary = (
                 f"{start} {clock(leave)}, return {clock(sheet.back)}; "
-                f"{sheet.distance:.1f} km, {sheet.driving:.0f} min driving, "
-                f"{sheet.waiting:.0f} min waiting; cost {cost}{unit}"
+                f"{sheet.distance:.1f} km, {sheet.empty_distance:.1f} of them empty; "
+                f"{sheet.driving:.0f} min driving, {sheet.waiting:.0f} min waiting; "
+                f"cost {cost}{unit}"
             )
             header = "| Trip | What | Order | Where | Window | Arrive | Start | End | "
             labour = _labour(sheet, ru=False)
