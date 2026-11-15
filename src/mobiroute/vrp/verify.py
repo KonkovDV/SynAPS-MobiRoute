@@ -56,33 +56,54 @@ class Verdict:
         )
 
 
+def _index(value: object, size: int) -> bool:
+    """``value`` is a valid index into a sequence of ``size`` items (no bools)."""
+    return isinstance(value, int) and not isinstance(value, bool) and 0 <= value < size
+
+
 def verify(inst: Instance, solution: Solution) -> Verdict:
+    """Check a plan against the instance and price it.
+
+    The plan may come from anywhere (a file, another system), so nothing in
+    it is assumed: an unknown vehicle type, a node that does not exist or an
+    unknown request index becomes a violation, never an exception. Such
+    routes are left out of the timing and of the cost, which then prices
+    only the well-formed part of the plan.
+    """
     violations: list[str] = []
     dims = len(inst.dimensions)
     n_req = inst.n_requests
+    n_types = len(inst.vehicle_types)
     owner_route: dict[int, int] = {}
     position: dict[int, int] = {}
     depots = {vt.start_depot for vt in inst.vehicle_types} | {
         vt.end_depot for vt in inst.vehicle_types
     }
-    used_by_type = [0] * len(inst.vehicle_types)
+    used_by_type = [0] * n_types
     reload_seen: set[int] = set()
+    malformed: set[int] = set()
     for r_idx, route in enumerate(solution.routes):
-        if not 0 <= route.vehicle_type < len(inst.vehicle_types):
+        if not _index(route.vehicle_type, n_types):
             violations.append(f"UNKNOWN_VEHICLE_TYPE:{r_idx}")
+            malformed.add(r_idx)
             continue
         if route.nodes:
             used_by_type[route.vehicle_type] += 1
         reloads = 0
         for k, node in enumerate(route.nodes):
-            if 0 <= node < inst.n_nodes and inst.reload_type_of(node) == route.vehicle_type:
+            if not _index(node, inst.n_nodes):
+                violations.append(f"NOT_A_SERVICE_NODE:{node}")
+                malformed.add(r_idx)
+                continue
+            if inst.reload_type_of(node) == route.vehicle_type:
                 reloads += 1
                 if node in reload_seen:
                     violations.append(f"DUPLICATE_VISIT:{node}")
                 reload_seen.add(node)
                 continue
-            if not 0 <= node < inst.n_nodes or node in depots or inst.request_of(node) < 0:
+            if node in depots or inst.request_of(node) < 0:
                 violations.append(f"NOT_A_SERVICE_NODE:{node}")
+                malformed.add(r_idx)
                 continue
             if node in owner_route:
                 violations.append(f"DUPLICATE_VISIT:{node}")
@@ -123,17 +144,16 @@ def verify(inst: Instance, solution: Solution) -> Verdict:
             if position[req.pickup] > position[req.delivery]:
                 violations.append(f"DELIVERY_BEFORE_PICKUP:{req.id}")
         served.append(req.id)
-    for r in solution.unassigned:
-        if not 0 <= r < n_req:
+    for r in sorted(solution.unassigned, key=repr):
+        if not _index(r, n_req):
             violations.append(f"UNKNOWN_REQUEST_INDEX:{r}")
-    complete = all(
-        inst.requests[r].penalty is not None for r in range(n_req) if inst.requests[r].id in missing
-    )
+    missing_set = set(missing)
+    complete = all(req.penalty is not None for req in inst.requests if req.id in missing_set)
 
     routes: list[VerifiedRoute] = []
     certificates: list[tuple[int, Infeasibility]] = []
     for r_idx, route in enumerate(solution.routes):
-        if not route.nodes or not 0 <= route.vehicle_type < len(inst.vehicle_types):
+        if not route.nodes or r_idx in malformed:
             continue
         if any(
             owner_route.get(node) != r_idx
@@ -200,13 +220,20 @@ def verify(inst: Instance, solution: Solution) -> Verdict:
                 rest_after=rest_after,
             )
         )
+    if malformed or any(not _index(r, n_req) for r in solution.unassigned):
+        priced = Solution(
+            [r for k, r in enumerate(solution.routes) if k not in malformed],
+            {r for r in solution.unassigned if _index(r, n_req)},
+        )
+    else:
+        priced = solution
     return Verdict(
         feasible=not violations,
         complete=complete,
         violations=tuple(violations),
         served=tuple(served),
         unassigned=tuple(missing),
-        cost=evaluate(inst, solution),
+        cost=evaluate(inst, priced),
         routes=tuple(routes),
         certificates=tuple(certificates),
     )

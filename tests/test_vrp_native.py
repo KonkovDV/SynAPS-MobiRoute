@@ -161,3 +161,105 @@ def test_alns_trajectory_with_rests_and_trips_is_identical() -> None:
     assert py.solution.as_lists() == rs.solution.as_lists()
     assert [p.objective for p in py.trace] == [p.objective for p in rs.trace]
     assert py.verdict.feasible
+
+
+def _split(seed: int) -> Instance:
+    """Rests that may be split 15 + 30, on a random rich instance with reloads."""
+    from dataclasses import replace
+
+    from mobiroute.vrp.model import BreakRule, add_reload_stops
+
+    base = random_instance(seed, n_requests=10, n_types=2, ride_share=0.3)
+    rng = random.Random(seed)
+    types = tuple(
+        replace(vt, breaks=BreakRule(rng.uniform(60.0, 200.0), 45.0, (15.0, 30.0)))
+        for vt in base.vehicle_types
+    )
+    return add_reload_stops(replace(base, vehicle_types=types), types[0].id, 3, 10.0)
+
+
+def _rush(seed: int) -> Instance:
+    """Time-dependent travel (two rush hours) on a random instance without ride
+    limits or rests, the combination the model admits, with a multi-trip type."""
+    from mobiroute.vrp.model import SpeedProfile, add_reload_stops
+    from mobiroute.vrp.traffic import with_traffic
+
+    base = random_instance(seed, n_requests=10, n_types=2, ride_share=0.0)
+    speed = SpeedProfile((0.0, 40.0, 110.0, 190.0), (1.0, 0.5, 1.0, 0.7))
+    inst = with_traffic(base, speed)
+    return add_reload_stops(inst, inst.vehicle_types[0].id, 2, 8.0)
+
+
+@pytest.mark.parametrize("build", [_split, _rush], ids=["split-break", "traffic"])
+def test_split_breaks_and_traffic_match_on_both_backends(build: object) -> None:
+    from collections.abc import Callable
+
+    from mobiroute.vrp.insertion import route_exact
+
+    make: Callable[[int], Instance] = build  # type: ignore[assignment]
+    compared = 0
+    for seed in range(40):
+        inst = make(seed)
+        c = Compiled(inst)
+        kernel = native.build_kernel(c)
+        assert kernel is not None
+        rng = random.Random(seed)
+        sol = _random_partial(c, rng)
+        for route in sol.routes:
+            t, nodes = route.vehicle_type, list(route.nodes)
+            assert kernel.exact_feasible_route(t, nodes) == route_exact(c, t, nodes), seed
+            # Shuffled orders exercise the infeasible side of the exact check.
+            shuffled = nodes[:]
+            rng.shuffle(shuffled)
+            pairs_ok = all(
+                shuffled.index(c.pick[r]) < shuffled.index(c.deliv[r])
+                for r in c.requests_of(shuffled)
+                if c.pick[r] >= 0 and c.deliv[r] >= 0
+            )
+            if pairs_ok:
+                assert kernel.exact_feasible_route(t, shuffled) == route_exact(c, t, shuffled)
+            state = RouteState(c, t, nodes)
+            for r in sorted(sol.unassigned):
+                py = best_insertion(c, state, r)
+                rs = kernel.best_insertion(t, nodes, r)
+                assert py == rs, (seed, r, py, rs)
+                compared += 1
+    assert compared > 150
+
+
+@pytest.mark.parametrize("build", [_split, _rush], ids=["split-break", "traffic"])
+def test_alns_trajectory_with_split_breaks_and_traffic_is_identical(build: object) -> None:
+    from collections.abc import Callable
+
+    make: Callable[[int], Instance] = build  # type: ignore[assignment]
+    inst = make(11)
+    py = solve(inst, AlnsConfig(backend="python", iterations=80, seed=2, segment=20))
+    rs = solve(inst, AlnsConfig(backend="native", iterations=80, seed=2, segment=20))
+    assert rs.backend == "native" and py.backend == "python"
+    assert py.solution.as_lists() == rs.solution.as_lists()
+    assert [p.objective for p in py.trace] == [p.objective for p in rs.trace]
+    assert py.verdict.feasible
+
+
+def test_cargo_day_with_rush_hours_runs_on_the_kernel() -> None:
+    from mobiroute.vrp.traffic import with_traffic
+
+    inst = with_traffic(cargo_day(3, n_orders=30))
+    py = solve(inst, AlnsConfig(backend="python", iterations=40, seed=5, segment=20))
+    rs = solve(inst, AlnsConfig(backend="native", iterations=40, seed=5, segment=20))
+    assert rs.backend == "native"
+    assert py.solution.as_lists() == rs.solution.as_lists()
+    assert py.objective == rs.objective and rs.verdict.feasible
+
+
+def test_kernel_rejects_a_malformed_speed_profile() -> None:
+    inst = random_instance(2, n_requests=4)
+    c = Compiled(inst)
+    module = native._module()
+    assert module is not None
+    kernel = native.build_kernel(c)
+    assert kernel is not None
+    args = list(native.kernel_args(c))
+    args[-1] = [([0.0, 0.0], [1.0, 1.0])] + [None] * (c.n_types - 1)  # starts not increasing
+    with pytest.raises(ValueError, match="VRP_KERNEL_SHAPE:speed"):
+        module.VrpKernel(*args)

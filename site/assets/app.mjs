@@ -29,10 +29,11 @@ function setLang(next) {
   root.lang = next;
   const btn = $("lang");
   btn.textContent = next === "ru" ? "EN" : "RU";
-  btn.setAttribute("aria-label", next === "ru" ? "Switch language to English" : "Переключить язык на русский");
+  // The accessible name starts with the visible label (WCAG 2.5.3, label in name).
+  btn.setAttribute("aria-label", next === "ru" ? "EN: switch language to English" : "RU: переключить язык на русский");
   document.title = next === "ru"
-    ? "SynAPS-MobiRoute — маршруты, которые можно доказать"
-    : "SynAPS-MobiRoute — routes you can prove";
+    ? "SynAPS-MobiRoute — маршрутизация смешанного парка"
+    : "SynAPS-MobiRoute — routing for a mixed fleet";
   store.set("mr-lang", next);
   rerender.forEach((fn) => fn());
 }
@@ -533,10 +534,35 @@ function laboratory(inst) {
 }
 
 /* ---------- boot ---------- */
-const load = (url) => fetch(url).then((r) => { if (!r.ok) throw new Error(`${url}: ${r.status}`); return r.json(); });
+// One request per data file, however many sections read it.
+const cache = new Map();
+const load = (url) => {
+  if (!cache.has(url)) {
+    cache.set(url, fetch(url).then((r) => { if (!r.ok) throw new Error(`${url}: ${r.status}`); return r.json(); }));
+  }
+  return cache.get(url);
+};
+// A section's data and drawing wait until the section is about two screens
+// away: the first screen does not pay for tables and charts far below it.
+const nearFns = new Map();
+const nearIo = new IntersectionObserver((entries) => {
+  for (const e of entries) {
+    if (!e.isIntersecting) continue;
+    nearIo.unobserve(e.target);
+    const fns = nearFns.get(e.target) || [];
+    nearFns.delete(e.target);
+    fns.forEach((fn) => fn());
+  }
+}, { rootMargin: "200% 0px 200% 0px" });
+const near = (el, fn) => {
+  if (!el) return fn();
+  if (!nearFns.has(el)) { nearFns.set(el, []); nearIo.observe(el); }
+  nearFns.get(el).push(fn);
+};
 setLang(new URLSearchParams(location.search).get("lang") || store.get("mr-lang") || "ru");
-load("data/a2-16.json").then((inst) => { hero(inst); laboratory(inst); }).catch((err) => console.error(err));
-load("data/solver-lab.json").then(race).catch((err) => console.error(err));
-initVrp({ $, tr, lang, svgEl, reduce, rerender, onReveal, load });
-initSheets({ $, tr, lang, svgEl, reduce, rerender, onReveal, load });
-initPrices({ $, tr, lang, svgEl, reduce, rerender, onReveal, load });
+load("data/a2-16.json").then((inst) => { hero(inst); near($("lab"), () => laboratory(inst)); }).catch((err) => console.error(err));
+near($("proof"), () => load("data/solver-lab.json").then(race).catch((err) => console.error(err)));
+const ctx = { $, tr, lang, svgEl, reduce, rerender, onReveal, load, near };
+initVrp(ctx);
+initSheets(ctx);
+initPrices(ctx);

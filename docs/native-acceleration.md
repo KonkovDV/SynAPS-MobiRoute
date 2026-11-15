@@ -54,13 +54,36 @@ guess.
    to 3.4%. Instances under 400 requests keep their full scans, so their
    published trajectories do not change.
 
+7. **Rush hours and split breaks.** Until 0.5 an instance with a speed
+   profile or a split break fell back to Python. The profile of a cargo day
+   with rush hours put 80% of the time in `traffic.arrive`,
+   `traffic.candidates` and `traffic.forward`; a store day with split breaks
+   spent it in `exact_feasible`. The kernel now takes each type's speed
+   profile and split: `arrive` and `depart_by` of the Ichoua–Gendreau–Potvin
+   model (`partition_point` in place of `bisect`), the forward and backward
+   passes, the insertion scan and the exact checks, in the Python order of
+   operations. 300 iterations: 3.66 → 0.57 s with rush hours, 1.26 → 0.24 s
+   with split breaks, identical plans.
+8. **Unwinding without paying for it.** The release profile used
+   `panic = "abort"`: a kernel bug would have killed the Python process
+   that hosts it, a web worker for instance. With `unwind` PyO3 turns a
+   panic into a Python exception, but the DARP case lost about 9%: the
+   Bellman-Ford loop shared a frame with owned vectors, so every index check
+   carried a landing pad. The loop moved into a function over borrowed
+   slices with iterator walks over the arc lists. Median of five runs on
+   Cordeau a4-48: 2.86 ms an iteration with unwind before, 2.63 with abort,
+   2.45 after the change.
+
 Current cost per iteration ([benchmarks/vrp-speed.md](benchmarks/vrp-speed.md),
 `python benchmark/measure_vrp_speed.py`): Rust is 10× faster on Solomon R101,
-17× on a Sartori–Buriol PDPTW, 49× on Cordeau DARP (exact ride checks), with
-identical plans. On the 8-type cargo day it is 5.4×: there the operators that
-still run in Python (vehicle-type assignment, route merges) are the next
-bottleneck — the obvious next candidates for the kernel. On R101 the local
-search, also Python, costs about 10% of an iteration.
+14× on a Sartori–Buriol PDPTW, 42× on Cordeau DARP (exact ride checks), 6.5×
+on a cargo day with rush hours and 5.5× on a store day with split breaks,
+with identical plans. On the 8-type cargo day it is 5.4×: there the operators
+that still run in Python (vehicle-type assignment, route merges) are the next
+bottleneck, the obvious next candidates for the kernel. On R101 the local
+search, also Python, costs about 10% of an iteration. The ratios move with
+the machine: the table was rerun for 0.6 on a faster one, where the Python
+side gained more than the Rust side.
 
 ## How the paratransit kernel got fast
 

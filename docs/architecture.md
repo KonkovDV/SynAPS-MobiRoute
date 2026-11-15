@@ -26,6 +26,7 @@ flowchart LR
     V[verify + schedule<br/>Bellman-Ford, certificates]
     GM[geo<br/>great-circle, OSRM or Valhalla truck matrices · access zones]
     SH[sheets<br/>driver's schedule · CSV · Markdown]
+    KP[kpi<br/>empty km · beta · gamma · time on duty]
   end
   B --> M
   J --> M
@@ -51,18 +52,19 @@ flowchart LR
   T --> V
   V --> OUT[plan · cost · SVG<br/>or certificate]
   V --> SH --> SHEETS[route sheets<br/>CSV · Markdown · Gantt SVG]
+  SH --> KP --> KPI[fleet indicators<br/>kpi.md · verdict.json]
 ```
 
 ## Packages
 
 | Package | Role |
 | --- | --- |
-| `vrp` | rich VRP engine: model (rests, reload stops, speed profiles), readers, input in coordinates with offline or OSRM matrices, constant-time insertion tests, ALNS, merge operator, VRPTW local search, set partitioning and its LP duals (order prices, vehicle rents), exact CP-SAT, OR-Tools baseline, lateness, live dispatch, verifier, route sheets, SVG |
+| `vrp` | rich VRP engine: model (rests, reload stops, speed profiles), readers, input in coordinates with offline or OSRM matrices, constant-time insertion tests, ALNS, merge operator, VRPTW local search, set partitioning and its LP duals (order prices, vehicle rents), exact CP-SAT, OR-Tools baseline, lateness, live dispatch, verifier, route sheets, fleet indicators, SVG |
 | `benchmarks` | Cordeau (2006) as published: exact CP-SAT and MIP on SCIP/HiGHS/CBC, LP bound, Bellman-Ford verifier; a check that keeps non-comparable gaps out of reports |
 | `domain`, `solvers`, `dispatch`, `validation` | paratransit DARP kernel ([darp-kernel.md](darp-kernel.md)) |
 | `adapters` | synthetic paratransit days, Cordeau adapter, fingerprints |
 | `reporting` | JSON, Markdown, CSV, SVG |
-| `native/mobiroute_native` | Rust (PyO3): `VrpKernel` for the rich VRP, `InsertionEngine` for the paratransit kernel |
+| `native/mobiroute_native` | Rust (PyO3): `VrpKernel` for the rich VRP (rests whole or split, reloads, rush hours), `InsertionEngine` for the paratransit kernel |
 
 ## Design decisions
 
@@ -121,11 +123,22 @@ starts with a stable code (`GEO_UNKNOWN_DEPOT:van`, `VRP_CAPACITY_INVALID:van`,
 `SHEETS_NEED_A_FEASIBLE_PLAN`); the CLI prints it in one line to stderr and
 exits with status 2.
 
+**Hostile input is ordinary input.** JSON readers accept `NaN` and
+`Infinity`, and `NaN` passes every check written as `value < 0`, so the
+model checks what each number may be: amounts finite and not negative, clock
+times finite, `+inf` only for "no limit". The verifier takes plans from
+anywhere and never raises on them: an unknown vehicle type, node or request
+index is a violation, and the cost covers only the well-formed routes. A
+panic in the Rust kernel unwinds into a Python exception instead of aborting
+the process. A test module (`tests/test_vrp_robustness.py`) keeps these
+properties, with Hypothesis feeding the verifier arbitrary plans.
+
 ## Paths through the code
 
 * `mobiroute vrp-solve --instance F --solver alns` → `io.load_benchmark` →
   `alns.solve` (construction by regret-2 → anneal → route elimination →
-  anneal) → `verify.verify` → `solution.json`, `verdict.json`, `routes.svg`.
+  anneal) → `verify.verify` → `sheets.route_sheets` → `kpi.plan_kpi` →
+  `solution.json`, `verdict.json` (with a `kpi` block), `kpi.md`, `routes.svg`.
 * `mobiroute vrp-solve --geo day.geo.json [--osrm URL] --sheets` →
   `geo.load` (offline or OSRM `table` matrices, reload stops for multi-trip
   types) → `alns.solve` → `verify.verify` → `sheets.route_sheets`

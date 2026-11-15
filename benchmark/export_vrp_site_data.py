@@ -34,6 +34,7 @@ from mobiroute.vrp import geo
 from mobiroute.vrp.alns import AlnsConfig, solve
 from mobiroute.vrp.generators import cargo_day, plant_day
 from mobiroute.vrp.geo import GeoInstance
+from mobiroute.vrp.kpi import plan_kpi
 from mobiroute.vrp.model import Instance
 from mobiroute.vrp.prices import Prices, solve_with_prices
 from mobiroute.vrp.realtime import simulate
@@ -253,6 +254,7 @@ def sheets_day() -> tuple[dict[str, Any], dict[str, Any]]:
                 "trips": sheet.trips,
                 "capacity": list(vt.capacity),
                 "distance": round(sheet.distance, 2),
+                "empty": round(sheet.empty_distance, 2),
                 "driving": round(sheet.driving, 1),
                 "waiting": round(sheet.waiting, 1),
                 "cost": round(sheet.cost, 2),
@@ -296,6 +298,7 @@ def sheets_day() -> tuple[dict[str, Any], dict[str, Any]]:
         key=lambda x: x[2],
     )
     depot = built.places[inst.vehicle_types[0].start_depot]
+    kpi = plan_kpi(inst, result.solution, result.verdict, sheets)
     day = {
         "name": inst.name,
         "currency": CURRENCY_SIGNS.get(built.currency, built.currency),
@@ -303,6 +306,10 @@ def sheets_day() -> tuple[dict[str, Any], dict[str, Any]]:
         "orders": inst.n_requests,
         "cost": round(result.verdict.cost.total, 2),
         "distance": round(result.verdict.cost.distance, 2),
+        "empty": round(kpi.empty_distance, 2),
+        "beta": None if kpi.mileage_utilisation is None else round(kpi.mileage_utilisation, 4),
+        "gamma": [None if g is None else round(g, 4) for g in kpi.load_utilisation],
+        "duty": round(kpi.duty, 1),
         "depot": {"lat": depot.lat, "lon": depot.lon, "label": depot.label},
         "suppliers": [{"lat": a, "lon": b, "label": c} for a, b, c in suppliers],
         "vehicles": vehicles,

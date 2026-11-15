@@ -1,5 +1,62 @@
 # Changelog
 
+## 0.6.0 — 2026-11-15
+
+### Fixed
+Found by trying to break the engine (`tests/test_vrp_robustness.py`):
+- The model accepted `NaN` and infinity, which JSON readers parse: a `NaN`
+  service time gave a plan the verifier passed with a cost of `nan`, an
+  infinite one made every schedule look feasible. Amounts are now finite and
+  not negative, clock times finite, and `+inf` remains only where it means
+  "no limit".
+- The verifier raised `IndexError` on a plan with an unknown vehicle type, a
+  node that does not exist or an unknown request index, and priced a route
+  with type `-1` as the last type. These are now violations; the cost covers
+  the well-formed routes only. Hypothesis feeds it arbitrary plans.
+- With a rest rule the reported shortest shift was that of the first
+  admissible rest place, up to 45 minutes longer than the best place when a
+  later gap hides the rest in waiting time. Duty-time prices, route sheets and
+  the verdict used it. Every place (and pair of places for a split break) is
+  now timed and the shortest kept (Lemma 1b of the formulation).
+- The exact CP-SAT model and the OR-Tools baseline priced operating time on
+  instances that pay the whole shift (`time_cost = "duty"`); both refuse such
+  instances now instead of reporting a result for another objective.
+- OR-Tools gave every order the must-serve penalty, on both nodes of a pair,
+  and drove out to orders cheaper to refuse; the live re-solve policy could
+  not tell the new order from old promises. An optional order costs its own
+  penalty, once. The re-solve row of `docs/benchmarks/realtime-dispatch.md`
+  is rerun: 81.4% of orders accepted (86.4% before), 4.6% cheaper than
+  insertion with ALNS passes, 7 minutes later to the pickup.
+- An OSRM table request carried every point of the day in its URL (about
+  22 kB for a thousand stops); each block request carries its own points.
+
+### Added
+- Fleet indicators (`mobiroute.vrp.kpi`): loaded and empty kilometres, the
+  mileage utilisation coefficient beta, the dynamic load utilisation gamma
+  over loaded kilometres per load dimension, load-kilometres and time on
+  duty split into driving, service, rest and waiting. `vrp-solve` writes
+  `kpi.md` and a `kpi` block in `verdict.json`; route sheets name each
+  vehicle's empty kilometres; the dispatcher's report adds empty running.
+- `docs/industrial-transport.md`: in-plant and inter-plant transport,
+  line feeding, staff shuttles; what the model covers and what it does not,
+  with a live-versus-static comparison on the plant day.
+- `vrp-dispatch --orders`; `vrp-solve --time-limit` without `--iterations`
+  now runs for the whole budget instead of stopping at 5000 iterations.
+
+### Changed
+- The Rust kernel covers time-dependent travel and split breaks, which fell
+  back to Python before: 6.5x and 5.5x faster per iteration on the measured
+  days, the same plans bit for bit (`docs/benchmarks/vrp-speed.md`).
+- The kernel unwinds on panic, so a bug fails one call with a Python
+  exception instead of aborting the host process; the Bellman-Ford loop moved
+  into its own frame to keep the DARP case as fast as before (faster, in
+  fact: 2.45 against 2.63 ms an iteration on a4-48).
+- Site: each data file is fetched once and a section loads when it comes
+  near; off-screen sections skip layout. On a phone profile: 8 requests
+  instead of 16, 200 instead of 331 kB at start, main-thread work down about
+  40%, largest contentful paint 0.93 -> 0.81 s.
+- Package and kernel 0.6.0; the kernel ABI check moves with them.
+
 ## 0.5.0 — 2026-11-14
 
 ### Added

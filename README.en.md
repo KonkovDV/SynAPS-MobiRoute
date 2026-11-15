@@ -7,8 +7,8 @@ drivers' driving-time rules, several trips per shift and travel speeds that
 change over the day.
 
 The main method is ALNS. Its hot path (inserting orders and checking
-schedules) is written in Rust and returns exactly the same plans as the
-reference implementation in Python. Small instances are solved exactly with
+schedules, rush hours and split breaks included) is written in Rust and
+returns exactly the same plans as the reference implementation in Python. Small instances are solved exactly with
 CP-SAT and MIP models (SCIP, HiGHS, CBC), and OR-Tools Routing runs on the same
 model for comparison. Every plan, wherever it comes from, is recomputed by a
 separate verifier. When a trip cannot be scheduled, the verifier says which
@@ -113,9 +113,9 @@ with an error code instead of returning a plan that silently breaks the rule.
 | ALNS against proven optima | 40 random instances of the full model (2–3 vehicle types, capacity vector, skills, ride limits, shifts) with optima proven by CP-SAT: ALNS finds the optimum on all 40. Where leaving an order out pays, on 87 of 90 | [exact-vs-alns](docs/benchmarks/exact-vs-alns.md) |
 | OR-Tools at equal time | 18 instances, 10 s each, both plans checked by the same verifier: ALNS is better on 12, equal on 6, worse on none. Mixed-fleet freight days come out 14–17% cheaper with one to three vehicles fewer | [ortools-vs-alns](docs/benchmarks/ortools-vs-alns.md) |
 | PyVRP, VROOM, jsprit | Solomon, vehicles first: the best-known vehicle count on 56 of 56 instances, against 50 for PyVRP, 32 for VROOM and 30 for jsprit. On 1000 customers ranked by distance alone PyVRP is ahead: +1.2% to the best known against +2.9% for this engine | [solvers](docs/benchmarks/solvers.md) |
-| Rust kernel | faster than the Python reference with bit-identical plans: 10× on VRPTW, 17× on PDPTW, 49× on DARP with ride limits. On a freight day with eight vehicle types it is 5.4×: the operators still written in Python become the bottleneck there | [vrp-speed](docs/benchmarks/vrp-speed.md) |
+| Rust kernel | faster than the Python reference with bit-identical plans: 10× on VRPTW, 14× on PDPTW, 42× on DARP with ride limits. On a freight day with eight vehicle types it is 5.4×, with rush hours 6.5×, on a day with split breaks 5.5×: the operators still written in Python become the bottleneck there | [vrp-speed](docs/benchmarks/vrp-speed.md) |
 | Profiling | on a 1000-customer instance, fixes guided by a `cProfile` table gave 2.9× more iterations a minute and cut the gap to the best known from 5.75% to 3.4% | [native-acceleration](docs/native-acceleration.md) |
-| Orders during the day | a new order is answered in 0.1 ms on average, 95% of answers within 0.21 ms | [realtime-dispatch](docs/benchmarks/realtime-dispatch.md) |
+| Orders during the day | a new order is answered in 0.1 ms on average, 95% of answers within 0.18 ms | [realtime-dispatch](docs/benchmarks/realtime-dispatch.md) |
 | Operating rules | a plan made without the 4.5 h / 45 min rule leaves 4–6 routes a day with no room for a break. Two trips cover 60 of 60 stores, one trip only 52–55. A plan made on free-flow speeds runs late on 8–13 routes in rush hour | [rules](docs/benchmarks/rules.md) |
 | Spread over seeds | 19 Solomon R2 and RC2 instances, 5 seeds each; the effect of local search is significant by the Wilcoxon test, p = 0.006 | [seed-study](docs/benchmarks/seed-study.md) |
 
@@ -159,6 +159,7 @@ flowchart LR
 | Verifier and the driver's schedule | [vrp/verify.py](src/mobiroute/vrp/verify.py), [vrp/schedule.py](src/mobiroute/vrp/schedule.py) |
 | Breaks, trips, traffic | [vrp/schedule.py](src/mobiroute/vrp/schedule.py), [vrp/traffic.py](src/mobiroute/vrp/traffic.py) |
 | Orders during the day | [vrp/realtime.py](src/mobiroute/vrp/realtime.py) |
+| Fleet indicators: empty kilometres, beta, gamma, time on duty | [vrp/kpi.py](src/mobiroute/vrp/kpi.py) |
 | Input in coordinates, route sheets | [vrp/geo.py](src/mobiroute/vrp/geo.py), [vrp/sheets.py](src/mobiroute/vrp/sheets.py) |
 | Benchmark scripts | [benchmark/](benchmark) |
 | Tests | [tests/](tests) |
@@ -263,7 +264,7 @@ instead of waiting an hour at the first customer's gate.
 
 ```text
 ## van #1 · own · 2 trips
-Start 10:14, departure 10:34, return 13:34; 36.3 km, 73 min driving, 0 min waiting; cost 1,999 ₽
+Start 10:14, departure 10:34, return 13:34; 36.3 km, 10.8 of them empty; 73 min driving, 0 min waiting; cost 1,999 ₽
 Driving-time rules met: longest drive between breaks 1:13 / 4:30; driving in the shift 1:13 / 9:00; shift 3:20 / 10:00.
 Loading order at the depot, reverse of the drops: trip 1: Z011, Z020, Z014; trip 2: Z027, Z002.
 
@@ -291,6 +292,28 @@ Russian law requires for every trip. The waybill with its medical and
 technical checks and odometer readings lives in the accounting system; the
 CSV loads into it as the assignment.
 
+## Fleet indicators
+
+Cost says what a day is worth, not how the vehicles worked. Next to the plan
+the engine writes `kpi.md` and a `kpi` block in `verdict.json`: distance and
+empty distance (legs with nothing on board), the mileage utilisation beta,
+the dynamic load utilisation gamma over loaded kilometres for every load
+dimension, and time on duty split into driving, work, rest and waiting. The
+same Chelny day:
+
+```text
+Vehicles: 7 (1 hired); orders served 45, unserved 0.
+Distance 333.9 km, of it empty 62.3 km; mileage utilisation 81.4%.
+Load utilisation (dynamic, over loaded kilometres): kg 63.2%, m3 40.5%, pallets 71.4%.
+On duty 38.2 h, driving 12.0 h, waiting 6.1 h.
+```
+
+The dispatcher's shift report counts empty running too: between workshops
+those are the kilometres from one drop to the next pickup, the ones
+dispatching is meant to cut. Formulas are in the
+[formulation](docs/mathematical-formulation.md#10-fleet-indicators), in-plant
+transport tasks in [docs/industrial-transport.md](docs/industrial-transport.md).
+
 ## Prices of orders
 
 ```bash
@@ -312,8 +335,17 @@ one more van saves 641 and with one more truck 2,160. Details are in the
   single-purpose classes: `Alns`, `LocalSearch`, `RouteMerger`,
   `TypeAssigner`, `Dispatcher`. A result is a plan (`Solution`) and the
   verifier's `Verdict`, which does not depend on the solver.
-- About 600 tests, 11 of them Hypothesis properties that check hundreds of
-  random routes against the verifier. Coverage is 92%.
+- 658 tests, 13 of them Hypothesis properties that check hundreds of random
+  routes against the verifier. A separate set tries to break the engine: NaN
+  and infinity in the input, a plan with a vehicle type or node that does
+  not exist, arbitrary plans from another system. Coverage is 92%.
+- The tests catch all 12 deliberately planted bugs (the verifier forgetting
+  capacity, insertion allowing a minute of lateness, a rest missing from a
+  route sheet, ...): `python benchmark/mutation_smoke.py`. A differential run,
+  `python benchmark/fuzz_differential.py 4000`, compares the Rust kernel with
+  the reference on 38 thousand insertions, feeds the verifier 80 thousand
+  arbitrary plans and solves 400 random instances with every rule on both
+  kernels, with no difference found.
 - `mypy --strict`, `ruff`, `cargo clippy -D warnings` and `cargo fmt` in CI.
 - The Rust kernel follows the Python reference operation by operation. Tests
   require identical plans, down to whole ALNS trajectories, so the fast path
@@ -322,7 +354,8 @@ one more van saves 641 and with one more truck 2,160. Details are in the
   both backends. Every speed-up started from that table; the story is in
   [docs/native-acceleration.md](docs/native-acceleration.md).
 - Input errors are codes (`GEO_UNKNOWN_DEPOT:van`, `VRP_CAPACITY_INVALID:van`):
-  the CLI prints one line and exits with status 2.
+  the CLI prints one line and exits with status 2. A panic in the Rust kernel
+  becomes a Python exception, not a crash of the process.
 
 ## Limitations
 
@@ -330,8 +363,8 @@ one more van saves 641 and with one more truck 2,160. Details are in the
   no carrier's data and no pilot.
 - Offline matrices are straight-line distances times a detour factor; real
   roads need an OSRM or Valhalla server.
-- Traffic and the split break run on the Python reference only, not in the
-  Rust kernel.
+- The live dispatcher does not handle driver rests, rush hours or ride
+  limits yet: it refuses such a day with an error code.
 - There are no time-of-day truck bans and no multi-day trips with daily rest.
 
 The full list and the plans are in [docs/limitations.md](docs/limitations.md).
@@ -342,6 +375,7 @@ The full list and the plans are in [docs/limitations.md](docs/limitations.md).
 | --- | --- |
 | [docs/cargo-vrp.md](docs/cargo-vrp.md) | freight VRP: model, algorithms, input in coordinates, route sheets, scenarios (Russian, English summary) |
 | [docs/trucking-ru.md](docs/trucking-ru.md) | Russian freight practice and how each rule maps onto the model (Russian, English summary) |
+| [docs/industrial-transport.md](docs/industrial-transport.md) | in-plant transport: moves between workshops on request, staff shuttles, line feeding; what the model covers (Russian) |
 | [docs/mathematical-formulation.md](docs/mathematical-formulation.md) | the model, O(1) insertion, difference constraints, breaks, trips, traffic, lemmas with proofs |
 | [docs/comparison.md](docs/comparison.md) | comparison with OR-Tools, VROOM, PyVRP, jsprit, Timefold and Yandex Routing (Russian, English summary) |
 | [docs/architecture.md](docs/architecture.md) | modules, data flow, design decisions |

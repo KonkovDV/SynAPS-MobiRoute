@@ -339,6 +339,33 @@ Both the verifier and the search check try the single break first and then
 the $O(m \cdot |G_2|)$ pairs, $G_2$ the admissible gaps; a Hypothesis
 property holds the two to the same answers.
 
+**Lemma 1b (the shortest shift with a rest).** Let $c_\emptyset$ be the
+shortest duration of the route with no rest at all and $c_g$ that with the
+rest in gap $g$, for a feasible place $g$. Then
+$c_\emptyset \le c_g \le c_\emptyset + b$ (with $b_1 + b_2$ in place of $b$
+for a split break), and the shortest feasible shift of the route is
+$\min_g c_g$ over the feasible places.
+
+*Proof.* The rest makes one travel arc of the constraint graph more negative
+by $b$ and changes nothing else. A system that stays feasible has no
+negative cycle, so its shortest paths are simple and use that arc at most
+once: every path weight drops by at most $b$, hence
+$\delta_g(\text{end}, \text{start}) \ge \delta_\emptyset(\text{end}, \text{start}) - b$,
+that is $c_g \le c_\emptyset + b$. An added constraint never shortens the
+shortest duration, so $c_g \ge c_\emptyset$. A split break lengthens two arcs,
+by $b_1$ and $b_2$. The route is feasible iff some place is (Lemmas 1 and 1a),
+and each place is its own system of difference constraints, so the shortest
+feasible shift is the least $c_g$. $\square$
+
+The feasibility test of the search stops at the first place that fits; it
+only needs a yes or no. The verifier times every place and keeps the
+shortest (the earliest gap among equals, a whole break before a split one),
+stopping as soon as a place reaches $c_\emptyset$. Up to 0.5 it reported the
+first feasible place, which on random routes overstated the shift by up to
+the whole 45 minutes when a later gap hid the rest in waiting time; duty-time
+prices and route sheets used that number. The regression test compares the
+reported shift with enumeration of all places.
+
 ## 4b. Multi-trip days
 
 A multi-trip type lists reload stops: copies of its depot whose service time
@@ -516,7 +543,47 @@ pairs, normal approximation with tie and continuity corrections above):
 values are quoted only for verified plans that serve every order, and only
 at the reference vehicle count when the reference ranks vehicles first.
 
+## 10. Fleet indicators
+
+A plan's cost does not say how the vehicles worked. `vrp/kpi.py` reads a
+feasible plan through its route sheets and reports, per route and for the
+day, the indicators of Russian freight practice. With legs $\ell$ of length
+$d_\ell$ and load vector $q_\ell$ on board (after the tail stop), capacity
+$Q$ of the route's vehicle type:
+
+```math
+L = \sum_\ell d_\ell,\qquad
+L_{\text{гр}} = \sum_{\ell:\, q_\ell \ne 0} d_\ell,\qquad
+\beta = \frac{L_{\text{гр}}}{L},\qquad
+\gamma^{(k)}_{\text{д}} = \frac{\sum_\ell q^{(k)}_\ell d_\ell}{Q^{(k)} \, L_{\text{гр}}}
+```
+
+$\beta$ is the mileage utilisation (коэффициент использования пробега),
+$L - L_{\text{гр}}$ the empty (deadhead) kilometres, $\gamma_{\text{д}}$ the
+dynamic load utilisation of dimension $k$ (динамический коэффициент
+использования грузоподъёмности): the transport work done over the work the
+body could do on its loaded legs. Empty running is $\beta$'s, so
+$\beta\gamma_{\text{д}} = \sum q d / (Q L)$ is the share of the possible work
+over the whole mileage. Day values sum numerators and denominators over
+routes (not averages of ratios). Time on duty is the sheet's departure to
+return; it splits into driving, service, rest and waiting, and the four add
+up to it (tested).
+
+For a depot-delivery day $\beta < 1$ always: the run back is empty. For
+pickup-and-delivery work between workshops the empty legs are the drives
+from one drop to the next pickup, which is what dispatching aims to cut;
+the dispatcher's report gives them for a whole replayed shift.
+
 ## References
+
+* Berbeglia, G., Cordeau, J.-F., Laporte, G. (2010). Dynamic pickup and delivery problems. *EJOR* 202(1):8–15.
+* Boysen, N., Emde, S., Hoeck, M., Kauderer, M. (2015). Part logistics in the automotive industry: decision problems, literature review and research agenda. *EJOR* 242(1):107–120.
+* Emde, S., Boysen, N. (2012). Optimally routing and scheduling tow trains for JIT-supply of mixed-model assembly lines. *EJOR* 217(2):287–299.
+* Ho, S.C., Szeto, W.Y., Kuo, Y.-H., Leung, J.M.Y., Petering, M., Tou, T.W.H. (2018). A survey of dial-a-ride problems: literature review and recent developments. *Transportation Research Part B* 111:395–421.
+* Kok, A.L., Meyer, C.M., Kopfer, H., Schutten, J.M.J. (2010). A dynamic programming heuristic for the vehicle routing problem with time windows and European Community social legislation. *Transportation Science* 44(4):442–454.
+* Prescott-Gagnon, E., Desaulniers, G., Drexl, M., Rousseau, L.-M. (2010). European driver rules in vehicle routing with time windows. *Transportation Science* 44(4):455–473.
+* Vidal, T. (2022). Hybrid genetic search for the CVRP: open-source implementation and SWAP* neighborhood. *Computers & Operations Research* 140:105643.
+* Wouda, N.A., Lan, L., Kool, W. (2024). PyVRP: a high-performance VRP solver package. *INFORMS Journal on Computing* 36(4):943–955.
 
 * Cattaruzza, D., Absi, N., Feillet, D. (2016). Vehicle routing problems with multiple trips. *4OR* 14(3):223–259.
 * Christiaens, J., Vanden Berghe, G. (2020). Slack induction by string removals for vehicle routing problems. *Transportation Science* 54(2):417–433.

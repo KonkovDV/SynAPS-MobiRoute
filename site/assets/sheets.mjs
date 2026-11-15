@@ -23,7 +23,7 @@ const hhmm = (t) => {
   return `${String(Math.floor(m / 60)).padStart(2, "0")}:${String(m % 60).padStart(2, "0")}`;
 };
 export function initSheets(ctx) {
-  ctx.load("data/route-sheets.json").then((d) => sheets(ctx, d)).catch((e) => console.error(e));
+  ctx.near(ctx.$("sheets"), () => ctx.load("data/route-sheets.json").then((d) => sheets(ctx, d)).catch((e) => console.error(e)));
 }
 
 /** Earliest schedule of a route when it leaves at ``d`` (no traffic, no ride limits). */
@@ -179,10 +179,10 @@ function sheets({ $, tr, lang, svgEl, reduce, rerender }, data) {
     $("sheet-name").textContent = v.id;
     loadChart(v);
     $("sheets-tag").textContent = `${v.hired ? tr("наёмная", "hired") : tr("своя", "own")} · ${tripsText(v.trips)}`;
-    $("sheets-tag").style.color = color(sel);
+    $("sheets-tag").style.setProperty("--swatch", color(sel));
     $("sheets-kpis").innerHTML = [
       [tr("начало → выезд → возврат", "start → out → back"), `${hhmm(first.s)} → ${hhmm(first.e)} → ${hhmm(last.s)}`],
-      [tr("пробег", "distance"), `${num(v.distance, 1)} ${tr("км", "km")}`],
+      [tr("пробег / порожний", "distance / empty"), `${num(v.distance, 1)} / ${num(v.empty ?? 0, 1)} ${tr("км", "km")}`],
       [tr("за рулём / ожидание", "driving / waiting"), `${Math.round(v.driving)} / ${Math.round(v.waiting)} ${tr("мин", "min")}`],
       [tr("стоимость", "cost"), `${num(v.cost)} ${data.currency}`],
     ].map(([a, b]) => `<div><dt>${a}</dt><dd>${b}</dd></div>`).join("");
@@ -343,9 +343,11 @@ function sheets({ $, tr, lang, svgEl, reduce, rerender }, data) {
     let saved = 0;
     for (const v of vehicles) saved += forward(v.lemma, v.lemma.lo).duration - v.lemma.c;
     $("sheets-saved").textContent = `${num(saved / 60, 1)} ${tr("ч", "h")}`;
+    // beta: share of kilometres driven with goods on board.
+    const beta = data.beta == null ? "" : ` · ${tr("β", "beta")} ${num(100 * data.beta, 0)}%`;
     $("sheets-day").textContent = tr(
-      `${vehicles.length} машин · ${data.orders} заказов · ${num(data.distance, 0)} км · ${num(data.cost)} ${data.currency}`,
-      `${vehicles.length} vehicles · ${data.orders} orders · ${num(data.distance, 0)} km · ${num(data.cost)} ${data.currency}`,
+      `${vehicles.length} машин · ${data.orders} заказов · ${num(data.distance, 0)} км, порожних ${num(data.empty ?? 0, 0)}${beta} · ${num(data.cost)} ${data.currency}`,
+      `${vehicles.length} vehicles · ${data.orders} orders · ${num(data.distance, 0)} km, ${num(data.empty ?? 0, 0)} empty${beta} · ${num(data.cost)} ${data.currency}`,
     );
   }
 

@@ -129,15 +129,19 @@ def test_offline_matrices_apply_detour_and_speed() -> None:
 
 
 def _straight_line_osrm(calls: list[str]) -> Callable[[str, float], bytes]:
-    """A fake OSRM ``table`` service: point ``k`` is ``k`` km and ``k`` minutes out."""
+    """A fake OSRM ``table`` service on a line: a point ``0.01 k`` degrees north of
+    55.75 is ``k`` km and ``k`` minutes out. Like OSRM, it reads ``sources`` and
+    ``destinations`` as indices into the coordinates of this request."""
 
     def opener(url: str, timeout: float) -> bytes:
         calls.append(url)
         parts = urlsplit(url)
         query = parse_qs(parts.query)
         assert query["annotations"] == ["duration,distance"]
-        src = [int(x) for x in query["sources"][0].split(";")]
-        dst = [int(x) for x in query["destinations"][0].split(";")]
+        coords = parts.path.rsplit("/", 1)[1].split(";")
+        km_out = [round((float(c.split(",")[1]) - 55.75) / 0.01) for c in coords]
+        src = [km_out[int(x)] for x in query["sources"][0].split(";")]
+        dst = [km_out[int(x)] for x in query["destinations"][0].split(";")]
         durations = [[60.0 * abs(a - b) for b in dst] for a in src]
         distances = [[1000.0 * abs(a - b) for b in dst] for a in src]
         body = {"code": "Ok", "durations": durations, "distances": distances}
@@ -156,8 +160,11 @@ def test_osrm_source_queries_in_blocks_and_converts_units() -> None:
     assert path.startswith("/table/v1/driving/")
     first = path.rsplit("/", 1)[1].split(";")[0]
     assert first == "52.400000,55.750000"  # OSRM wants lon,lat
+    # Each request carries only its block's points, not the whole day.
+    assert all(len(urlsplit(c).path.rsplit("/", 1)[1].split(";")) <= 4 for c in calls)
     assert km[0][4] == pytest.approx(4.0) and km[3][1] == pytest.approx(2.0)
     assert mins[0][4] == pytest.approx(4.0 * 1.25)
+    assert all(km[a][b] == pytest.approx(abs(a - b)) for a in range(5) for b in range(5))
 
 
 def test_osrm_errors_name_the_problem() -> None:
@@ -213,7 +220,9 @@ def test_load_reads_road_matrices_over_http(
     built = geo.load(str(path), osrm=url, osrm_profile="truck")
     assert calls and all("/table/v1/truck/" in c for c in calls)
     road = built.instance.profiles["road"]
-    assert road.distance[0][5] == pytest.approx(5.0) and road.time[5][2] == pytest.approx(3.0)
+    # The fake service puts a point (lat - 55.75) / 0.01 km out: node 0 at 0,
+    # node 5 (55.78) at 3, node 2 (55.73) at -2.
+    assert road.distance[0][5] == pytest.approx(3.0) and road.time[5][2] == pytest.approx(5.0)
 
 
 # -- the document ----------------------------------------------------------------
@@ -482,6 +491,30 @@ def test_every_route_sheet_keeps_the_driving_time_rule(seed: int, drive: float, 
         assert sheet.driving <= 2 * drive + 1e-6
         rests = [row for row in sheet.rows if row.kind == "rest"]
         assert len(rests) == (1 if sheet.driving > drive + 1e-6 else 0)
+
+
+def test_sheet_puts_an_early_rest_before_the_drive() -> None:
+    """Lemma 1's first case: the rest right after the work at a stop, then the drive.
+
+    At 20 km/h with a 90-minute limit the admissible gap of route 1-2-3-4-5 is
+    after the supplier, and both stints stay within the limit if the driver
+    rests before leaving it, so the sheet shows the rest there (a mutation
+    that dropped this row went unnoticed before this test).
+    """
+    doc = _doc()
+    doc["profiles"]["road"]["speed_kmh"] = 20
+    doc["vehicle_types"][0]["rests"] = {"max_driving_min": 90, "duration_min": 30}
+    built = geo.build(doc)
+    sheet = _sheet_of(built, [1, 2, 3, 4, 5])
+    kinds = [row.kind for row in sheet.rows]
+    assert kinds == [
+        "depart", "delivery", "pickup", "rest", "delivery", "pickup", "delivery", "return"
+    ]  # fmt: skip
+    work, rest, after = sheet.rows[2], sheet.rows[3], sheet.rows[4]
+    assert rest.place == work.place and rest.start == pytest.approx(work.end)
+    assert rest.end - rest.start == pytest.approx(30.0)
+    assert after.arrive > rest.end  # the drive comes after the rest
+    assert sheet.longest_stint <= 90.0 + 1e-6 and sheet.compliant()
 
 
 def test_sheet_leaves_late_rests_and_counts_load() -> None:

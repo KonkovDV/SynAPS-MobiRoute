@@ -13,13 +13,15 @@ from __future__ import annotations
 import argparse
 import json
 import platform
+from dataclasses import replace
 from pathlib import Path
 from typing import Any
 
 from mobiroute.vrp.alns import AlnsConfig, solve
-from mobiroute.vrp.generators import cargo_day
+from mobiroute.vrp.generators import cargo_day, dc_day
 from mobiroute.vrp.io import load_benchmark
-from mobiroute.vrp.model import Instance
+from mobiroute.vrp.model import BreakRule, Instance
+from mobiroute.vrp.traffic import with_traffic
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -37,7 +39,19 @@ def _cases() -> list[tuple[str, Instance]]:
             load_benchmark(inst / "cordeau" / "a4-48.txt")[0],
         ),
         ("Cargo day, 120 orders, 8 vehicle types, 3-D capacity", cargo_day(7, n_orders=120)),
+        (
+            "Cargo day, 120 orders, rush hours (time-dependent travel)",
+            with_traffic(cargo_day(7, n_orders=120)),
+        ),
+        ("Store day, 60 stores, 2 trips, 15 + 30 min split breaks", _split_day()),
     ]
+
+
+def _split_day() -> Instance:
+    """The two-wave store day with the driving-time rule allowing a 15 + 30 split."""
+    day = dc_day(1, n_stores=60, trips=2)
+    rule = BreakRule(270.0, 45.0, (15.0, 30.0))
+    return replace(day, vehicle_types=tuple(replace(vt, breaks=rule) for vt in day.vehicle_types))
 
 
 def main() -> None:

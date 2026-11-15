@@ -1,6 +1,6 @@
 [package]
 name = "mobiroute_native"
-version = "0.5.0"
+version = "0.6.0"
 edition = "2021"
 description = "Required PyO3 hot path for MobiRoute DARP insertion scoring"
 license = "MIT"
@@ -17,7 +17,9 @@ rayon = "1.10"
 lto = "fat"
 codegen-units = 1
 opt-level = 3
-panic = "abort"
+# Unwind, not abort: PyO3 turns a panic into a Python exception, so a bug in the
+# kernel fails one call instead of killing the interpreter that hosts it.
+panic = "unwind"
 strip = true
 
 [lints.clippy]

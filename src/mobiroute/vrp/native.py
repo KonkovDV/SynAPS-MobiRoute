@@ -17,7 +17,7 @@ from mobiroute.vrp.solution import Route, Solution
 
 NativeRepair = Callable[[Solution, int, float, int, "int | None"], Solution]
 #: Major.minor of ``mobiroute_native`` whose ``VrpKernel`` matches this module.
-KERNEL_ABI = "0.5"
+KERNEL_ABI = "0.6"
 
 
 def _module() -> Any | None:
@@ -40,12 +40,12 @@ def available() -> bool:
     return _module() is not None
 
 
-def build_kernel(c: Compiled) -> Any | None:
-    """Flatten the compiled instance into the kernel's arrays (shared matrices once)."""
-    module = _module()
-    if module is None or c.has_traffic or c.has_split:
-        # Time-dependent travel and split breaks run on the Python reference only.
-        return None
+def kernel_args(c: Compiled) -> tuple[Any, ...]:
+    """The kernel's constructor arguments: flat arrays, shared matrices stored once.
+
+    Rest rules (whole or split) and speed profiles go in as they are, so the
+    kernel covers every rule the Python reference does.
+    """
     matrices: list[list[float]] = []
     index: dict[int, int] = {}
 
@@ -63,7 +63,7 @@ def build_kernel(c: Compiled) -> Any | None:
     for r, types in enumerate(c.allowed):
         for t in types:
             allowed[r * n_types + t] = True
-    return module.VrpKernel(
+    return (
         c.n,
         c.dims,
         c.e,
@@ -92,7 +92,17 @@ def build_kernel(c: Compiled) -> Any | None:
         c.brk_drive,
         c.brk_len,
         c.reload_of,
+        c.brk_split,
+        [None if sp is None else (list(sp.starts), list(sp.factors)) for sp in c.speed],
     )
+
+
+def build_kernel(c: Compiled) -> Any | None:
+    """The Rust kernel for this instance, or ``None`` if the extension is unavailable."""
+    module = _module()
+    if module is None:
+        return None
+    return module.VrpKernel(*kernel_args(c))
 
 
 def native_repair(c: Compiled) -> NativeRepair | None:

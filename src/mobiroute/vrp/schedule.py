@@ -299,11 +299,19 @@ def compact_schedule(inst: Instance, vehicle_type: int, nodes: Sequence[int]) ->
 def route_timing(inst: Instance, vehicle_type: int, nodes: Sequence[int]) -> RouteTiming:
     """Earliest and latest schedules and the shortest feasible duration.
 
-    With a rest rule and more driving than it allows without a rest, every
-    gap whose driving split is admissible is tried in order and the first
-    one that admits a schedule is reported. If none does, the certificate is
-    the one of the gap that misses by the fewest minutes; a route that
-    drives more than twice the limit gets a ``DRIVING`` certificate.
+    With a rest rule and more driving than it allows without a rest, the
+    route is feasible iff some admissible place of the rest admits a
+    schedule. Places differ in the shift they give: a rest that falls into
+    waiting time costs nothing, one between two tight stops adds its whole
+    length. So every admissible gap is timed (and, for a split break, every
+    pair of gaps), and the place with the shortest feasible duration is
+    reported; ties go to the earliest gap, a whole break before a split one.
+    The search stops early once a place reaches the duration of the same
+    route without any rest, which no place can beat.
+
+    If no place admits a schedule, the certificate is the one of the gap
+    that misses by the fewest minutes; a route that drives more than twice
+    the limit gets a ``DRIVING`` certificate.
     """
     vt = inst.vehicle_types[vehicle_type]
     if inst.profiles[vt.profile].speed is not None:
@@ -318,39 +326,51 @@ def route_timing(inst: Instance, vehicle_type: int, nodes: Sequence[int]) -> Rou
     if driving > 2 * rule.max_driving + TIME_EPS:
         short = Infeasibility(round(driving - 2 * rule.max_driving, 6), ("DRIVING",))
         return RouteTiming(False, (), (), math.inf, short, None, driving)
-    best: RouteTiming | None = None
     admissible: list[int] = []
     done = 0.0
     for k, leg in enumerate(legs):
         before, after = done, done + leg
         done = after
-        if not any(
+        if any(
             driving - rule.max_driving - TIME_EPS <= x <= rule.max_driving + TIME_EPS
             for x in (before, after)
         ):
-            continue
-        admissible.append(k)
-        timing = _timing_with(inst, vehicle_type, nodes, k, driving)
-        if timing.feasible:
-            return timing
-        assert timing.infeasibility is not None
-        if best is None or (
-            best.infeasibility is not None
-            and timing.infeasibility.short_by < best.infeasibility.short_by
-        ):
-            best = timing
-    if best is None:  # no gap splits the driving (a single leg longer than the limit)
+            admissible.append(k)
+    if not admissible:  # no gap splits the driving (a single leg longer than the limit)
         short = Infeasibility(round(max(legs) - rule.max_driving, 6), ("DRIVING",))
         return RouteTiming(False, (), (), math.inf, short, None, driving)
+    places: list[tuple[int, int | None]] = [(k, None) for k in admissible]
     if rule.split is not None:
         # Two parts: the second goes where a whole break could go (the driving
         # counter resets only after it), the first in any earlier gap.
-        for k in admissible:
-            for first in range(k):
-                timing = _timing_with(inst, vehicle_type, nodes, k, driving, first)
-                if timing.feasible:
-                    return timing
-    return best
+        places += [(k, first) for k in admissible for first in range(k)]
+    best: RouteTiming | None = None  # shortest feasible place so far
+    closest: RouteTiming | None = None  # infeasible place that misses by the least
+    floor: float | None = None  # duration without any rest: a lower bound
+    for k, first in places:
+        timing = _timing_with(inst, vehicle_type, nodes, k, driving, first)
+        if not timing.feasible:
+            assert timing.infeasibility is not None
+            if first is None and (
+                closest is None
+                or (
+                    closest.infeasibility is not None
+                    and timing.infeasibility.short_by < closest.infeasibility.short_by
+                )
+            ):
+                closest = timing
+            continue
+        if best is not None and timing.min_duration >= best.min_duration - TIME_EPS:
+            continue
+        best = timing
+        if floor is None:
+            floor = _timing_with(inst, vehicle_type, nodes, None, driving).min_duration
+        if best.min_duration <= floor + TIME_EPS:
+            break
+    if best is not None:
+        return best
+    assert closest is not None
+    return closest
 
 
 def describe(inst: Instance, labels: Sequence[str], *, lang: str = "en") -> list[str]:

@@ -17,12 +17,14 @@ const FAMILY = [
 ];
 
 export function initVrp(ctx) {
-  const { load } = ctx;
-  load("data/fleet-mix.json").then((d) => fleet(ctx, d)).catch((e) => console.error(e));
-  load("data/dispatch.json").then((d) => load("data/comparisons.json").then((c) => dispatch(ctx, d, c))).catch((e) => console.error(e));
-  Promise.all([load("data/benchmarks.json"), load("data/comparisons.json")])
+  const { load, near, $ } = ctx;
+  near($("fleet"), () => load("data/fleet-mix.json").then((d) => fleet(ctx, d)).catch((e) => console.error(e)));
+  near($("dispatch"), () => Promise.all([load("data/dispatch.json"), load("data/comparisons.json")])
+    .then(([d, c]) => dispatch(ctx, d, c))
+    .catch((e) => console.error(e)));
+  near($("bench"), () => Promise.all([load("data/benchmarks.json"), load("data/comparisons.json")])
     .then(([b, c]) => bench(ctx, b, c))
-    .catch((e) => console.error(e));
+    .catch((e) => console.error(e)));
 }
 
 const fmtInt = (v) => Math.round(v).toLocaleString("ru-RU").replace(/,/g, " ");
@@ -313,6 +315,18 @@ function dispatch({ $, tr, svgEl, reduce, rerender }, data, comparisons) {
   };
   fill();
   rerender.push(fill);
+
+  const k = data.kpi || {};
+  const empty = () => {
+    if (k.empty_km == null || !k.distance) return;
+    const beta = (100 * (1 - k.empty_km / k.distance)).toFixed(0);
+    $("disp-empty").textContent = tr(
+      `За смену: ${Math.round(k.distance)} км, из них порожних ${Math.round(k.empty_km)} (коэффициент использования пробега ${beta}%).`,
+      `The shift: ${Math.round(k.distance)} km, ${Math.round(k.empty_km)} of them empty (mileage utilisation ${beta}%).`,
+    );
+  };
+  empty();
+  rerender.push(empty);
 }
 
 /* ---------- benchmarks ---------- */
