@@ -10,10 +10,13 @@ worked. For every route and for the whole plan:
 * the mileage utilisation coefficient ``beta = loaded km / total km``
   (коэффициент использования пробега);
 * the dynamic load utilisation per dimension, ``gamma = sum(q * d) /
-  (Q * sum(d))`` over the legs: the distance-weighted mean load over the
-  capacity (динамический коэффициент использования грузоподъёмности), and
-  the load-kilometres ``sum(q * d)`` behind it (tonne-km when the dimension
-  is tonnes);
+  (Q * loaded km)`` over the loaded legs: the work done over the work the
+  body could do while it carries something (динамический коэффициент
+  использования грузоподъёмности, normalised by loaded kilometres as in the
+  Russian textbook definition), with the load-kilometres ``sum(q * d)``
+  behind it (tonne-km when the dimension is tonnes). Empty running is
+  ``beta``'s business, so ``beta * gamma`` is the share of the possible
+  work over the whole mileage;
 * time on duty from the route sheet's departure to the return, split into
   driving, service, the driver's rest and waiting.
 
@@ -52,7 +55,7 @@ class RouteKpi:
     loaded_distance: float
     #: Sum over legs of load times length, per dimension.
     load_distance: tuple[float, ...]
-    #: Sum over legs of capacity times length, per dimension.
+    #: Capacity times loaded kilometres, per dimension: the possible work.
     capacity_distance: tuple[float, ...]
     driving: float
     service: float
@@ -71,7 +74,7 @@ class RouteKpi:
 
     @property
     def load_utilisation(self) -> tuple[float | None, ...]:
-        """``gamma`` per dimension: distance-weighted load over capacity."""
+        """``gamma`` per dimension: load-kilometres over capacity times loaded km."""
         return tuple(
             _ratio(q, cap)
             for q, cap in zip(self.load_distance, self.capacity_distance, strict=True)
@@ -244,7 +247,7 @@ def plan_kpi(
                 distance=total,
                 loaded_distance=loaded,
                 load_distance=tuple(load_km),
-                capacity_distance=tuple(cap * total for cap in vt.capacity),
+                capacity_distance=tuple(cap * loaded for cap in vt.capacity),
                 driving=sheet.driving,
                 service=service,
                 rest=rest,
@@ -284,7 +287,8 @@ def kpi_markdown(kpi: PlanKpi, *, lang: str = "ru") -> str:
             f"Пробег {num(kpi.distance)} км, из них порожний {num(kpi.empty_distance)} км; "
             f"коэффициент использования пробега {_pct(kpi.mileage_utilisation)}.",
             "",
-            f"Использование грузоподъёмности (динамическое, по пробегу): {gamma}.",
+            f"Коэффициент использования грузоподъёмности (динамический, по гружёному "
+            f"пробегу): {gamma}.",
             "",
             f"Время в наряде {num(kpi.duty / 60.0)} ч, за рулём {num(kpi.driving / 60.0)} ч, "
             f"ожидание {num(kpi.waiting / 60.0)} ч.",
@@ -307,7 +311,7 @@ def kpi_markdown(kpi: PlanKpi, *, lang: str = "ru") -> str:
             f"Distance {num(kpi.distance)} km, of it empty {num(kpi.empty_distance)} km; "
             f"mileage utilisation {_pct(kpi.mileage_utilisation)}.",
             "",
-            f"Load utilisation (dynamic, distance-weighted): {gamma}.",
+            f"Load utilisation (dynamic, over loaded kilometres): {gamma}.",
             "",
             f"On duty {num(kpi.duty / 60.0)} h, driving {num(kpi.driving / 60.0)} h, "
             f"waiting {num(kpi.waiting / 60.0)} h.",

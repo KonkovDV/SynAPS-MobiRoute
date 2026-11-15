@@ -63,14 +63,20 @@ def test_empty_and_loaded_kilometres_by_hand() -> None:
     assert first.empty_distance == pytest.approx(14.0)
     assert first.mileage_utilisation == pytest.approx(0.5)
     assert first.load_distance == pytest.approx((5.0 * 10.0 + 3.0 * 4.0,))
-    assert first.load_utilisation[0] == pytest.approx(62.0 / (10.0 * 28.0))
+    # Dynamic load utilisation over loaded kilometres: 62 t-km of 10 t x 14 km.
+    assert first.load_utilisation[0] == pytest.approx(62.0 / (10.0 * 14.0))
     assert second.empty_distance == pytest.approx(15.0)
     assert second.mileage_utilisation == pytest.approx(3.0 / 18.0)
     assert kpi.distance == pytest.approx(verdict.cost.distance)
     assert kpi.empty_distance == pytest.approx(29.0)
     assert kpi.mileage_utilisation == pytest.approx(17.0 / 46.0)
     assert kpi.load_distance == pytest.approx((62.0 + 12.0,))
-    assert kpi.load_utilisation[0] == pytest.approx(74.0 / (10.0 * 46.0))
+    assert second.load_utilisation[0] == pytest.approx(12.0 / (10.0 * 3.0))
+    assert kpi.load_utilisation[0] == pytest.approx(74.0 / (10.0 * 17.0))
+    # beta * gamma: the share of the possible work over the whole mileage.
+    beta, gamma = kpi.mileage_utilisation, kpi.load_utilisation[0]
+    assert beta is not None and gamma is not None
+    assert beta * gamma == pytest.approx(74.0 / (10.0 * 46.0))
     assert kpi.served == 3 and kpi.unserved == 0 and kpi.vehicles == 2
     assert kpi.km_per_order == pytest.approx(46.0 / 3.0)
     # Time on duty adds up: driving + service + rest + waiting.
