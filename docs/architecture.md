@@ -129,7 +129,11 @@ literature instances.
 **Errors are codes.** Every input problem raises a `ValueError` whose message
 starts with a stable code (`GEO_UNKNOWN_DEPOT:van`, `VRP_CAPACITY_INVALID:van`,
 `SHEETS_NEED_A_FEASIBLE_PLAN`); the CLI prints it in one line to stderr and
-exits with status 2.
+exits with status 2. Whole numbers in a file are never rounded: `2.7`, `true`
+and `"6"` are errors. `vrp-solve` exits 0 for a verified plan that serves
+every mandatory order, 2 for refused input or a plan that breaks a rule, and
+3 for a verified plan that leaves mandatory orders without a vehicle (it
+lists them). A missing Rust build is one line with the command that makes it.
 
 **Hostile input is ordinary input.** JSON readers accept `NaN` and
 `Infinity`, and `NaN` passes every check written as `value < 0`, so the
