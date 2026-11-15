@@ -25,7 +25,7 @@ Modules
 ``schedule``     difference constraints, Bellman-Ford, certificates, the dispatcher's schedule
 ``traffic``      time-dependent travel (FIFO arrival function and its inverse)
 ``insertion``    O(1) insertion tests and regret-k repair (reference implementation)
-``native``       the same repair in Rust (``mobiroute_native.VrpKernel``)
+``native``       the same repair in Rust (``mobiroute_native.VrpKernel``), every rule included
 ``alns``         adaptive large neighbourhood search with guided ejection
 ``fleet``        vehicle type per route as a transportation problem (min-cost flow)
 ``merge``        two routes onto one vehicle; trips chained through a reload
@@ -38,6 +38,7 @@ Modules
 ``realtime``     live dispatch simulator and policies
 ``verify``       independent verifier
 ``sheets``       route sheets (CSV, Markdown) from a verified plan
+``kpi``          fleet indicators: empty kilometres, mileage and load utilisation, time on duty
 ``generators``   synthetic cargo, DC, shuttle and plant days
 ``render``       SVG route maps
 """
@@ -54,6 +55,7 @@ from mobiroute.vrp.io import (
     parse_sartori_buriol,
     parse_solomon,
 )
+from mobiroute.vrp.kpi import PlanKpi, kpi_markdown, plan_kpi
 from mobiroute.vrp.model import Instance, Node, Profile, Request, VehicleType
 from mobiroute.vrp.prices import Prices, prices_markdown, shadow_prices, solve_with_prices
 from mobiroute.vrp.sheets import RouteSheet, route_sheets, sheets_csv, sheets_markdown
@@ -67,6 +69,7 @@ __all__ = [
     "Instance",
     "Node",
     "Place",
+    "PlanKpi",
     "Prices",
     "Profile",
     "Request",
@@ -80,11 +83,13 @@ __all__ = [
     "geo",
     "instance_from_json",
     "instance_to_json",
+    "kpi_markdown",
     "load_benchmark",
     "parse_cordeau_vrp",
     "parse_lilim",
     "parse_sartori_buriol",
     "parse_solomon",
+    "plan_kpi",
     "prices_markdown",
     "route_sheets",
     "search_objective",
