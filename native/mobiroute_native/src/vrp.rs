@@ -9,6 +9,10 @@
 //! dimension, and for the shift cap the prefix/suffix extrema of `l_k - H_k`
 //! and `e_k + G_k` (shortest feasible duration in O(1) per candidate).
 //! Ride limits are checked lazily with Bellman-Ford on the cheapest candidates.
+//!
+//! Driver rests, whole or split into two parts, lengthen one or two travel
+//! constraints; time-dependent travel (`src/mobiroute/vrp/traffic.py`) replaces
+//! `+ t` by the arrival function of the Ichoua-Gendreau-Potvin model.
 
 use std::sync::Arc;
 
@@ -19,6 +23,62 @@ const EPS: f64 = 1e-9;
 const TIME_EPS: f64 = 1e-6;
 const LAZY_CHECKS: usize = 32;
 const MISSING: f64 = 1e15;
+
+/// Speed by time of day (Python `SpeedProfile`): `factors[k]` from `starts[k]`.
+struct Speed {
+    starts: Vec<f64>,
+    factors: Vec<f64>,
+}
+
+impl Speed {
+    /// Arrival of a trip of `free_flow` minutes leaving at `depart` (Python `arrive`).
+    #[inline]
+    fn arrive(&self, depart: f64, free_flow: f64) -> f64 {
+        if free_flow <= 0.0 {
+            return depart;
+        }
+        let (starts, factors) = (&self.starts, &self.factors);
+        // bisect_right(starts, depart) - 1, at least 0.
+        let pos = starts.partition_point(|&x| x <= depart);
+        let mut k = pos.saturating_sub(1);
+        let (mut x, mut rest) = (depart, free_flow);
+        while k + 1 < starts.len() {
+            let f = factors[k];
+            let room = (starts[k + 1] - x) * f;
+            if room >= rest {
+                return x + rest / f;
+            }
+            rest -= room;
+            x = starts[k + 1];
+            k += 1;
+        }
+        x + rest / factors[k]
+    }
+
+    /// Latest departure arriving by `arrive_at` (Python `depart_by`).
+    #[inline]
+    fn depart_by(&self, arrive_at: f64, free_flow: f64) -> f64 {
+        if free_flow <= 0.0 || arrive_at.is_infinite() {
+            return arrive_at;
+        }
+        let (starts, factors) = (&self.starts, &self.factors);
+        // bisect_left(starts, arrive_at) - 1, at least 0.
+        let pos = starts.partition_point(|&x| x < arrive_at);
+        let mut k = pos.saturating_sub(1);
+        let (mut x, mut rest) = (arrive_at, free_flow);
+        while k > 0 {
+            let f = factors[k];
+            let room = (x - starts[k]) * f;
+            if room >= rest {
+                return x - rest / f;
+            }
+            rest -= room;
+            x = starts[k];
+            k -= 1;
+        }
+        x - rest / factors[0]
+    }
+}
 
 struct SplitMix64 {
     state: u64,
@@ -139,6 +199,10 @@ pub struct VrpKernel {
     /// Rest rule per type: most driving between rests (inf: none), rest length.
     brk_drive: Vec<f64>,
     brk_len: Vec<f64>,
+    /// Parts of a split break per type (`None`: the break is not split).
+    brk_split: Vec<Option<(f64, f64)>>,
+    /// Speed by time of day per type (`None`: static travel times).
+    speed: Vec<Option<Speed>>,
     /// Vehicle type reloading at each node, -1 for every other node.
     reload_of: Vec<i64>,
     has_reload: bool,
@@ -161,6 +225,34 @@ impl VrpKernel {
         self.cost[t][a * self.n + b]
     }
 
+    /// Earliest service starts along `seq` leaving `seq[0]` at `depart` under
+    /// time-dependent travel (Python `traffic.forward`).
+    fn forward(&self, sp: &Speed, t: usize, seq: &[usize], depart: f64) -> Vec<f64> {
+        let (e, s) = (&self.e, &self.s);
+        let mut out = Vec::with_capacity(seq.len());
+        out.push(depart);
+        for k in 1..seq.len() {
+            let (a, b) = (seq[k - 1], seq[k]);
+            let arr = sp.arrive(out[k - 1] + s[a], self.tm(t, a, b));
+            out.push(if arr > e[b] { arr } else { e[b] });
+        }
+        out
+    }
+
+    /// Latest service starts keeping every later stop on time (Python `traffic.backward`).
+    fn backward(&self, sp: &Speed, t: usize, seq: &[usize], lim: &[f64]) -> Vec<f64> {
+        let s = &self.s;
+        let m2 = seq.len();
+        let mut late = vec![0.0; m2];
+        late[m2 - 1] = lim[m2 - 1];
+        for k in (0..m2 - 1).rev() {
+            let (a, b) = (seq[k], seq[k + 1]);
+            let back = sp.depart_by(late[k + 1], self.tm(t, a, b)) - s[a];
+            late[k] = pick_min(lim[k], back);
+        }
+        late
+    }
+
     fn state(&self, t: usize, nodes: Vec<usize>) -> RouteState {
         let (e, l, s) = (&self.e, &self.l, &self.s);
         let mut seq = Vec::with_capacity(nodes.len() + 2);
@@ -168,23 +260,31 @@ impl VrpKernel {
         seq.extend_from_slice(&nodes);
         seq.push(self.end[t]);
         let m2 = seq.len();
-        let mut begin = vec![0.0; m2];
-        begin[0] = self.t_min[t];
-        for k in 1..m2 {
-            let (a, b) = (seq[k - 1], seq[k]);
-            let arr = begin[k - 1] + s[a] + self.tm(t, a, b);
-            begin[k] = pick_max(arr, e[b]);
-        }
         let mut lim: Vec<f64> = seq.iter().map(|&node| l[node]).collect();
         lim[0] = self.start_lim[t];
         lim[m2 - 1] = self.end_lim[t];
-        let mut late = vec![0.0; m2];
-        late[m2 - 1] = lim[m2 - 1];
-        for k in (0..m2 - 1).rev() {
-            let (a, b) = (seq[k], seq[k + 1]);
-            let back = late[k + 1] - s[a] - self.tm(t, a, b);
-            late[k] = pick_min(lim[k], back);
-        }
+        let (begin, late) = if let Some(sp) = self.speed[t].as_ref() {
+            (
+                self.forward(sp, t, &seq, self.t_min[t]),
+                self.backward(sp, t, &seq, &lim),
+            )
+        } else {
+            let mut begin = vec![0.0; m2];
+            begin[0] = self.t_min[t];
+            for k in 1..m2 {
+                let (a, b) = (seq[k - 1], seq[k]);
+                let arr = begin[k - 1] + s[a] + self.tm(t, a, b);
+                begin[k] = pick_max(arr, e[b]);
+            }
+            let mut late = vec![0.0; m2];
+            late[m2 - 1] = lim[m2 - 1];
+            for k in (0..m2 - 1).rev() {
+                let (a, b) = (seq[k], seq[k + 1]);
+                let back = late[k + 1] - s[a] - self.tm(t, a, b);
+                late[k] = pick_min(lim[k], back);
+            }
+            (begin, late)
+        };
         let mut drive = 0.0;
         for k in 1..m2 {
             drive += self.tm(t, seq[k - 1], seq[k]);
@@ -488,12 +588,16 @@ impl VrpKernel {
         duration <= self.max_dur[t] + EPS
     }
 
+    /// Bellman-Ford on the route's difference constraints (Python `exact_feasible`);
+    /// `rest_arc`/`first_arc` lengthen one travel constraint each by a rest.
     fn exact_feasible(
         &self,
         t: usize,
         nodes: &[usize],
         rest_arc: Option<usize>,
         rest: f64,
+        first_arc: Option<usize>,
+        first: f64,
     ) -> bool {
         let (e, l, s) = (&self.e, &self.l, &self.s);
         let mut seq = Vec::with_capacity(nodes.len() + 2);
@@ -530,6 +634,8 @@ impl VrpKernel {
             heads.push(k);
             if rest_arc == Some(k) {
                 weights.push(-(s[a] + self.tm(t, a, b) + rest));
+            } else if first_arc == Some(k) {
+                weights.push(-(s[a] + self.tm(t, a, b) + first));
             } else {
                 weights.push(-(s[a] + self.tm(t, a, b)));
             }
@@ -573,11 +679,42 @@ impl VrpKernel {
         (0..tails.len()).all(|x| dist[heads[x]] + weights[x] >= dist[tails[x]] - TIME_EPS)
     }
 
+    /// Feasibility of a fixed sequence under time-dependent travel (Python
+    /// `traffic.route_ok`): windows by the earliest schedule, the shift cap by
+    /// leaving at the earliest or at the latest on-time departure.
+    fn traffic_route_ok(&self, sp: &Speed, t: usize, nodes: &[usize]) -> bool {
+        let mut seq = Vec::with_capacity(nodes.len() + 2);
+        seq.push(self.start[t]);
+        seq.extend_from_slice(nodes);
+        seq.push(self.end[t]);
+        let last = seq.len() - 1;
+        let mut lim: Vec<f64> = seq.iter().map(|&node| self.l[node]).collect();
+        lim[0] = self.start_lim[t];
+        lim[last] = self.end_lim[t];
+        let begin = self.forward(sp, t, &seq, self.t_min[t]);
+        if begin.iter().zip(lim.iter()).any(|(&b, &hi)| b > hi + EPS) {
+            return false;
+        }
+        let cap = self.max_dur[t];
+        if cap == f64::INFINITY {
+            return true;
+        }
+        if begin[last] - begin[0] <= cap + EPS {
+            return true;
+        }
+        let latest = self.backward(sp, t, &seq, &lim)[0];
+        let late_run = self.forward(sp, t, &seq, latest);
+        late_run[last] - latest <= cap + EPS
+    }
+
     /// Exact feasibility with the rest rule (Python `route_exact`).
     fn route_exact(&self, t: usize, nodes: &[usize]) -> bool {
+        if let Some(sp) = self.speed[t].as_ref() {
+            return self.traffic_route_ok(sp, t, nodes);
+        }
         let limit = self.brk_drive[t];
         if limit == f64::INFINITY {
-            return self.exact_feasible(t, nodes, None, 0.0);
+            return self.exact_feasible(t, nodes, None, 0.0, None, 0.0);
         }
         let mut seq = Vec::with_capacity(nodes.len() + 2);
         seq.push(self.start[t]);
@@ -591,7 +728,7 @@ impl VrpKernel {
             total += leg;
         }
         if total <= limit + EPS {
-            return self.exact_feasible(t, nodes, None, 0.0);
+            return self.exact_feasible(t, nodes, None, 0.0, None, 0.0);
         }
         if total > 2.0 * limit + EPS {
             return false;
@@ -599,14 +736,27 @@ impl VrpKernel {
         let low = total - limit - EPS;
         let high = limit + EPS;
         let mut done = 0.0;
+        let mut admissible: Vec<usize> = Vec::new();
         for (k, &leg) in legs.iter().enumerate() {
             let after = done + leg;
-            if ((low <= done && done <= high) || (low <= after && after <= high))
-                && self.exact_feasible(t, nodes, Some(k), self.brk_len[t])
-            {
-                return true;
+            if (low <= done && done <= high) || (low <= after && after <= high) {
+                admissible.push(k);
+                if self.exact_feasible(t, nodes, Some(k), self.brk_len[t], None, 0.0) {
+                    return true;
+                }
             }
             done = after;
+        }
+        if let Some((part1, part2)) = self.brk_split[t] {
+            // The second part goes where a whole break could, the first in any
+            // earlier gap: the driving counter resets only after the second.
+            for &k in &admissible {
+                for first in 0..k {
+                    if self.exact_feasible(t, nodes, Some(k), part2, Some(first), part1) {
+                        return true;
+                    }
+                }
+            }
         }
         false
     }
@@ -805,6 +955,93 @@ impl VrpKernel {
         best
     }
 
+    /// Every insertion of `r` that keeps the windows under time-dependent travel
+    /// (Python `traffic.candidates`); `positions` are the admissible spots of a
+    /// single-node order. The shift cap is left to the exact check.
+    #[allow(clippy::too_many_arguments)]
+    fn traffic_candidates(
+        &self,
+        sp: &Speed,
+        st: &RouteState,
+        r: usize,
+        fits: &[bool],
+        extra: f64,
+        positions: &[usize],
+        out: &mut Vec<Candidate>,
+    ) {
+        let t = st.t;
+        let (seq, begin, late) = (&st.seq, &st.begin, &st.late);
+        let (e, lat, s) = (&self.e, &self.l, &self.s);
+        let (p, d) = (self.pick[r], self.deliv[r]);
+        let m = seq.len() - 2;
+        if p < 0 || d < 0 {
+            let u = if p >= 0 { p as usize } else { d as usize };
+            for &i in positions {
+                let (a, b) = (seq[i], seq[i + 1]);
+                let arr = sp.arrive(begin[i] + s[a], self.tm(t, a, u));
+                let bu = if arr > e[u] { arr } else { e[u] };
+                if bu > lat[u] + EPS {
+                    continue;
+                }
+                if sp.arrive(bu + s[u], self.tm(t, u, b)) > late[i + 1] + EPS {
+                    continue;
+                }
+                out.push((
+                    (self.cs(t, a, u) + self.cs(t, u, b) - self.cs(t, a, b)) + extra,
+                    i,
+                    i,
+                ));
+            }
+            return;
+        }
+        let (p, d) = (p as usize, d as usize);
+        for i in 0..m + 1 {
+            if !fits[i] {
+                continue;
+            }
+            let (a, b) = (seq[i], seq[i + 1]);
+            let arr = sp.arrive(begin[i] + s[a], self.tm(t, a, p));
+            let bp = if arr > e[p] { arr } else { e[p] };
+            if bp > lat[p] + EPS {
+                continue;
+            }
+            let arr_d = sp.arrive(bp + s[p], self.tm(t, p, d));
+            let bd = if arr_d > e[d] { arr_d } else { e[d] };
+            if bd <= lat[d] + EPS && sp.arrive(bd + s[d], self.tm(t, d, b)) <= late[i + 1] + EPS {
+                out.push((
+                    (self.cs(t, a, p) + self.cs(t, p, d) + self.cs(t, d, b) - self.cs(t, a, b))
+                        + extra,
+                    i,
+                    i,
+                ));
+            }
+            let detour_p = self.cs(t, a, p) + self.cs(t, p, b) - self.cs(t, a, b);
+            let mut tcur = sp.arrive(bp + s[p], self.tm(t, p, b));
+            for j in i + 1..m + 1 {
+                let cj = seq[j];
+                let bj = if tcur > e[cj] { tcur } else { e[cj] };
+                if bj > lat[cj] + EPS || !fits[j] {
+                    break;
+                }
+                let nx = seq[j + 1];
+                let arr_d = sp.arrive(bj + s[cj], self.tm(t, cj, d));
+                let bd = if arr_d > e[d] { arr_d } else { e[d] };
+                if bd <= lat[d] + EPS
+                    && sp.arrive(bd + s[d], self.tm(t, d, nx)) <= late[j + 1] + EPS
+                {
+                    out.push((
+                        detour_p
+                            + (self.cs(t, cj, d) + self.cs(t, d, nx) - self.cs(t, cj, nx))
+                            + extra,
+                        i,
+                        j,
+                    ));
+                }
+                tcur = sp.arrive(bj + s[cj], self.tm(t, cj, nx));
+            }
+        }
+    }
+
     fn best_insertion_state(&self, st: &RouteState, r: usize) -> Option<Candidate> {
         let t = st.t;
         if !self.allowed[r * self.n_types + t] {
@@ -812,7 +1049,9 @@ impl VrpKernel {
         }
         let (p, d) = (self.pick[r], self.deliv[r]);
         let rests = self.brk_drive[t] < f64::INFINITY;
-        let lazy = (self.has_ride && (st.has_ride || self.max_ride[r] < f64::INFINITY)) || rests;
+        let timed = self.speed[t].is_some();
+        let lazy =
+            (self.has_ride && (st.has_ride || self.max_ride[r] < f64::INFINITY)) || rests || timed;
         let check_dur = !lazy && self.max_dur[t] < f64::INFINITY;
         // The per-position vector is read only by pairs and by trips cut at
         // reloads; a single stop on a plain route needs just its bounds.
@@ -829,7 +1068,18 @@ impl VrpKernel {
             extra += self.open_cost[t];
         }
         let mut out: Vec<Candidate> = Vec::new();
-        let best = if p >= 0 && d >= 0 {
+        let best = if let Some(sp) = self.speed[t].as_ref() {
+            let positions: Vec<usize> = if p >= 0 && d >= 0 {
+                Vec::new()
+            } else if st.trip_start.is_some() {
+                self.single_positions(st, &fits, d >= 0)
+            } else {
+                let (lo, hi) = self.single_bounds(st, r, d >= 0);
+                (lo..hi).collect()
+            };
+            self.traffic_candidates(sp, st, r, &fits, extra, &positions, &mut out);
+            None
+        } else if p >= 0 && d >= 0 {
             self.pair_candidates(
                 st, p as usize, d as usize, &fits, extra, check_dur, lazy, &mut out,
             )
@@ -1168,10 +1418,33 @@ impl VrpKernel {
         brk_drive: Vec<f64>,
         brk_len: Vec<f64>,
         reload_of: Vec<i64>,
+        brk_split: Vec<Option<(f64, f64)>>,
+        speed: Vec<Option<(Vec<f64>, Vec<f64>)>>,
     ) -> PyResult<Self> {
         let n_types = time_idx.len();
         let n_req = pick.len();
         let bad = |what: &str| PyValueError::new_err(format!("VRP_KERNEL_SHAPE:{what}"));
+        if brk_split.len() != n_types || speed.len() != n_types {
+            return Err(bad("types"));
+        }
+        let mut profiles: Vec<Option<Speed>> = Vec::with_capacity(n_types);
+        for entry in speed {
+            match entry {
+                None => profiles.push(None),
+                Some((starts, factors)) => {
+                    let ordered = starts.windows(2).all(|w| w[1] > w[0]);
+                    if starts.is_empty()
+                        || starts.len() != factors.len()
+                        || !ordered
+                        || starts.iter().any(|x| !x.is_finite())
+                        || factors.iter().any(|&f| !(f > 0.0 && f.is_finite()))
+                    {
+                        return Err(bad("speed"));
+                    }
+                    profiles.push(Some(Speed { starts, factors }));
+                }
+            }
+        }
         if dims == 0
             || e.len() != n
             || l.len() != n
@@ -1258,6 +1531,8 @@ impl VrpKernel {
             max_cost,
             brk_drive,
             brk_len,
+            brk_split,
+            speed: profiles,
             reload_of,
             has_reload,
         })

@@ -411,7 +411,8 @@ def test_split_break_fits_where_a_whole_break_does_not() -> None:
     # The first part does not reset the counter: 40 + 40 + 40 = 120 before the second.
     assert sheet.longest_stint == pytest.approx(120.0) and sheet.compliant()
     assert "перерыв, 1-я часть" in sheets_markdown([sheet], ("load",))
-    assert build_kernel(Compiled(split)) is None  # split breaks run on the reference
+    kernel = build_kernel(Compiled(split))  # split breaks run on the kernel too
+    assert kernel is None or kernel.exact_feasible_route(0, route)
     back = instance_from_json(instance_to_json(split))
     assert back.vehicle_types[0].breaks == BreakRule(120.0, 45.0, (15.0, 30.0))
     with pytest.raises(ValueError, match="VRP_BREAK_SPLIT_INVALID"):
