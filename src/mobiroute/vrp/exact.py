@@ -50,6 +50,11 @@ def solve_exact(
     from ortools.sat.python import cp_model
 
     inst.require_core_model("EXACT")
+    if inst.time_cost != "operating":
+        # The model prices driving and service on the arcs; a shift paid from
+        # departure to return (waiting included) is another objective, and an
+        # "OPTIMAL" for the wrong objective would be a false claim.
+        raise ValueError("EXACT_DUTY_TIME_COST_UNSUPPORTED")
     n_req = inst.n_requests
     dims = len(inst.dimensions)
     units: list[int] = []

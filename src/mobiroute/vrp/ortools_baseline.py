@@ -69,6 +69,10 @@ def solve_ortools(
     from ortools.constraint_solver import pywrapcp, routing_enums_pb2
 
     inst.require_core_model("ORTOOLS")
+    if inst.time_cost != "operating":
+        # Arc costs carry driving and service; a paid shift needs span costs
+        # with integer rates, which would round the tariff. Refuse instead.
+        raise ValueError("ORTOOLS_DUTY_TIME_COST_UNSUPPORTED")
     pickups_only = any(r.pickup is not None and r.delivery is None for r in inst.requests)
     deliveries_only = any(r.pickup is None and r.delivery is not None for r in inst.requests)
     if pickups_only and deliveries_only:
@@ -191,7 +195,7 @@ def solve_ortools(
         routing.AddVariableMinimizedByFinalizer(time_dim.CumulVar(routing.End(v)))
         routing.AddVariableMaximizedByFinalizer(time_dim.CumulVar(routing.Start(v)))
 
-    penalty = round(DROP_PENALTY * scale)
+    must_serve = round(DROP_PENALTY * scale)
     for req in inst.requests:
         allowed = [
             v
@@ -203,11 +207,17 @@ def solve_ortools(
             )
         ]
         indices = [manager.NodeToIndex(pos[k]) for k in req.nodes]
-        for index in indices:
+        for x, index in enumerate(indices):
             if len(allowed) < len(unit_type):
                 # -1 keeps the "unperformed" value for the disjunction.
                 routing.VehicleVar(index).SetValues([-1, *allowed])
-            routing.AddDisjunction([index], penalty)
+            if req.penalty is None:
+                routing.AddDisjunction([index], must_serve)
+            else:
+                # An order that may be refused costs its own penalty, once: on
+                # its first node; the second node of a pair follows it for free.
+                price = round(req.penalty * scale) if x == 0 else 0
+                routing.AddDisjunction([index], price)
         if req.is_pair:
             p_idx, d_idx = indices
             routing.AddPickupAndDelivery(p_idx, d_idx)

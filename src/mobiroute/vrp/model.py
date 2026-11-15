@@ -243,7 +243,21 @@ def _check_matrix(name: str, matrix: Matrix, n: int) -> None:
                 raise ValueError(f"VRP_MATRIX_VALUE:{name}")
 
 
+def _amount(value: float) -> bool:
+    """A finite number that is not negative (``NaN`` fails every comparison)."""
+    return 0.0 <= value < INF
+
+
 def _validate(inst: Instance) -> tuple[tuple[int, ...], tuple[int, ...]]:
+    """Check the instance and index its nodes.
+
+    JSON readers accept ``NaN`` and ``Infinity``, and ``NaN`` passes any test
+    written as ``value < 0``: such a value would make every comparison of
+    the verifier false, so a plan could pass with a cost of ``nan``. Every
+    number is therefore checked for what it may be: finite and not negative
+    for amounts, finite for clock times, and ``+inf`` only where it means "no
+    limit" (a window that never closes, a shift without an end).
+    """
     n = len(inst.nodes)
     dims = len(inst.dimensions)
     if n == 0:
@@ -255,8 +269,15 @@ def _validate(inst: Instance) -> tuple[tuple[int, ...], tuple[int, ...]]:
     for k, node in enumerate(inst.nodes):
         if node.id != k:
             raise ValueError("VRP_NODE_IDS_MUST_BE_SEQUENTIAL")
-        if node.service < 0 or math.isnan(node.earliest) or node.earliest > node.latest:
+        if (
+            not _amount(node.service)
+            or not math.isfinite(node.earliest)
+            or math.isnan(node.latest)
+            or node.earliest > node.latest
+        ):
             raise ValueError(f"VRP_NODE_WINDOW_INVALID:{k}")
+        if not (math.isfinite(node.x) and math.isfinite(node.y)):
+            raise ValueError(f"VRP_NODE_COORDINATES_INVALID:{k}")
     if not inst.profiles:
         raise ValueError("VRP_NO_PROFILES")
     for name, profile in inst.profiles.items():
@@ -269,7 +290,8 @@ def _validate(inst: Instance) -> tuple[tuple[int, ...], tuple[int, ...]]:
             not sp.factors
             or len(sp.starts) != len(sp.factors)
             or any(not (f > 0 and math.isfinite(f)) for f in sp.factors)
-            or any(b <= a for a, b in zip(sp.starts, sp.starts[1:], strict=False))
+            or any(not math.isfinite(x) for x in sp.starts)
+            or any(not b > a for a, b in zip(sp.starts, sp.starts[1:], strict=False))
         ):
             raise ValueError(f"VRP_SPEED_PROFILE_INVALID:{name}")
     if not inst.vehicle_types:
@@ -280,31 +302,41 @@ def _validate(inst: Instance) -> tuple[tuple[int, ...], tuple[int, ...]]:
         if vt.id in type_ids:
             raise ValueError(f"VRP_DUPLICATE_VEHICLE_TYPE:{vt.id}")
         type_ids.add(vt.id)
-        if len(vt.capacity) != dims or any(c < 0 for c in vt.capacity):
+        if len(vt.capacity) != dims or not all(_amount(c) for c in vt.capacity):
             raise ValueError(f"VRP_CAPACITY_INVALID:{vt.id}")
-        if vt.count < 0:
+        if isinstance(vt.count, bool) or not isinstance(vt.count, int) or vt.count < 0:
             raise ValueError(f"VRP_COUNT_INVALID:{vt.id}")
         if not (0 <= vt.start_depot < n and 0 <= vt.end_depot < n):
             raise ValueError(f"VRP_DEPOT_OUT_OF_RANGE:{vt.id}")
         if vt.profile not in inst.profiles:
             raise ValueError(f"VRP_UNKNOWN_PROFILE:{vt.id}:{vt.profile}")
-        if vt.shift_start > vt.shift_end:
+        if (
+            not math.isfinite(vt.shift_start)
+            or math.isnan(vt.shift_end)
+            or vt.shift_start > vt.shift_end
+        ):
             raise ValueError(f"VRP_SHIFT_INVALID:{vt.id}")
-        if vt.max_duration is not None and vt.max_duration < 0:
+        if vt.max_duration is not None and not _amount(vt.max_duration):
             raise ValueError(f"VRP_MAX_DURATION_INVALID:{vt.id}")
         for value in (vt.fixed_cost, vt.cost_per_distance, vt.cost_per_time):
-            if value < 0 or math.isnan(value):
+            if not _amount(value):
                 raise ValueError(f"VRP_COST_INVALID:{vt.id}")
-        if vt.breaks is not None and not (vt.breaks.max_driving > 0 and vt.breaks.duration >= 0):
+        if vt.breaks is not None and not (
+            0.0 < vt.breaks.max_driving < INF and _amount(vt.breaks.duration)
+        ):
             raise ValueError(f"VRP_BREAK_RULE_INVALID:{vt.id}")
         if vt.breaks is not None and vt.breaks.split is not None:
             first, second = vt.breaks.split
-            if not (first > 0 and second > 0 and first + second >= vt.breaks.duration - 1e-9):
+            if not (
+                0.0 < first < INF
+                and 0.0 < second < INF
+                and first + second >= vt.breaks.duration - 1e-9
+            ):
                 raise ValueError(f"VRP_BREAK_SPLIT_INVALID:{vt.id}")
         if vt.max_trips < 1 or (vt.max_trips > 1) != bool(vt.reload_nodes):
             raise ValueError(f"VRP_TRIPS_INVALID:{vt.id}")
         depots.update((vt.start_depot, vt.end_depot))
-    if inst.vehicle_penalty < 0:
+    if not _amount(inst.vehicle_penalty):
         raise ValueError("VRP_VEHICLE_PENALTY_INVALID")
     if any(p.speed is not None for p in inst.profiles.values()) and (
         any(r.max_ride is not None for r in inst.requests)
@@ -325,14 +357,16 @@ def _validate(inst: Instance) -> tuple[tuple[int, ...], tuple[int, ...]]:
         ids.add(req.id)
         if not req.nodes:
             raise ValueError(f"VRP_REQUEST_WITHOUT_NODES:{req.id}")
-        if len(req.demand) != dims or any(q < 0 for q in req.demand):
+        if len(req.demand) != dims or not all(_amount(q) for q in req.demand):
             raise ValueError(f"VRP_DEMAND_INVALID:{req.id}")
-        if req.max_ride is not None and (not req.is_pair or req.max_ride < 0):
+        if req.max_ride is not None and (not req.is_pair or not _amount(req.max_ride)):
             raise ValueError(f"VRP_MAX_RIDE_NEEDS_A_PAIR:{req.id}")
-        if req.penalty is not None and req.penalty < 0:
+        if req.penalty is not None and not _amount(req.penalty):
             raise ValueError(f"VRP_PENALTY_INVALID:{req.id}")
+        if not math.isfinite(req.release):
+            raise ValueError(f"VRP_RELEASE_INVALID:{req.id}")
         for nid in req.nodes:
-            if not 0 <= nid < n:
+            if isinstance(nid, bool) or not isinstance(nid, int) or not 0 <= nid < n:
                 raise ValueError(f"VRP_REQUEST_NODE_OUT_OF_RANGE:{req.id}")
             if nid in depots or reload_owner[nid] != -1:
                 raise ValueError(f"VRP_REQUEST_AT_DEPOT:{req.id}")

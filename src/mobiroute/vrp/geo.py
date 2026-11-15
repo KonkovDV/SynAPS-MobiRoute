@@ -186,15 +186,21 @@ def osrm_source(
         factor = float(profile.get("osrm_time_factor", 1.0))
         secs = [[0.0] * n for _ in range(n)]
         metres = [[0.0] * n for _ in range(n)]
-        coords = ";".join(f"{lon:.6f},{lat:.6f}" for lat, lon in points)
         for i0 in range(0, n, block):
             src = list(range(i0, min(n, i0 + block)))
             for j0 in range(0, n, block):
                 dst = list(range(j0, min(n, j0 + block)))
+                # Only this block's points go into the URL: with every point of
+                # the day in each request, a thousand stops make a URL of about
+                # 22 kB that proxies and OSRM's own server cut off.
+                in_src = set(src)
+                used = src + [k for k in dst if k not in in_src]
+                local = {k: x for x, k in enumerate(used)}
+                coords = ";".join(f"{points[k][1]:.6f},{points[k][0]:.6f}" for k in used)
                 query = urllib.parse.urlencode(
                     {
-                        "sources": ";".join(map(str, src)),
-                        "destinations": ";".join(map(str, dst)),
+                        "sources": ";".join(str(local[k]) for k in src),
+                        "destinations": ";".join(str(local[k]) for k in dst),
                         "annotations": "duration,distance",
                     }
                 )
