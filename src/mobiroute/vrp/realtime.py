@@ -33,11 +33,11 @@ route already driven fixes how long the driver has been at the wheel and
 whether the break, or its first part, is behind them; an order is inserted
 only where the rest of the route still has a legal place for the break, and
 the plan carries the break with its start. A break once started is never
-moved. ALNS re-optimisation sees only the stops not yet driven, from the
-vehicle's current position, so it does not know the driving already done.
-A proposal is kept only when every new suffix still has a legal break under
-that count, a break already begun stays where it is, the independent
-verifier accepts the whole day and the verified cost falls.
+moved. ALNS re-optimisation sees the open stops from the current position
+with that driving already on the counter (Lemma 1c), so a suffix that would
+only be legal for a fresh driver is not a candidate. A proposal is kept only
+when the independent verifier accepts the whole day and the verified cost
+falls; a break already begun stays where it is.
 
 KPIs: acceptance, time from call to pickup (vehicle arrival lead time), ride
 time, distance and the part of it driven empty, vehicles used, decision
@@ -64,7 +64,7 @@ from mobiroute.vrp.insertion import (
     best_insertion,
     route_loads,
 )
-from mobiroute.vrp.model import Instance, Node, Profile, Request, VehicleType
+from mobiroute.vrp.model import BreakRule, Instance, Node, Profile, Request, VehicleType
 from mobiroute.vrp.sheets import LOADED_EPS
 from mobiroute.vrp.solution import Route, Solution
 from mobiroute.vrp.verify import verify
@@ -248,6 +248,26 @@ class Dispatcher:
         if finals:
             return driving - max(finals), True, True
         return driving, False, any(not rest.final for rest in behind)
+
+    def _residual_rule(
+        self, u: _Unit, f: int, tau: float, vt: VehicleType
+    ) -> tuple[BreakRule | None, float, bool]:
+        """Break rule of a snapshot vehicle, with the driving already counted.
+
+        The offset is ``R`` after a final break and ``Φ`` otherwise: the
+        partial sum at which a scan of the open suffix starts (Lemma 1c).
+        A first part already taken leaves only the second part to place.
+        The counter has not reset, and that part is no longer an open gap.
+        """
+        rule = vt.breaks
+        if rule is None:
+            return None, 0.0, False
+        driving, rested, first_taken = self._driver(u, f, tau)
+        if rested:
+            return rule, driving, True
+        if first_taken and rule.split is not None:
+            return BreakRule(rule.max_driving, rule.split[1]), driving, False
+        return rule, driving, False
 
     def _run(
         self,
@@ -545,6 +565,7 @@ class Dispatcher:
             u = self.units[k]
             vt = inst.vehicle_types[u.t]
             end_by = self._end_by(u, state[k][2])
+            rule, prior, taken = self._residual_rule(u, state[k][0], tau, vt)
             types.append(
                 VehicleType(
                     id=f"veh{k}",
@@ -560,6 +581,9 @@ class Dispatcher:
                     skills=vt.skills | {f"lock{k}"},
                     profile=vt.profile,
                     hired=vt.hired,
+                    breaks=rule,
+                    prior_driving=prior,
+                    break_taken=taken,
                 )
             )
             owners.append((0, k))
@@ -582,6 +606,7 @@ class Dispatcher:
                         skills=vt.skills,
                         profile=vt.profile,
                         hired=vt.hired,
+                        breaks=vt.breaks,
                     )
                 )
                 owners.append((1, t))
@@ -683,10 +708,10 @@ class Dispatcher:
     ) -> bool:
         """Keep ``plan`` only when Lemma 1c holds and the verified cost falls.
 
-        ALNS timed the open stops from the current position and counted the
-        residual driving as zero. ``_place`` is the test in the lemma: the
-        driving already done, a break already begun left where it is. The
-        verifier prices the whole day; a rejected proposal is not applied.
+        The snapshot already times the open stops with the driving done so
+        far. ``_place`` repeats that test on the original day, and the
+        verifier prices it. A rejected proposal is not applied. A break that
+        has started is not an open gap, so it stays.
         """
         before = self._live_cost()
         if before is None:
@@ -740,9 +765,9 @@ class Dispatcher:
         )
         if res.verdict.feasible and not res.solution.unassigned and res.objective < before - 1e-9:
             if self.inst.has_rest_rules:
-                # The snapshot priced a driver who starts fresh at the current
-                # position. Keep the new order of stops only when the driving
-                # already done still leaves every break a legal place.
+                # The snapshot already carries the residual driving. The
+                # original day is checked again, and only a cheaper verified
+                # plan replaces the one the vehicles are driving.
                 self._apply_if_breaks_hold(tau, res.solution, owners)
             else:
                 self._apply_snapshot(tau, snap, res.solution, owners)

@@ -16,6 +16,7 @@ from hypothesis import given, settings
 from hypothesis import strategies as st
 
 from mobiroute.vrp.generators import random_instance
+from mobiroute.vrp.io import instance_from_json, instance_to_json
 from mobiroute.vrp.model import (
     BreakRule,
     Instance,
@@ -30,14 +31,21 @@ from mobiroute.vrp.schedule import route_timing
 from mobiroute.vrp.solution import Route, Solution
 
 
-def _stints_allow(legs: list[float], limit: float) -> bool:
-    """Lemma 1 as a statement about partial sums, with no schedule in it."""
-    total = math.fsum(legs)
-    if total <= limit:
-        return True
+def _stints_allow(
+    legs: list[float], limit: float, *, prior: float = 0.0, taken: bool = False
+) -> bool:
+    """Lemma 1 as a statement about partial sums, with no schedule in it.
+
+    ``prior`` is driving already done. ``taken`` means the one final break is
+    behind the driver, so the remaining budget is ``limit - prior`` and no
+    new break is placed.
+    """
+    total = prior + math.fsum(legs)
+    if taken or total <= limit:
+        return total <= limit
     if total > 2.0 * limit:
         return False
-    done = 0.0
+    done = prior
     for leg in legs:
         before, after = done, done + leg
         if limit >= before >= total - limit or limit >= after >= total - limit:
@@ -46,7 +54,9 @@ def _stints_allow(legs: list[float], limit: float) -> bool:
     return False
 
 
-def _line(legs: list[float], limit: float) -> tuple[Instance, list[int]]:
+def _line(
+    legs: list[float], limit: float, *, prior: float = 0.0, taken: bool = False
+) -> tuple[Instance, list[int]]:
     """Stops on a line, so each leg is exactly the distance written down."""
     xs = [0.0]
     for leg in legs:
@@ -55,7 +65,14 @@ def _line(legs: list[float], limit: float) -> tuple[Instance, list[int]]:
     last = len(xs) - 1
     requests = tuple(Request(f"r{k}", None, k, (1.0,)) for k in range(1, last))
     van = VehicleType(
-        "van", (9.0,), count=1, end_depot=last, shift_end=1.0e7, breaks=BreakRule(limit, 5.0)
+        "van",
+        (9.0,),
+        count=1,
+        end_depot=last,
+        shift_end=1.0e7,
+        breaks=BreakRule(limit, 5.0),
+        prior_driving=prior,
+        break_taken=taken,
     )
     inst = Instance(
         "line", nodes, requests, (van,), single_profile(euclidean_matrix([(x, 0.0) for x in xs]))
@@ -72,6 +89,23 @@ def _line(legs: list[float], limit: float) -> tuple[Instance, list[int]]:
 def test_a_rest_is_admissible_exactly_when_both_stints_fit(legs: list[int], limit: int) -> None:
     inst, nodes = _line(legs, limit)
     assert route_timing(inst, 0, nodes).feasible == _stints_allow(legs, limit)
+
+
+@settings(max_examples=60, deadline=None)
+@given(
+    legs=st.lists(st.integers(1, 40), min_size=2, max_size=5),
+    limit=st.integers(15, 80),
+    prior=st.integers(0, 70),
+    taken=st.booleans(),
+)
+def test_driving_already_done_shifts_the_cut(
+    legs: list[int], limit: int, prior: int, taken: bool
+) -> None:
+    """The same cut, started at the driving the driver has already done."""
+    inst, nodes = _line(legs, limit, prior=float(prior), taken=taken)
+    assert route_timing(inst, 0, nodes).feasible == _stints_allow(
+        legs, limit, prior=float(prior), taken=taken
+    )
 
 
 @settings(max_examples=40, deadline=None)
@@ -167,7 +201,18 @@ def test_reoptimisation_keeps_only_a_legal_cheaper_continuation() -> None:
     begun = Rest(gap=1, start=25.0, minutes=10.0, driven=20.0, final=True)
     unit.rests = [begun]
     tau = 40.0
-    _snap, _plan, owners = dispatcher.snapshot(tau)
+    snap, plan, owners = dispatcher.snapshot(tau)
+    # The break at A has reset the counter, so the open route starts at R = 0
+    # and may not take another break. The far stop then exceeds the allowance
+    # inside the snapshot itself, before any proposal is filtered.
+    (snap_type,) = (vt for vt in snap.vehicle_types if vt.break_taken)
+    assert snap_type.prior_driving == pytest.approx(0.0)
+    assert snap_type.breaks is not None and snap_type.breaks.max_driving == pytest.approx(100.0)
+    seeded = next(route.nodes for route in plan.routes)
+    assert route_timing(snap, 0, seeded).feasible
+    assert not route_timing(snap, 0, [4]).feasible
+    restored = instance_from_json(instance_to_json(snap)).vehicle_types[0]
+    assert restored.break_taken and restored.prior_driving == pytest.approx(snap_type.prior_driving)
     (kind, ref) = owners[0]
     assert (kind, ref) == (0, 0)
     before = dispatcher._live_cost()

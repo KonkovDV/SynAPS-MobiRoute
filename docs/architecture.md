@@ -167,9 +167,9 @@ properties, with Hypothesis feeding the verifier arbitrary plans.
 * `mobiroute vrp-dispatch --day plant --rests` → per order `_insert` with
   the driving done so far (`_driver`) → `_place` puts the break into the
   part not yet driven (Lemma 1c: whole, or 15 + 30 using a planned wait).
-  An ALNS pass proposes a new suffix from the current position;
-  `_apply_if_breaks_hold` keeps it only when the lemma still holds and the
-  verified cost falls. OR-Tools refuses the day. The verifier checks the
-  final routes.
+  `snapshot` copies that driving onto the vehicle (`prior_driving`,
+  `break_taken`), so ALNS proposes only a suffix the lemma allows.
+  `_apply_if_breaks_hold` keeps it when the original day verifies and the
+  cost falls. OR-Tools refuses the day. The verifier checks the final routes.
 * `mobiroute literature-benchmark --instance a2-16.txt` →
   `cordeau_exact.solve_exact_cpsat` → `verify_routes` → gated literature report.

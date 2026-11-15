@@ -416,6 +416,8 @@ def instance_to_dict(inst: Instance) -> dict[str, Any]:
                     "duration": vt.breaks.duration,
                     "split": None if vt.breaks.split is None else list(vt.breaks.split),
                 },
+                **({"prior_driving": vt.prior_driving} if vt.prior_driving else {}),
+                **({"break_taken": True} if vt.break_taken else {}),
                 "reload_nodes": list(vt.reload_nodes),
                 "max_trips": vt.max_trips,
             }
@@ -559,6 +561,8 @@ def _instance_from_dict(data: Mapping[str, Any]) -> Instance:
                     if vt["breaks"].get("split") is None
                     else (float(vt["breaks"]["split"][0]), float(vt["breaks"]["split"][1])),
                 ),
+                prior_driving=float(vt.get("prior_driving", 0.0)),
+                break_taken=bool(vt.get("break_taken", False)),
                 reload_nodes=_whole_list(
                     vt.get("reload_nodes", []),
                     f"VRP_JSON_FIELD_INVALID:{vt.get('id', '?')}.reload_nodes",

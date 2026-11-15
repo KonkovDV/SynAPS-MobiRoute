@@ -78,10 +78,12 @@ next.
   and service, and a result for another objective would be mislabelled.
 * The live dispatcher plans the break rule when it answers an order: the
   break goes into the part of the route not yet driven, counting the driving
-  already done, and a break once begun is never moved (Lemma 1c). ALNS
-  re-optimisation sees only the open stops and would count that driving as
-  zero, so a proposal is kept only when every new suffix still satisfies the
-  lemma, the verifier accepts the day and the verified cost falls. OR-Tools
+  already done, and a break once begun is never moved (Lemma 1c). The ALNS
+  snapshot starts the driving counter there, so the search does not propose a
+  suffix that only a fresh driver could drive. A proposal is kept when the
+  verifier accepts the day and the verified cost falls. The Rust kernel has
+  no argument for that offset, so this snapshot is repaired in Python.
+  OR-Tools
   has no break variable and that policy refuses the day. Multi-trip days and
   time-dependent travel are refused too. Ride limits have to be written as
   delivery deadlines, and vehicles idle where they finish instead of

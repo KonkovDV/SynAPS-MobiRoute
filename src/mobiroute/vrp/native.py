@@ -98,9 +98,18 @@ def kernel_args(c: Compiled) -> tuple[Any, ...]:
 
 
 def build_kernel(c: Compiled) -> Any | None:
-    """The Rust kernel for this instance, or ``None`` if the extension is unavailable."""
+    """The Rust kernel for this instance, or ``None`` if the extension is unavailable.
+
+    A live snapshot carries driving already done (``prior_driving``). The
+    kernel has no argument for that offset, so the Python reference repairs
+    the snapshot and the two cannot disagree.
+    """
     module = _module()
     if module is None:
+        return None
+    if any(
+        driven > 0.0 or taken for driven, taken in zip(c.prior_drive, c.break_taken, strict=True)
+    ):
         return None
     return module.VrpKernel(*kernel_args(c))
 

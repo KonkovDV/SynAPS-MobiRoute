@@ -424,18 +424,31 @@ The first part of a split may also be booked into a wait the suffix already
 has, at no extra cost. That does not change the statement: it is one of the
 placements Lemma 1a already allows.
 
-**Corollary.** Re-optimisation rebuilds only the open stops, as a static route
-that starts at the current position, so it counts the residual driving as
-zero. Its proposal continues the day feasibly if and only if every vehicle's
-new suffix satisfies Lemma 1c. The dispatcher keeps such a proposal only when
-the independent verifier accepts the whole day and the verified cost of
-section 1 strictly falls. A break with start at most $\tau$ is not an open
-gap, so it stays. OR-Tools Routing has no break variable, and the
-re-solve-per-order policy therefore refuses a day with a rest rule.
+**Corollary (the snapshot).** Rebuild the open stops as a static route that
+starts at the current position, at the ready instant, and give that vehicle
+the same break rule with the counter started at $R$ after a final break and
+at $\Phi$ otherwise. If a final break is behind the driver, the static route
+may not take another. If only the first part of a split is behind him, the
+static rule is a single break of length $b_2$: the counter has not reset, and
+the first part is no longer an open gap. Then the ordinary test of section 4a
+accepts the static route if and only if Lemma 1c accepts the suffix. The
+partial sums of the static route are exactly the partial sums of the
+concatenated driving on the open gaps, and a break already begun is not one
+of those gaps.
 
-`Dispatcher._place` is the test in the lemma; `Dispatcher._apply_if_breaks_hold`
-is the corollary. Both are held to the driving condition on random leg lengths
-and on a hand-built continuation.
+The search therefore never proposes a suffix that only a fresh driver could
+drive. The dispatcher still keeps a proposal only when the independent
+verifier accepts the whole day and the verified cost of section 1 strictly
+falls: the snapshot is a feasibility screen, the original day is the cost.
+OR-Tools Routing has no break variable, and the re-solve-per-order policy
+refuses a day with a rest rule. The Rust repair kernel has no argument for
+the offset, so a snapshot that carries one is repaired by the Python
+reference.
+
+`route_timing` and `route_exact` are the static test with the offset.
+`Dispatcher._place` is Lemma 1c on the original day. A property holds the
+offset to the same cut as Lemma 1, and the snapshot of a hand-built
+continuation to `_place`.
 
 ## 4b. Multi-trip days
 

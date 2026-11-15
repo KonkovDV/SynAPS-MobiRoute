@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.7.1 — 2026-11-15
+
+### Changed
+- Live re-optimisation starts the driving counter at the time already driven
+  (Lemma 1c). The snapshot vehicle carries `prior_driving` and, once the
+  final break is behind the driver, `break_taken`, so ALNS does not propose a
+  suffix that only a fresh driver could drive. A first part already taken
+  leaves a single remaining break of the second part's length. The original
+  day is still verified, and a proposal replaces the plan only when that cost
+  falls. The Rust kernel has no argument for the offset, so such a snapshot
+  is repaired by the Python reference.
+
 ## 0.7.0 — 2026-11-15
 
 ### Added

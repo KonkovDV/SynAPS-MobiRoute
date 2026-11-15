@@ -159,6 +159,10 @@ class Compiled:
         #: Rest rule per type: most driving between rests (inf: no rule), rest length.
         self.brk_drive = [math.inf if vt.breaks is None else vt.breaks.max_driving for vt in types]
         self.brk_len = [0.0 if vt.breaks is None else vt.breaks.duration for vt in types]
+        #: Driving already counted, and whether the one final break is behind
+        #: the driver (Lemma 1c on a live snapshot). Zero on an ordinary route.
+        self.prior_drive = [0.0 if vt.breaks is None else vt.prior_driving for vt in types]
+        self.break_taken = [vt.breaks is not None and vt.break_taken for vt in types]
         #: Parts of a split break per type (``None``: the break is not split).
         self.brk_split = [None if vt.breaks is None else vt.breaks.split for vt in types]
         self.has_split = any(sp is not None for sp in self.brk_split)
@@ -616,7 +620,8 @@ def best_insertion(
     if not lazy:
         return found[0] if found else None
     if rests:
-        room = 2.0 * c.brk_drive[t] - st.drive + EPS if drive_room is None else drive_room + EPS
+        cap = c.brk_drive[t] if c.break_taken[t] else 2.0 * c.brk_drive[t]
+        room = cap - c.prior_drive[t] - st.drive + EPS if drive_room is None else drive_room + EPS
         found = [cand for cand in found if _drive_delta(c, st, p, d, cand[1], cand[2]) <= room]
     found.sort()
     check = exact if exact is not None else (lambda nodes: route_exact(c, t, nodes))
@@ -663,16 +668,20 @@ def route_exact(c: Compiled, t: int, nodes: Sequence[int]) -> bool:
     time = c.time[t]
     seq = [c.start[t], *nodes, c.end[t]]
     legs = [time[seq[k]][seq[k + 1]] for k in range(len(seq) - 1)]
-    total = 0.0
+    total = c.prior_drive[t]
     for leg in legs:
         total += leg
+    if c.break_taken[t]:
+        if total > limit + EPS:
+            return False
+        return exact_feasible(c, t, nodes)
     if total <= limit + EPS:
         return exact_feasible(c, t, nodes)
     if total > 2.0 * limit + EPS:
         return False
     low = total - limit - EPS
     high = limit + EPS
-    done = 0.0
+    done = c.prior_drive[t]
     admissible: list[int] = []
     for k, leg in enumerate(legs):
         after = done + leg

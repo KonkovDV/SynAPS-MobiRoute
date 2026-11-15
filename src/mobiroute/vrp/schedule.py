@@ -321,23 +321,34 @@ def route_timing(inst: Instance, vehicle_type: int, nodes: Sequence[int]) -> Rou
     legs = [time[a][b] for a, b in pairwise(seq)]
     driving = math.fsum(legs)
     rule = vt.breaks
-    if rule is None or driving <= rule.max_driving + TIME_EPS:
+    # A live snapshot starts the counter at the driving already done. The
+    # minutes reported below stay the legs of this route; the rule sees both.
+    accounted = driving + (vt.prior_driving if rule is not None else 0.0)
+    if rule is not None and vt.break_taken:
+        if accounted > rule.max_driving + TIME_EPS:
+            short = Infeasibility(round(accounted - rule.max_driving, 6), ("DRIVING",))
+            return RouteTiming(False, (), (), math.inf, short, None, driving)
         return _timing_with(inst, vehicle_type, nodes, None, driving)
-    if driving > 2 * rule.max_driving + TIME_EPS:
-        short = Infeasibility(round(driving - 2 * rule.max_driving, 6), ("DRIVING",))
+    if rule is None or accounted <= rule.max_driving + TIME_EPS:
+        return _timing_with(inst, vehicle_type, nodes, None, driving)
+    if accounted > 2 * rule.max_driving + TIME_EPS:
+        short = Infeasibility(round(accounted - 2 * rule.max_driving, 6), ("DRIVING",))
         return RouteTiming(False, (), (), math.inf, short, None, driving)
     admissible: list[int] = []
-    done = 0.0
+    done = vt.prior_driving
     for k, leg in enumerate(legs):
         before, after = done, done + leg
         done = after
         if any(
-            driving - rule.max_driving - TIME_EPS <= x <= rule.max_driving + TIME_EPS
+            accounted - rule.max_driving - TIME_EPS <= x <= rule.max_driving + TIME_EPS
             for x in (before, after)
         ):
             admissible.append(k)
     if not admissible:  # no gap splits the driving (a single leg longer than the limit)
-        short = Infeasibility(round(max(legs) - rule.max_driving, 6), ("DRIVING",))
+        excess = max(legs) - rule.max_driving
+        if vt.prior_driving > TIME_EPS:
+            excess = max(excess, vt.prior_driving - rule.max_driving)
+        short = Infeasibility(round(excess, 6), ("DRIVING",))
         return RouteTiming(False, (), (), math.inf, short, None, driving)
     places: list[tuple[int, int | None]] = [(k, None) for k in admissible]
     if rule.split is not None:

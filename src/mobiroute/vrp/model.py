@@ -142,6 +142,14 @@ class VehicleType:
     profile: str = "default"
     hired: bool = False
     breaks: BreakRule | None = None
+    #: Driving already done that still counts toward the current stint, and
+    #: whether the route's one final break is already behind the driver.
+    #: Both stay at zero on a route that leaves the depot. A live snapshot
+    #: sets them, so the ordinary rest check of the open stops is Lemma 1c:
+    #: the counter starts at this offset, and a break already taken is not
+    #: inserted again.
+    prior_driving: float = 0.0
+    break_taken: bool = False
     reload_nodes: tuple[int, ...] = ()
     max_trips: int = 1
 
@@ -343,6 +351,10 @@ def _validate(inst: Instance) -> tuple[tuple[int, ...], tuple[int, ...]]:
             0.0 < vt.breaks.max_driving < INF and _amount(vt.breaks.duration)
         ):
             raise ValueError(f"VRP_BREAK_RULE_INVALID:{vt.id}")
+        if not _amount(vt.prior_driving):
+            raise ValueError(f"VRP_PRIOR_DRIVING_INVALID:{vt.id}")
+        if (vt.prior_driving > 0.0 or vt.break_taken) and vt.breaks is None:
+            raise ValueError(f"VRP_PRIOR_DRIVING_NEEDS_A_BREAK_RULE:{vt.id}")
         if vt.breaks is not None and vt.breaks.split is not None:
             first, second = vt.breaks.split
             if not (
