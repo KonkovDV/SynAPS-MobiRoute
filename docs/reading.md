@@ -105,11 +105,13 @@
 
 1. [Сайт](https://konkovdv.github.io/SynAPS-MobiRoute/) — смена цехов, перерыв
    по приказу № 160, маршрут, который можно сломать и увидеть сертификат.
-2. `mobiroute vrp-dispatch --day plant --seed 11 --orders 140` — пересчёт
-   таблицы выше.
-3. [Постановка](mathematical-formulation.md) — если нужна математика, а не
+2. `mobiroute vrp-dispatch --day plant --seed 11 --orders 140` — левая
+   колонка таблицы: заявки по ходу смены, вставка без переоптимизации.
+3. `mobiroute vrp-solve --generate plant --seed 11 --orders 140` — правая
+   колонка: все заявки известны с утра, ALNS на 5000 итерациях.
+4. [Постановка](mathematical-formulation.md) — если нужна математика, а не
    пересказ.
-4. [Ограничения](limitations.md) — полный список того, что модель пока не
+5. [Ограничения](limitations.md) — полный список того, что модель пока не
    умеет.
 
 ## English
